@@ -70,11 +70,34 @@ function drawCoin(ctx,cx,cy,r){
 }
 function drawPokeball(ctx,cx,cy,r){
   ctx.save();
-  ctx.beginPath(); ctx.arc(cx,cy,r,Math.PI,0); ctx.fillStyle='#f5484f'; ctx.fill();
-  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI); ctx.fillStyle='#f6fbff'; ctx.fill();
-  ctx.fillStyle='#173a5c'; ctx.fillRect(cx-r,cy-r*0.09,r*2,r*0.18);
-  ctx.beginPath(); ctx.arc(cx,cy,r*0.36,0,Math.PI*2); ctx.fillStyle='#f6fbff'; ctx.fill();
-  ctx.lineWidth=r*0.14; ctx.strokeStyle='#173a5c'; ctx.stroke();
+  // ombre douce sous la sphère
+  const shadow = ctx.createRadialGradient(cx,cy+r*0.1,r*0.4,cx,cy+r*0.1,r*1.15);
+  shadow.addColorStop(0,'rgba(0,0,0,.35)'); shadow.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle = shadow; ctx.beginPath(); ctx.arc(cx,cy,r*1.15,0,Math.PI*2); ctx.fill();
+
+  const topGrad = ctx.createRadialGradient(cx-r*0.3,cy-r*0.55,r*0.1,cx,cy,r*1.05);
+  topGrad.addColorStop(0,'#ff7b80'); topGrad.addColorStop(.55,'#f5484f'); topGrad.addColorStop(1,'#c22b34');
+  ctx.beginPath(); ctx.arc(cx,cy,r,Math.PI,0); ctx.fillStyle=topGrad; ctx.fill();
+
+  const botGrad = ctx.createRadialGradient(cx-r*0.3,cy+r*0.15,r*0.1,cx,cy,r*1.05);
+  botGrad.addColorStop(0,'#ffffff'); botGrad.addColorStop(.6,'#f6fbff'); botGrad.addColorStop(1,'#c7d6e2');
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI); ctx.fillStyle=botGrad; ctx.fill();
+
+  ctx.fillStyle='#152c46'; ctx.fillRect(cx-r,cy-r*0.1,r*2,r*0.2);
+  ctx.lineWidth=r*0.05; ctx.strokeStyle='#0c1a2b';
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.stroke();
+
+  const btnGrad = ctx.createRadialGradient(cx-r*0.12,cy-r*0.12,r*0.05,cx,cy,r*0.4);
+  btnGrad.addColorStop(0,'#ffffff'); btnGrad.addColorStop(.7,'#eef6fb'); btnGrad.addColorStop(1,'#c7d6e2');
+  ctx.beginPath(); ctx.arc(cx,cy,r*0.4,0,Math.PI*2); ctx.fillStyle=btnGrad; ctx.fill();
+  ctx.lineWidth=r*0.09; ctx.strokeStyle='#152c46'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx,cy,r*0.24,0,Math.PI*2); ctx.fillStyle='rgba(255,255,255,.9)'; ctx.fill();
+  ctx.lineWidth=r*0.045; ctx.strokeStyle='#8fa6b8'; ctx.stroke();
+
+  // reflet de brillance
+  ctx.beginPath();
+  ctx.ellipse(cx-r*0.42,cy-r*0.5,r*0.28,r*0.16,-0.5,0,Math.PI*2);
+  ctx.fillStyle='rgba(255,255,255,.55)'; ctx.fill();
   ctx.restore();
 }
 
@@ -112,23 +135,26 @@ const faceTextureCache = new Map();
 function getFaceTexture(cat, kind, isStart){
   const key = cat+'|'+kind+'|'+(isStart?'S':'');
   if(faceTextureCache.has(key)) return faceTextureCache.get(key);
-  const size = 256;
+  const size = 384;
   const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
   const ctx = cvs.getContext('2d');
   const [top,bot] = TILE_GRADIENTS[cat];
   const r = size*0.16;
   ctx.save();
-  ctx.beginPath(); ctx.roundRect(6,6,size-12,size-12,r); ctx.clip();
+  ctx.beginPath(); ctx.roundRect(9,9,size-18,size-18,r); ctx.clip();
   const grad = ctx.createLinearGradient(0,0,size,size);
   grad.addColorStop(0,top); grad.addColorStop(1,bot);
   ctx.fillStyle = grad; ctx.fillRect(0,0,size,size);
-  const gloss = ctx.createRadialGradient(size*0.32,size*0.26,4,size*0.32,size*0.26,size*0.6);
-  gloss.addColorStop(0,'rgba(255,255,255,.55)');
+  const gloss = ctx.createRadialGradient(size*0.32,size*0.24,4,size*0.32,size*0.24,size*0.62);
+  gloss.addColorStop(0,'rgba(255,255,255,.6)');
   gloss.addColorStop(1,'rgba(255,255,255,0)');
   ctx.fillStyle = gloss; ctx.fillRect(0,0,size,size);
+  const innerShadow = ctx.createRadialGradient(size*0.5,size*0.5,size*0.3,size*0.5,size*0.5,size*0.52);
+  innerShadow.addColorStop(0,'rgba(0,0,0,0)'); innerShadow.addColorStop(1,'rgba(0,0,0,.18)');
+  ctx.fillStyle = innerShadow; ctx.fillRect(0,0,size,size);
   ctx.restore();
-  ctx.beginPath(); ctx.roundRect(6,6,size-12,size-12,r);
-  ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(255,255,255,.65)'; ctx.stroke();
+  ctx.beginPath(); ctx.roundRect(9,9,size-18,size-18,r);
+  ctx.lineWidth = 9; ctx.strokeStyle = 'rgba(255,255,255,.68)'; ctx.stroke();
 
   if(kind && kind!=='none'){ drawGlyph(ctx,size, isStart ? 'star' : kind); }
 
@@ -309,7 +335,7 @@ function makePokeballFieldTexture(){
 }
 const centerPlate = new THREE.Mesh(
   new THREE.BoxGeometry(9*CELL,0.14,9*CELL),
-  new THREE.MeshStandardMaterial({map:makePokeballFieldTexture(),roughness:.4,metalness:.1})
+  new THREE.MeshPhysicalMaterial({map:makePokeballFieldTexture(),roughness:.28,metalness:.05,clearcoat:.9,clearcoatRoughness:.18})
 );
 centerPlate.position.y = 0.07;
 centerPlate.receiveShadow = true;
@@ -345,7 +371,7 @@ for(let i=0;i<40;i++){
   group.add(bodyTile);
   const tileTopY = 0.22;
 
-  const faceMat = new THREE.MeshStandardMaterial({map:getFaceTexture(cat,kind,isStart),roughness:.35,metalness:.08});
+  const faceMat = new THREE.MeshPhysicalMaterial({map:getFaceTexture(cat,kind,isStart),roughness:.32,metalness:.06,clearcoat:.7,clearcoatRoughness:.25});
   const face = new THREE.Mesh(new THREE.PlaneGeometry(TILE*0.94,TILE*0.94), faceMat);
   face.rotation.x = -Math.PI/2;
   face.position.y = tileTopY+0.002;
@@ -393,16 +419,20 @@ for(let i=0;i<40;i++){
 function buildToken(){
   const root = new THREE.Group();
 
-  const skin = new THREE.MeshStandardMaterial({color:0xf0b98a,roughness:.6});
-  const jacket = new THREE.MeshStandardMaterial({color:0x2f7de0,roughness:.5,metalness:.08});
-  const jeans = new THREE.MeshStandardMaterial({color:0x35528a,roughness:.65});
-  const cap = new THREE.MeshStandardMaterial({color:0xe0333f,roughness:.5});
-  const dark = new THREE.MeshStandardMaterial({color:0x14202f,roughness:.6});
-  const bag = new THREE.MeshStandardMaterial({color:0xc23b3b,roughness:.55});
+  const skin = new THREE.MeshPhysicalMaterial({color:0xf3c39c,roughness:.55,clearcoat:.3,clearcoatRoughness:.4});
+  const jacket = new THREE.MeshPhysicalMaterial({color:0x2a5fc4,roughness:.45,metalness:.05,clearcoat:.4,clearcoatRoughness:.3});
+  const jacketLight = new THREE.MeshPhysicalMaterial({color:0xf3f7fb,roughness:.5,clearcoat:.3});
+  const jeans = new THREE.MeshStandardMaterial({color:0x3f63a8,roughness:.7});
+  const cap = new THREE.MeshPhysicalMaterial({color:0xe23b3f,roughness:.4,clearcoat:.5,clearcoatRoughness:.3});
+  const capDark = new THREE.MeshStandardMaterial({color:0xb32a2e,roughness:.5});
+  const hair = new THREE.MeshStandardMaterial({color:0x3b2a1e,roughness:.6});
+  const shoe = new THREE.MeshStandardMaterial({color:0x6b4226,roughness:.6});
+  const bag = new THREE.MeshStandardMaterial({color:0xb23a3a,roughness:.55});
+  const strap = new THREE.MeshStandardMaterial({color:0x5a2020,roughness:.6});
 
   function limb(mat,r,len){
     const g = new THREE.Group();
-    const geo = new THREE.CapsuleGeometry(r,len,4,8);
+    const geo = new THREE.CapsuleGeometry(r,len,4,10);
     const mesh = new THREE.Mesh(geo,mat);
     mesh.position.y = -len/2 - r;
     mesh.castShadow = true;
@@ -410,48 +440,90 @@ function buildToken(){
     return g;
   }
 
-  const hipY = 0.34;
-  const legL = limb(jeans,0.055,0.22); legL.position.set(-0.09,hipY,0); root.add(legL);
-  const legR = limb(jeans,0.055,0.22); legR.position.set(0.09,hipY,0); root.add(legR);
+  const hipY = 0.3;
+  const legL = limb(jeans,0.06,0.2); legL.position.set(-0.085,hipY,0); root.add(legL);
+  const legR = limb(jeans,0.06,0.2); legR.position.set(0.085,hipY,0); root.add(legR);
 
-  const shoulderY = 0.56;
-  const armL = limb(jacket,0.045,0.2); armL.position.set(-0.16,shoulderY,0); root.add(armL);
-  const armR = limb(jacket,0.045,0.2); armR.position.set(0.16,shoulderY,0); root.add(armR);
+  const shoulderY = 0.53;
+  const armL = limb(jacket,0.05,0.19); armL.position.set(-0.165,shoulderY,0); root.add(armL);
+  const armR = limb(jacket,0.05,0.19); armR.position.set(0.165,shoulderY,0); root.add(armR);
 
   const torso = new THREE.Group();
   torso.position.y = hipY;
   root.add(torso);
-  const torsoMesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.13,0.22,4,10), jacket);
-  torsoMesh.position.y = 0.24;
+  const torsoMesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.145,0.19,4,12), jacket);
+  torsoMesh.position.y = 0.23;
   torsoMesh.castShadow = true;
   torso.add(torsoMesh);
 
-  const backpack = new THREE.Mesh(new THREE.BoxGeometry(0.15,0.19,0.1), bag);
-  backpack.position.set(0,0.24,-0.14);
+  const chestPanel = new THREE.Mesh(new THREE.SphereGeometry(0.1,16,12,0,Math.PI*2,0,Math.PI*0.5), jacketLight);
+  chestPanel.rotation.x = Math.PI;
+  chestPanel.position.set(0,0.29,0.1);
+  chestPanel.scale.set(1,1,0.6);
+  torso.add(chestPanel);
+
+  const strapL = new THREE.Mesh(new THREE.BoxGeometry(0.035,0.24,0.03), strap);
+  strapL.position.set(-0.07,0.28,0.09); strapL.rotation.z = 0.18;
+  torso.add(strapL);
+  const strapR = new THREE.Mesh(new THREE.BoxGeometry(0.035,0.24,0.03), strap);
+  strapR.position.set(0.07,0.28,0.09); strapR.rotation.z = -0.18;
+  torso.add(strapR);
+
+  const backpack = new THREE.Mesh(new THREE.BoxGeometry(0.17,0.2,0.12), bag);
+  backpack.position.set(0,0.25,-0.15);
   backpack.castShadow = true;
   torso.add(backpack);
+  const backpackFlap = new THREE.Mesh(new THREE.BoxGeometry(0.13,0.09,0.03), strap);
+  backpackFlap.position.set(0,0.31,-0.09);
+  torso.add(backpackFlap);
 
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.135,20,16), skin);
-  head.position.y = 0.52;
+  const headGroup = new THREE.Group();
+  headGroup.position.y = 0.5;
+  torso.add(headGroup);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.155,24,20), skin);
   head.castShadow = true;
-  torso.add(head);
+  headGroup.add(head);
 
-  const capMesh = new THREE.Mesh(new THREE.SphereGeometry(0.145,20,16,0,Math.PI*2,0,Math.PI*0.55), cap);
-  capMesh.position.y = 0.565;
+  [-1,1].forEach(side=>{
+    const tuft = new THREE.Mesh(new THREE.SphereGeometry(0.05,10,8), hair);
+    tuft.position.set(side*0.135,0.01,0.03);
+    tuft.scale.set(0.7,1,1);
+    headGroup.add(tuft);
+  });
+  const fringe = new THREE.Mesh(new THREE.SphereGeometry(0.09,16,10,0,Math.PI*2,0,Math.PI*0.4), hair);
+  fringe.position.set(0,0.09,0.07);
+  fringe.rotation.x = Math.PI*0.05;
+  headGroup.add(fringe);
+
+  const capMesh = new THREE.Mesh(new THREE.SphereGeometry(0.168,22,16,0,Math.PI*2,0,Math.PI*0.56), cap);
+  capMesh.position.y = 0.045;
   capMesh.castShadow = true;
-  torso.add(capMesh);
-  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.1,0.02,16), cap);
-  brim.position.set(0,0.535,0.09);
-  torso.add(brim);
+  headGroup.add(capMesh);
+  const capBand = new THREE.Mesh(new THREE.TorusGeometry(0.147,0.014,8,20,Math.PI),capDark);
+  capBand.position.y = 0.02; capBand.rotation.x = Math.PI/2; capBand.rotation.z = Math.PI;
+  headGroup.add(capBand);
+  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.11,0.115,0.018,20,1,false,0,Math.PI), cap);
+  brim.position.set(0,0,0.1);
+  brim.rotation.x = -0.08;
+  headGroup.add(brim);
+  const buttonTop = new THREE.Mesh(new THREE.SphereGeometry(0.018,8,8), capDark);
+  buttonTop.position.set(0,0.165,0);
+  headGroup.add(buttonTop);
 
-  const eyeGeo = new THREE.SphereGeometry(0.014,8,8);
+  const eyeGeo = new THREE.SphereGeometry(0.016,8,8);
   const eyeMat = new THREE.MeshBasicMaterial({color:0x18304f});
-  const eyeL = new THREE.Mesh(eyeGeo,eyeMat); eyeL.position.set(-0.045,0.52,0.125); torso.add(eyeL);
-  const eyeR = new THREE.Mesh(eyeGeo,eyeMat); eyeR.position.set(0.045,0.52,0.125); torso.add(eyeR);
+  const eyeL = new THREE.Mesh(eyeGeo,eyeMat); eyeL.position.set(-0.05,0,0.145); headGroup.add(eyeL);
+  const eyeR = new THREE.Mesh(eyeGeo,eyeMat); eyeR.position.set(0.05,0,0.145); headGroup.add(eyeR);
+  const blushGeo = new THREE.CircleGeometry(0.018,10);
+  const blushMat = new THREE.MeshBasicMaterial({color:0xff9a8a,transparent:true,opacity:.55});
+  const blushL = new THREE.Mesh(blushGeo,blushMat); blushL.position.set(-0.09,-0.03,0.125); blushL.rotation.y=-0.6; headGroup.add(blushL);
+  const blushR = new THREE.Mesh(blushGeo,blushMat); blushR.position.set(0.09,-0.03,0.125); blushR.rotation.y=0.6; headGroup.add(blushR);
 
   [legL,legR].forEach(g=>{
-    const s = new THREE.Mesh(new THREE.BoxGeometry(0.09,0.05,0.13), dark);
-    s.position.set(0,-0.24,0.02);
+    const s = new THREE.Mesh(new THREE.BoxGeometry(0.095,0.06,0.15), shoe);
+    s.position.set(0,-0.22,0.025);
+    s.castShadow = true;
     g.add(s);
   });
 
@@ -555,7 +627,7 @@ function animate(){
         player.legR.rotation.x = -swing;
         player.armL.rotation.x = -swing;
         player.armR.rotation.x = swing;
-        player.torso.position.y = 0.34 + Math.abs(Math.sin(p*Math.PI*2))*0.02;
+        player.torso.position.y = 0.3 + Math.abs(Math.sin(p*Math.PI*2))*0.02;
       }
     }
   }
