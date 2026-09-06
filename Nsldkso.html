@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<title>Plateau Live — 40 cases</title>
+<title>Plateau Live 3D — 40 cases</title>
 <style>
 :root{
   --cyan:#19d6ff; --blue:#0d66ff; --navy:#06142c; --navy2:#0b2852;
@@ -48,7 +48,7 @@ body{overflow:hidden;color:#fff}
   background:#0d4b99;border:2px solid #50cfff;font-size:22px;font-weight:900
 }
 
-/* zone principale = décor + plateau */
+/* zone principale = décor + plateau 3D */
 .game-zone{
   flex:1 1 auto;min-height:0;position:relative;
   display:flex;align-items:center;justify-content:center;
@@ -79,106 +79,27 @@ body{overflow:hidden;color:#fff}
   width:min(95vw,680px);
   aspect-ratio:1/1;
   position:relative;z-index:1;
-  perspective:1250px;
   filter:drop-shadow(0 22px 26px rgba(0,0,0,.55));
 }
-.board-stage{
-  position:absolute;inset:0;
-  transform:rotateX(22deg);
-  transform-origin:50% 100%;
-  transform-style:preserve-3d;
+#gl{
+  position:absolute;inset:0;width:100%;height:100%;display:block;
+  border-radius:14px;
+  cursor:grab;
+  touch-action:none;
 }
-.board{
-  position:absolute;inset:2%;
-  display:grid;grid-template-columns:repeat(11,1fr);grid-template-rows:repeat(11,1fr);
-  gap:2px;padding:2px;
-  background:#0b66aa;border:3px solid #9af4ff;border-radius:10px;
-  box-shadow:0 0 7px #39deff,0 0 20px #007eff,inset 0 0 22px rgba(26,208,255,.55);
+#gl:active{cursor:grabbing}
+.gl-fallback{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  text-align:center;padding:20px;font-size:13px;color:#cfe6ff;
+  background:radial-gradient(circle at 50% 40%,#0b2852,#040d1f);border-radius:14px;
 }
-.center{
-  grid-column:2/11;grid-row:2/11;position:relative;z-index:0;
-  background:
-    radial-gradient(circle at 50% 52%,rgba(132,247,255,.22),transparent 33%),
-    linear-gradient(145deg,#13a7db,#0b88ce 55%,#0571b6);
-  border:2px solid rgba(115,239,255,.7);
-  box-shadow:inset 0 0 25px rgba(255,255,255,.18);
+.hint3d{
+  position:absolute;left:50%;bottom:6px;transform:translateX(-50%);
+  font-size:9px;letter-spacing:.03em;color:rgba(210,235,255,.55);
+  background:rgba(4,16,36,.45);border:1px solid rgba(90,190,255,.3);
+  border-radius:20px;padding:3px 10px;pointer-events:none;white-space:nowrap;
+  transition:opacity .6s ease;z-index:2;
 }
-.center:after{
-  content:"";position:absolute;left:35%;top:35%;width:30%;aspect-ratio:1;border-radius:50%;
-  background:
-    radial-gradient(circle at 32% 24%,rgba(255,255,255,.85) 0 7%,transparent 19%),
-    linear-gradient(#f3474e 0 45%,#17395b 46% 54%,#f5fbff 55%);
-  border:6px solid #17395b;
-  box-shadow:0 9px 14px rgba(0,0,0,.3),inset -6px -8px 12px rgba(0,0,0,.16)
-}
-.cell{
-  z-index:2;min-width:0;min-height:0;border:1.5px solid #d5f4ff;border-radius:4px;
-  display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;
-  box-shadow:inset 0 -6px 8px rgba(0,0,0,.11),0 1px 2px rgba(0,0,0,.4);
-  transition:box-shadow .25s ease;
-  animation:cellBreathe 3.2s ease-in-out infinite;
-  animation-delay:var(--d,0s);
-}
-/* Le plateau "respire" : chaque case oscille légèrement, avec un
-   décalage propre à sa position, pour donner l'effet vivant/dynamique
-   demandé — sans jamais déplacer les pistes de la grille (donc sans
-   jamais désynchroniser le pion, qui se cale sur la mise en page, pas
-   sur ce rendu visuel). */
-@keyframes cellBreathe{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-4%) scale(1.03)}}
-.cell .ico{
-  font-size:clamp(9px,2.2vw,18px);font-weight:900;text-shadow:0 1px 1px rgba(0,0,0,.28);
-  display:inline-block;animation:iconFloat 2.6s ease-in-out infinite;
-}
-@keyframes iconFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-10%)}}
-.cell .n{position:absolute;right:2px;bottom:0;font-size:clamp(5px,1vw,8px);font-weight:900;color:rgba(255,255,255,.78)}
-.c-white{background:linear-gradient(145deg,#eaf5ff,#9dbbd2)}
-.c-yellow{background:linear-gradient(145deg,#ffe154,#f1a714)}
-.c-green{background:linear-gradient(145deg,#55e58c,#07965e)}
-.c-pink{background:linear-gradient(145deg,#ee7db0,#cf3f81)}
-.c-purple{background:linear-gradient(145deg,#c976eb,#8245c8)}
-.c-red{background:linear-gradient(145deg,#ff686e,#dc2946)}
-.c-blue{background:linear-gradient(145deg,#74aaff,#4266cb)}
-.c-orange{background:linear-gradient(145deg,#ffad63,#ef6434)}
-
-/* case où se trouve le pion : halo animé, comme sur la référence */
-.cell.active{
-  box-shadow:0 0 0 3px #ffe873,0 0 16px 5px rgba(255,232,115,.9),inset 0 -6px 8px rgba(0,0,0,.11);
-  animation:activePulse 1.15s ease-in-out infinite;
-  z-index:3;
-}
-@keyframes activePulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.3)}}
-
-.token-shadow,.token{
-  position:absolute;z-index:20;pointer-events:none;
-  left:0;top:0;
-  transition:left .40s linear,top .40s linear;
-}
-.token-shadow{
-  width:6.4%;height:2%;border-radius:50%;background:rgba(0,0,0,.5);
-  transform:translate(-50%,-30%);filter:blur(1.5px)
-}
-.token{
-  width:7.4%;aspect-ratio:.68;transform:translate(-50%,-78%);
-  filter:drop-shadow(0 6px 4px rgba(0,0,0,.4));
-}
-/* Cycle de marche : le corps rebondit, jambes et bras pivotent en
-   alternance depuis la hanche/épaule (transform-origin défini en unités
-   du viewBox directement sur chaque groupe SVG). Ce cycle tourne en
-   continu pendant le déplacement, indépendamment du glissement
-   left/top, ce qui donne une vraie marche et non un flottement. */
-.token .g-body{transform-origin:40px 70px}
-.token .g-leg-l{transform-origin:33px 91px}
-.token .g-leg-r{transform-origin:47px 89px}
-.token .g-arm-l{transform-origin:24px 70px}
-.token .g-arm-r{transform-origin:56px 69px}
-.token.walk .g-body{animation:walkBob .34s ease-in-out infinite}
-.token.walk .g-leg-l{animation:legL .34s ease-in-out infinite}
-.token.walk .g-leg-r{animation:legR .34s ease-in-out infinite}
-.token.walk .g-arm-l{animation:legR .34s ease-in-out infinite}
-.token.walk .g-arm-r{animation:legL .34s ease-in-out infinite}
-@keyframes walkBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6%)}}
-@keyframes legL{0%,100%{transform:rotate(-22deg)}50%{transform:rotate(22deg)}}
-@keyframes legR{0%,100%{transform:rotate(22deg)}50%{transform:rotate(-22deg)}}
 
 /* commandes SOUS le plateau */
 .controls-zone{
@@ -221,6 +142,11 @@ button:active:not(:disabled){transform:translateY(1px)}
 }
 .legend-row{display:flex;align-items:center;justify-content:center;gap:4px;text-align:center}
 .sw{width:9px;height:9px;border-radius:2px;flex:none}
+.sw-white{background:linear-gradient(145deg,#eaf5ff,#9dbbd2)}
+.sw-yellow{background:linear-gradient(145deg,#ffe154,#f1a714)}
+.sw-red{background:linear-gradient(145deg,#ff686e,#dc2946)}
+.sw-green{background:linear-gradient(145deg,#55e58c,#07965e)}
+.sw-purple{background:linear-gradient(145deg,#c976eb,#8245c8)}
 
 .statusbar{
   margin-top:6px;min-height:42px;border:2px solid #1f98ff;border-radius:10px;
@@ -247,9 +173,6 @@ button:active:not(:disabled){transform:translateY(1px)}
   .legend{padding:5px;margin-top:4px}
   .statusbar{margin-top:4px;min-height:38px}
 }
-@media(prefers-reduced-motion:reduce){
-  .cell .ico,.cell.active,.token.walk svg{animation:none}
-}
 </style>
 </head>
 <body>
@@ -272,71 +195,9 @@ button:active:not(:disabled){transform:translateY(1px)}
   </div>
 
   <div class="game-zone">
-    <div class="board-wrap">
-      <div class="board-stage">
-        <div class="board" id="board">
-          <div class="center"></div>
-          <div id="cells"></div>
-
-          <div class="token-shadow" id="shadow"></div>
-          <div class="token" id="token">
-            <svg viewBox="0 0 80 125" width="100%" height="100%">
-              <defs>
-                <linearGradient id="skin" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0" stop-color="#ffd3a8"/>
-                  <stop offset="1" stop-color="#e9a976"/>
-                </linearGradient>
-                <linearGradient id="cap" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0" stop-color="#ff5b5f"/>
-                  <stop offset="1" stop-color="#c81f2c"/>
-                </linearGradient>
-                <linearGradient id="jacket" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0" stop-color="#2f8dff"/>
-                  <stop offset="1" stop-color="#0e4fb0"/>
-                </linearGradient>
-                <linearGradient id="pants" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0" stop-color="#3a5878"/>
-                  <stop offset="1" stop-color="#1c2e44"/>
-                </linearGradient>
-              </defs>
-              <ellipse cx="40" cy="118" rx="20" ry="4" fill="#000" opacity=".18"/>
-
-              <!-- jambe gauche : pivote depuis la hanche -->
-              <g class="g-leg-l">
-                <path d="M29 92L39 92L37 114L25 114Z" fill="url(#pants)"/>
-                <path d="M25 112L39 112L38 118L23 118Z" fill="#172537"/>
-              </g>
-              <!-- jambe droite : pivote depuis la hanche, en opposition de phase -->
-              <g class="g-leg-r">
-                <path d="M43 92L53 90L60 110L49 115Z" fill="url(#pants)"/>
-                <path d="M49 112L61 109L63 116L48 119Z" fill="#172537"/>
-              </g>
-
-              <!-- buste + tête : rebondit légèrement à chaque pas -->
-              <g class="g-body">
-                <path d="M23 65Q40 52 57 66L55 92Q40 98 25 92Z" fill="url(#jacket)"/>
-                <path d="M23 65Q40 52 57 66L56 74Q40 63 24 74Z" fill="#7fbcff" opacity=".55"/>
-                <circle cx="40" cy="44" r="18" fill="url(#skin)"/>
-                <path d="M23 40Q27 23 46 24Q58 27 59 40Q44 33 23 40Z" fill="url(#cap)"/>
-                <path d="M20 36Q34 28 54 34L62 40Q40 41 21 41Z" fill="#ff6d72"/>
-                <path d="M31 28Q40 22 51 30L47 35L35 34Z" fill="#f7fbff"/>
-                <circle cx="34" cy="44" r="2.2" fill="#17304a"/><circle cx="48" cy="44" r="2.2" fill="#17304a"/>
-                <path d="M33 52Q40 57 47 52" fill="none" stroke="#a85f43" stroke-width="2" stroke-linecap="round"/>
-                <ellipse cx="40" cy="58" rx="9" ry="3" fill="#000" opacity=".08"/>
-              </g>
-
-              <!-- bras gauche : balancier opposé à la jambe gauche -->
-              <g class="g-arm-l">
-                <path d="M21 69L10 82L15 88L29 78Z" fill="#155ea7"/>
-              </g>
-              <!-- bras droit : balancier opposé à la jambe droite -->
-              <g class="g-arm-r">
-                <path d="M57 68L70 80L66 87L51 78Z" fill="#155ea7"/>
-              </g>
-            </svg>
-          </div>
-        </div>
-      </div>
+    <div class="board-wrap" id="boardWrap">
+      <canvas id="gl"></canvas>
+      <div class="hint3d" id="hint3d">🖱️ glisser pour tourner la vue</div>
     </div>
   </div>
 
@@ -357,11 +218,11 @@ button:active:not(:disabled){transform:translateY(1px)}
     </div>
 
     <div class="legend">
-      <div class="legend-row"><span class="sw c-white"></span>Classique</div>
-      <div class="legend-row"><span class="sw c-yellow"></span>Gain</div>
-      <div class="legend-row"><span class="sw c-red"></span>Perte</div>
-      <div class="legend-row"><span class="sw c-green"></span>Cadeau</div>
-      <div class="legend-row"><span class="sw c-purple"></span>Événement</div>
+      <div class="legend-row"><span class="sw sw-white"></span>Classique</div>
+      <div class="legend-row"><span class="sw sw-yellow"></span>Gain</div>
+      <div class="legend-row"><span class="sw sw-red"></span>Perte</div>
+      <div class="legend-row"><span class="sw sw-green"></span>Cadeau</div>
+      <div class="legend-row"><span class="sw sw-purple"></span>Événement</div>
     </div>
 
     <div class="statusbar">
@@ -372,148 +233,9 @@ button:active:not(:disabled){transform:translateY(1px)}
   </div>
 </div>
 
-<script>
-(function(){
-  const board = document.getElementById('board');
-  const cellsHolder = document.getElementById('cells');
-  const token = document.getElementById('token');
-  const shadow = document.getElementById('shadow');
-  const minus = document.getElementById('minus');
-  const plus = document.getElementById('plus');
-  const validate = document.getElementById('validate');
-  const reset = document.getElementById('reset');
-  const sel = document.getElementById('sel');
-  const topNum = document.getElementById('topNum');
-  const status = document.getElementById('status');
-
-  let selected = 1;
-  let current = 0;
-  let moving = false;
-  let generation = 0;
-
-  const styles = [
-    ['c-orange','★'],['c-white','?'],['c-yellow','●'],['c-green','🎁'],['c-pink','🎁'],
-    ['c-purple','?'],['c-white',''],['c-yellow','●'],['c-red','◉'],['c-green','🎁'],
-    ['c-purple','?'],['c-blue','♜']
-  ];
-
-  function pos(i){
-    if(i===0) return {r:11,c:11};
-    if(i<=10) return {r:11,c:11-i};
-    if(i<=20) return {r:21-i,c:1};
-    if(i<=30) return {r:1,c:i-19};
-    return {r:i-29,c:11};
-  }
-
-  const cellEls = [];
-  for(let i=0;i<40;i++){
-    const p = pos(i), st = styles[i % styles.length];
-    const el = document.createElement('div');
-    el.className = 'cell ' + (i===0 ? 'c-orange' : st[0]);
-    el.style.gridRow = p.r;
-    el.style.gridColumn = p.c;
-    el.innerHTML = '<span class="ico">' + (i===0?'★':st[1]) + '</span><span class="n">' + (i===0?'D':i) + '</span>';
-    el.dataset.index = i;
-    el.style.setProperty('--d', (((p.r+p.c)%8)*0.14)+'s');
-    el.querySelector('.ico').style.animationDelay = ((i%6)*0.18)+'s';
-    cellsHolder.appendChild(el);
-    cellEls.push(el);
-  }
-  cellsHolder.style.display='contents';
-  cellEls[0].classList.add('active');
-
-  // Mesure en coordonnées LOCALES (offset*), donc valable même avec la
-  // perspective 3D appliquée sur .board-stage : on ne lit jamais de
-  // coordonnées écran (getBoundingClientRect), seulement la position de
-  // mise en page brute, ce qui évite tout décalage du pion.
-  function getCellCenter(index){
-    const cell = cellEls[index];
-    return {
-      x: cell.offsetLeft + cell.offsetWidth / 2,
-      y: cell.offsetTop + cell.offsetHeight / 2
-    };
-  }
-
-  function place(index,instant){
-    const q=getCellCenter(index);
-    if(instant){
-      token.style.transition='none';
-      shadow.style.transition='none';
-    }
-    token.style.left=q.x+'px'; token.style.top=q.y+'px';
-    shadow.style.left=q.x+'px'; shadow.style.top=q.y+'px';
-    if(instant){
-      token.getBoundingClientRect();
-      token.style.transition='left .40s linear,top .40s linear';
-      shadow.style.transition='left .40s linear,top .40s linear';
-    }
-  }
-
-  function setActiveCell(index){
-    cellEls.forEach(el=>el.classList.remove('active'));
-    cellEls[index].classList.add('active');
-  }
-
-  function setSelected(v){
-    selected=v<1?12:(v>12?1:v);
-    sel.textContent=selected;
-    topNum.textContent=selected;
-  }
-
-  const wait=ms=>new Promise(r=>setTimeout(r,ms));
-
-  async function move(){
-    if(moving) return;
-    moving=true;
-    const myGen=++generation;
-    validate.disabled=minus.disabled=plus.disabled=true;
-    token.classList.add('walk');
-    status.textContent='Le joueur avance de '+selected+' case'+(selected>1?'s':'')+'…';
-
-    for(let n=0;n<selected;n++){
-      if(myGen!==generation) return;
-      current=(current+1)%40;
-      place(current,false);
-      setActiveCell(current);
-      await wait(410);
-    }
-
-    if(myGen!==generation) return;
-    token.classList.remove('walk');
-    status.textContent=current===0?'Le joueur est arrivé sur Départ !':'Le joueur est arrivé sur la case '+current+' !';
-    moving=false;
-    validate.disabled=minus.disabled=plus.disabled=false;
-  }
-
-  function restart(){
-    generation++;
-    moving=false;
-    current=0;
-    token.classList.remove('walk');
-    place(0,true);
-    setActiveCell(0);
-    status.textContent='Le joueur est prêt sur Départ.';
-    validate.disabled=minus.disabled=plus.disabled=false;
-  }
-
-  minus.addEventListener('click',()=>setSelected(selected-1));
-  plus.addEventListener('click',()=>setSelected(selected+1));
-  validate.addEventListener('click',move);
-  reset.addEventListener('click',restart);
-
-  [minus,plus,validate,reset].forEach(btn=>{
-    btn.addEventListener('touchend',e=>{e.preventDefault();btn.click();},{passive:false});
-  });
-
-  function sync(){ requestAnimationFrame(()=>place(current,true)); }
-  window.addEventListener('load',sync);
-  window.addEventListener('resize',sync,{passive:true});
-  window.addEventListener('orientationchange',()=>setTimeout(sync,150),{passive:true});
-  if(window.ResizeObserver){ new ResizeObserver(sync).observe(board); }
-
-  setSelected(1);
-  requestAnimationFrame(()=>requestAnimationFrame(()=>place(0,true)));
-})();
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js" } }
 </script>
+<script type="module" src="./board3d.js"></script>
 </body>
 </html>
