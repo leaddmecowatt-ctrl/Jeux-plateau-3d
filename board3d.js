@@ -619,10 +619,12 @@ placeTokenInstant(0);
 const clock = new THREE.Clock();
 let hopState = null;
 
-function startHop(fromIdx,toIdx,duration){
+function smoothstep(x){ x = Math.max(0,Math.min(1,x)); return x*x*(3-2*x); }
+
+function startHop(fromIdx,toIdx,duration,stepIndex,totalSteps){
   const a = tiles[fromIdx].world, b = tiles[toIdx].world;
   const yaw = Math.atan2(b.x-a.x, b.z-a.z);
-  hopState = { fromIdx, toIdx, t0: clock.getElapsedTime(), duration, yaw };
+  hopState = { fromIdx, toIdx, t0: clock.getElapsedTime(), duration, yaw, stepIndex, totalSteps };
 }
 
 function animate(){
@@ -667,11 +669,19 @@ function animate(){
   });
 
   // marche du pion : glisse à vitesse constante d'une case à l'autre
-  // (pas d'arc de saut ni de "squash" à l'atterrissage), avec un cycle
-  // de marche jambes/bras qui alterne et un léger rebond au sol par pas.
+  // (pas d'arc de saut), avec une vraie accélération au premier pas et
+  // une décélération au dernier (comme un personnage qui se met en
+  // route puis freine), un buste qui penche légèrement en avant et
+  // se balance pendant la marche, et un cycle jambes/bras continu.
   if(hopState){
     const dur = hopState.duration;
     let p = (t - hopState.t0) / dur;
+    const isFirst = hopState.stepIndex === 0;
+    const isLast = hopState.stepIndex === hopState.totalSteps-1;
+    const rampIn = isFirst ? smoothstep(p/0.45) : 1;
+    const rampOut = isLast ? smoothstep((1-p)/0.45) : 1;
+    const gait = rampIn*rampOut;
+
     if(p >= 1){
       p = 1;
       const toTile = tiles[hopState.toIdx];
@@ -681,26 +691,31 @@ function animate(){
       const a = tiles[hopState.fromIdx].world, b = tiles[hopState.toIdx].world;
       const x = a.x + (b.x-a.x)*p;
       const z = a.z + (b.z-a.z)*p;
-      const bob = reduceMotion ? 0 : Math.abs(Math.sin(p*Math.PI*2))*0.028;
+      const bob = reduceMotion ? 0 : Math.abs(Math.sin(p*Math.PI*2))*0.028*gait;
       player.root.position.set(x, tiles[hopState.fromIdx].tileTopY + bob, z);
       let dyaw = hopState.yaw - player.root.rotation.y;
       dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
-      player.root.rotation.y += dyaw*Math.min(1,dt*14);
+      player.root.rotation.y += dyaw*Math.min(1,dt*16);
     }
     if(!reduceMotion){
-      const swing = Math.sin(p*Math.PI*2)*0.5;
+      const swing = Math.sin(p*Math.PI*2)*0.5*gait;
       player.legL.rotation.x = swing;
       player.legR.rotation.x = -swing;
       player.armL.rotation.x = -swing;
       player.armR.rotation.x = swing;
-      player.torso.position.y = 0.3 + Math.abs(Math.sin(p*Math.PI*2))*0.016;
+      player.torso.position.y = 0.3 + Math.abs(Math.sin(p*Math.PI*2))*0.016*gait;
+      const leanTarget = -0.09*gait;
+      player.root.rotation.x += (leanTarget - player.root.rotation.x)*Math.min(1,dt*10);
+      player.torso.rotation.z = Math.sin(p*Math.PI*2 + Math.PI/2)*0.05*gait;
     }
     if(hopState.done){ hopState = null; }
   } else if(!reduceMotion){
-    // au repos : jambes/bras reviennent doucement en position neutre
+    // au repos : tout revient doucement en position neutre
     player.legL.rotation.x *= 0.8; player.legR.rotation.x *= 0.8;
     player.armL.rotation.x *= 0.8; player.armR.rotation.x *= 0.8;
     player.torso.position.y += (0.3 - player.torso.position.y)*0.2;
+    player.root.rotation.x *= 0.8;
+    player.torso.rotation.z *= 0.8;
   }
 
   composer.render();
@@ -754,8 +769,8 @@ async function move(){
     const from = currentIndex;
     currentIndex = (currentIndex+1)%40;
     setActive(currentIndex);
-    startHop(from,currentIndex,HOP_DURATION);
-    await wait(HOP_DURATION*1000 + 60);
+    startHop(from,currentIndex,HOP_DURATION,n,selected);
+    await wait(HOP_DURATION*1000);
   }
 
   if(myGen!==generation) return;
@@ -770,6 +785,8 @@ function restart(){
   hopState = null;
   currentIndex = 0;
   player.root.scale.set(1,1,1);
+  player.root.rotation.x = 0;
+  player.torso.rotation.z = 0;
   player.legL.rotation.x = player.legR.rotation.x = player.armL.rotation.x = player.armR.rotation.x = 0;
   placeTokenInstant(0);
   setActive(0);
