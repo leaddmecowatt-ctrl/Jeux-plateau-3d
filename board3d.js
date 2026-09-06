@@ -1,5 +1,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/three/OrbitControls.js';
+import { EffectComposer } from './vendor/three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from './vendor/three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from './vendor/three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from './vendor/three/examples/jsm/postprocessing/OutputPass.js';
 
 /* =========================================================================
    Plateau de jeu en vraie 3D (WebGL / three.js) — 40 cases en anneau,
@@ -235,6 +239,26 @@ renderer.toneMappingExposure = 1.08;
 
 const scene = new THREE.Scene();
 
+/* fond "studio" façon plateau télé/casino : dégradé profond avec une
+   lueur douce au centre-haut, plutôt qu'un canvas transparent — ça
+   permet aussi d'ajouter un vrai effet de brillance (bloom) sans que
+   le fond ne devienne noir. */
+function makeStudioBackdrop(){
+  const w=512,h=512;
+  const cvs=document.createElement('canvas'); cvs.width=w; cvs.height=h;
+  const ctx=cvs.getContext('2d');
+  const grad = ctx.createRadialGradient(w*0.5,h*0.22,10,w*0.5,h*0.55,h*0.95);
+  grad.addColorStop(0,'#154a82');
+  grad.addColorStop(0.4,'#0b2c58');
+  grad.addColorStop(0.75,'#051733');
+  grad.addColorStop(1,'#020714');
+  ctx.fillStyle=grad; ctx.fillRect(0,0,w,h);
+  const tex = new THREE.CanvasTexture(cvs);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+scene.background = makeStudioBackdrop();
+
 const camera = new THREE.PerspectiveCamera(40,1,0.1,100);
 camera.position.set(0,17,14);
 scene.add(camera);
@@ -251,6 +275,12 @@ controls.enablePan = false;
 controls.autoRotate = !reduceMotion;
 controls.autoRotateSpeed = 0.55;
 controls.update();
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(1,1), 0.45, 0.55, 0.8);
+composer.addPass(bloomPass);
+composer.addPass(new OutputPass());
 
 let idleTimer = null;
 controls.addEventListener('start', ()=>{
@@ -320,6 +350,41 @@ const rimGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(11*CELL+0.7,0.5,11*
 const rimLine = new THREE.LineSegments(rimGeo, new THREE.LineBasicMaterial({color:0x7fe9ff}));
 rimLine.position.copy(plinth.position);
 boardGroup.add(rimLine);
+
+/* liseré de loupiotes façon plateau de jeu télévisé/casino, qui
+   "chassent" tout autour du bord du plateau */
+function makeGlowDotTexture(colorCss){
+  const c=document.createElement('canvas'); c.width=c.height=64;
+  const g=c.getContext('2d');
+  const grad=g.createRadialGradient(32,32,0,32,32,32);
+  grad.addColorStop(0,colorCss);
+  grad.addColorStop(1,'rgba(0,0,0,0)');
+  g.fillStyle=grad; g.fillRect(0,0,64,64);
+  return new THREE.CanvasTexture(c);
+}
+const goldDotTex = makeGlowDotTexture('rgba(255,214,120,1)');
+const cyanDotTex = makeGlowDotTexture('rgba(140,225,255,1)');
+const trimLights = [];
+{
+  const half = (11*CELL+0.7)/2;
+  const perEdge = 13;
+  const pts = [];
+  for(let i=0;i<perEdge;i++){ pts.push([-half+(i/(perEdge-1))*half*2, -half]); }
+  for(let i=1;i<perEdge;i++){ pts.push([half, -half+(i/(perEdge-1))*half*2]); }
+  for(let i=1;i<perEdge;i++){ pts.push([half-(i/(perEdge-1))*half*2, half]); }
+  for(let i=1;i<perEdge-1;i++){ pts.push([-half, half-(i/(perEdge-1))*half*2]); }
+  pts.forEach(([x,z],idx)=>{
+    const mat = new THREE.SpriteMaterial({
+      map: idx%2===0 ? goldDotTex : cyanDotTex,
+      transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.6
+    });
+    const spr = new THREE.Sprite(mat);
+    spr.scale.set(0.26,0.26,0.26);
+    spr.position.set(x,0.03,z);
+    boardGroup.add(spr);
+    trimLights.push({ spr, idx });
+  });
+}
 
 function makePokeballFieldTexture(){
   const size = 512;
@@ -554,8 +619,6 @@ placeTokenInstant(0);
 const clock = new THREE.Clock();
 let hopState = null;
 
-function easeInOutQuad(x){ return x<0.5 ? 2*x*x : 1-Math.pow(-2*x+2,2)/2; }
-
 function startHop(fromIdx,toIdx,duration){
   const a = tiles[fromIdx].world, b = tiles[toIdx].world;
   const yaw = Math.atan2(b.x-a.x, b.z-a.z);
@@ -568,6 +631,10 @@ function animate(){
   const t = clock.getElapsedTime();
 
   controls.update();
+
+  trimLights.forEach(tl=>{
+    tl.spr.material.opacity = reduceMotion ? 0.6 : 0.32 + 0.55*Math.max(0, Math.sin(t*2.2 - tl.idx*0.5));
+  });
 
   // respiration + icônes dynamiques
   tiles.forEach(tile=>{
@@ -599,7 +666,9 @@ function animate(){
     }
   });
 
-  // saut du pion
+  // marche du pion : glisse à vitesse constante d'une case à l'autre
+  // (pas d'arc de saut ni de "squash" à l'atterrissage), avec un cycle
+  // de marche jambes/bras qui alterne et un léger rebond au sol par pas.
   if(hopState){
     const dur = hopState.duration;
     let p = (t - hopState.t0) / dur;
@@ -607,47 +676,34 @@ function animate(){
       p = 1;
       const toTile = tiles[hopState.toIdx];
       player.root.position.set(toTile.world.x, toTile.tileTopY, toTile.world.z);
-      player.root.scale.set(1.08,0.85,1.08);
-      hopState.landT0 = t;
       hopState.done = true;
     } else {
       const a = tiles[hopState.fromIdx].world, b = tiles[hopState.toIdx].world;
-      const e = easeInOutQuad(p);
-      const x = a.x + (b.x-a.x)*e;
-      const z = a.z + (b.z-a.z)*e;
-      const hopH = Math.sin(p*Math.PI) * (reduceMotion?0.02:0.32);
-      player.root.position.set(x, tiles[hopState.fromIdx].tileTopY + hopH, z);
+      const x = a.x + (b.x-a.x)*p;
+      const z = a.z + (b.z-a.z)*p;
+      const bob = reduceMotion ? 0 : Math.abs(Math.sin(p*Math.PI*2))*0.028;
+      player.root.position.set(x, tiles[hopState.fromIdx].tileTopY + bob, z);
       let dyaw = hopState.yaw - player.root.rotation.y;
       dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
-      player.root.rotation.y += dyaw*Math.min(1,dt*12);
-
-      if(!reduceMotion){
-        const swing = Math.sin(p*Math.PI*2)*0.55;
-        player.legL.rotation.x = swing;
-        player.legR.rotation.x = -swing;
-        player.armL.rotation.x = -swing;
-        player.armR.rotation.x = swing;
-        player.torso.position.y = 0.3 + Math.abs(Math.sin(p*Math.PI*2))*0.02;
-      }
+      player.root.rotation.y += dyaw*Math.min(1,dt*14);
     }
-  }
-  if(hopState && hopState.done){
-    const landP = Math.min((t-hopState.landT0)/0.15, 1);
-    const s = 0.85 + (1-0.85)*landP;
-    const sx = 1.08 + (1-1.08)*landP;
-    player.root.scale.set(sx,s,sx);
     if(!reduceMotion){
-      player.legL.rotation.x *= (1-landP);
-      player.legR.rotation.x *= (1-landP);
-      player.armL.rotation.x *= (1-landP);
-      player.armR.rotation.x *= (1-landP);
-    } else {
-      player.legL.rotation.x = player.legR.rotation.x = player.armL.rotation.x = player.armR.rotation.x = 0;
+      const swing = Math.sin(p*Math.PI*2)*0.5;
+      player.legL.rotation.x = swing;
+      player.legR.rotation.x = -swing;
+      player.armL.rotation.x = -swing;
+      player.armR.rotation.x = swing;
+      player.torso.position.y = 0.3 + Math.abs(Math.sin(p*Math.PI*2))*0.016;
     }
-    if(landP>=1){ hopState = null; }
+    if(hopState.done){ hopState = null; }
+  } else if(!reduceMotion){
+    // au repos : jambes/bras reviennent doucement en position neutre
+    player.legL.rotation.x *= 0.8; player.legR.rotation.x *= 0.8;
+    player.armL.rotation.x *= 0.8; player.armR.rotation.x *= 0.8;
+    player.torso.position.y += (0.3 - player.torso.position.y)*0.2;
   }
 
-  renderer.render(scene,camera);
+  composer.render();
 }
 animate();
 
@@ -658,6 +714,8 @@ function resize(){
   renderer.setSize(w,h,false);
   camera.aspect = w/h;
   camera.updateProjectionMatrix();
+  composer.setSize(w,h);
+  bloomPass.setSize(w,h);
 }
 window.addEventListener('resize',resize,{passive:true});
 window.addEventListener('orientationchange',()=>setTimeout(resize,150),{passive:true});
