@@ -48,35 +48,55 @@ body{overflow:hidden;color:#fff}
   background:#0d4b99;border:2px solid #50cfff;font-size:22px;font-weight:900
 }
 
-/* zone principale = décor + plateau 3D */
-.game-zone{
+/* zone principale = décor de stade + plateau 3D + panneau latéral */
+.main-row{
   flex:1 1 auto;min-height:0;position:relative;
-  display:flex;align-items:center;justify-content:center;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
   padding:2px 10px 4px;
   overflow:hidden;
 }
-/* décor d'arène derrière le plateau, façon stade */
-.game-zone::before{
-  content:"";position:absolute;inset:-4% -8% -2%;pointer-events:none;z-index:0;
-  background:
-    radial-gradient(ellipse 90px 60px at 9% 10%,rgba(255,255,255,.55),transparent 60%),
-    radial-gradient(ellipse 90px 60px at 91% 10%,rgba(255,255,255,.5),transparent 60%),
-    radial-gradient(ellipse 70% 40% at 50% 6%,rgba(255,150,90,.18),transparent 70%),
-    radial-gradient(ellipse 60% 30% at 50% 0%,rgba(120,190,255,.16),transparent 70%);
-  filter:blur(1px);
+
+/* ---------- décor de stade (bâtiment façon Pokécenter, montagnes,
+   projecteurs) rendu en CSS pure derrière le plateau ---------- */
+.stadium{position:absolute;inset:-4% -6% -2%;overflow:hidden;pointer-events:none;z-index:0}
+.stad-mountain{
+  position:absolute;bottom:36%;width:62%;height:24%;
+  background:linear-gradient(180deg,#31517f,#152947);
+  clip-path:polygon(0% 100%,8% 55%,20% 78%,32% 40%,46% 68%,58% 30%,72% 62%,86% 45%,100% 100%);
+  opacity:.6;
 }
-.game-zone::after{
-  content:"";position:absolute;left:0;right:0;top:6%;height:16%;pointer-events:none;z-index:0;
-  background:
-    linear-gradient(rgba(255,225,170,.16),transparent),
-    repeating-linear-gradient(90deg,rgba(20,40,70,.55) 0 4%,transparent 4% 9%);
-  -webkit-mask-image:linear-gradient(#000,transparent);
-  mask-image:linear-gradient(#000,transparent);
-  opacity:.7;
+.stad-mountain.m1{left:-10%}
+.stad-mountain.m2{right:-12%;bottom:34%;height:19%;opacity:.42;filter:hue-rotate(12deg)}
+.stad-building{position:absolute;left:50%;top:11%;transform:translateX(-50%);width:150px;height:112px}
+.stad-building .roof{
+  position:absolute;left:50%;top:0;transform:translateX(-50%);width:0;height:0;
+  border-left:82px solid transparent;border-right:82px solid transparent;border-bottom:32px solid #e2434f;
+  filter:drop-shadow(0 3px 3px rgba(0,0,0,.35));
+}
+.stad-building .facade{
+  position:absolute;inset:24px 0 0;background:linear-gradient(180deg,#eaf4ff,#aecbe6);
+  border-radius:8px 8px 4px 4px;box-shadow:0 12px 26px rgba(0,0,0,.45);
+}
+.stad-building .emblem{
+  position:absolute;left:50%;top:30px;transform:translateX(-50%);width:30px;height:30px;border-radius:50%;
+  background:linear-gradient(180deg,#f5484f 0 50%,#173a5c 50% 54%,#f6fbff 54%);border:3px solid #173a5c;
+}
+.stad-building .win{position:absolute;width:12px;height:16px;background:#ffe37a;border-radius:2px;box-shadow:0 0 9px rgba(255,220,120,.85)}
+.stad-building .win.w1{left:14px;bottom:12px}
+.stad-building .win.w2{right:14px;bottom:12px}
+.stad-building .win.w3{left:32px;bottom:12px}
+.stad-building .win.w4{right:32px;bottom:12px}
+.stad-light{position:absolute;top:6%;width:6px;height:32%;background:linear-gradient(180deg,#0e2c52,#04101f);border-radius:3px}
+.stad-light.left{left:5%}
+.stad-light.right{right:5%}
+.stad-light .glow{
+  position:absolute;top:-15px;left:50%;transform:translateX(-50%);width:34px;height:34px;border-radius:50%;
+  background:radial-gradient(circle,rgba(255,255,255,.95),rgba(190,225,255,.5) 45%,transparent 75%);
+  box-shadow:0 0 46px 16px rgba(180,225,255,.35);
 }
 
 .board-wrap{
-  width:min(95vw,680px);
+  width:min(95vw,560px);
   aspect-ratio:1/1;
   position:relative;z-index:1;
   filter:drop-shadow(0 22px 26px rgba(0,0,0,.55));
@@ -101,10 +121,10 @@ body{overflow:hidden;color:#fff}
   transition:opacity .6s ease;z-index:2;
 }
 
-/* commandes SOUS le plateau */
-.controls-zone{
-  flex:0 0 auto;position:relative;z-index:5;
-  padding:6px 10px 4px;
+/* panneau latéral : Interface Animateur + légende */
+.side-panel{
+  position:relative;z-index:1;width:100%;max-width:560px;
+  display:flex;flex-direction:column;gap:8px;
 }
 .controls-panel{
   display:grid;grid-template-columns:1fr auto;gap:8px;
@@ -132,16 +152,14 @@ body{overflow:hidden;color:#fff}
 button:disabled{opacity:.48;filter:grayscale(.7)}
 button:active:not(:disabled){transform:translateY(1px)}
 
-/* légende séparée, sous les commandes */
 .legend{
-  margin-top:6px;
-  display:grid;grid-template-columns:repeat(5,1fr);gap:5px;
   background:linear-gradient(180deg,#092a5a,#061833);
-  border:1px solid #299fff;border-radius:10px;padding:7px;
-  font-size:9px;
+  border:1px solid #299fff;border-radius:10px;padding:9px 10px;
 }
-.legend-row{display:flex;align-items:center;justify-content:center;gap:4px;text-align:center}
-.sw{width:9px;height:9px;border-radius:2px;flex:none}
+.legend-title{font-size:11px;font-weight:900;color:#eaf6ff;margin-bottom:7px;letter-spacing:.02em}
+.legend-list{display:flex;flex-direction:column;gap:6px}
+.legend-row{display:flex;align-items:center;gap:7px;font-size:10.5px}
+.sw{width:11px;height:11px;border-radius:3px;flex:none}
 .sw-white{background:linear-gradient(145deg,#eaf5ff,#9dbbd2)}
 .sw-yellow{background:linear-gradient(145deg,#ffe154,#f1a714)}
 .sw-red{background:linear-gradient(145deg,#ff686e,#dc2946)}
@@ -149,7 +167,7 @@ button:active:not(:disabled){transform:translateY(1px)}
 .sw-purple{background:linear-gradient(145deg,#c976eb,#8245c8)}
 
 .statusbar{
-  margin-top:6px;min-height:42px;border:2px solid #1f98ff;border-radius:10px;
+  flex:0 0 auto;margin:4px 10px 10px;min-height:42px;border:2px solid #1f98ff;border-radius:10px;
   background:linear-gradient(180deg,#0c3977,#071d44);
   box-shadow:0 0 10px rgba(0,117,255,.42);
   display:flex;align-items:center;justify-content:center;position:relative;
@@ -165,12 +183,17 @@ button:active:not(:disabled){transform:translateY(1px)}
   background:#082757;color:#cceaff;font-size:9px;font-weight:900
 }
 
+/* écrans larges (tablette/paysage, comme la maquette de référence) :
+   panneau à droite du plateau plutôt qu'en dessous */
+@media (min-width:760px) and (min-aspect-ratio: 1/1){
+  .main-row{flex-direction:row;align-items:stretch;justify-content:center;gap:16px}
+  .board-wrap{width:min(60vh,52vw,560px);flex:0 0 auto;align-self:center}
+  .side-panel{width:258px;max-width:258px;justify-content:flex-start;align-self:center}
+}
+
 @media(max-height:760px){
   .top-hud{padding-top:6px}.player-card{height:46px}.next-card{height:50px}.next-num{height:24px;line-height:20px;font-size:18px}
-  .game-zone{padding-top:0}.board-wrap{width:min(88vw,610px)}
-  .controls-zone{padding-top:2px}
-  .controls-panel{padding:6px}
-  .legend{padding:5px;margin-top:4px}
+  .main-row{padding-top:0}.board-wrap{width:min(88vw,500px)}
   .statusbar{margin-top:4px;min-height:38px}
 }
 </style>
@@ -194,42 +217,59 @@ button:active:not(:disabled){transform:translateY(1px)}
     <div class="next-card"><small>Prochaine case :</small><div class="next-num" id="topNum">1</div></div>
   </div>
 
-  <div class="game-zone">
+  <div class="main-row">
+    <div class="stadium" aria-hidden="true">
+      <div class="stad-mountain m1"></div>
+      <div class="stad-mountain m2"></div>
+      <div class="stad-building">
+        <div class="roof"></div>
+        <div class="facade">
+          <div class="emblem"></div>
+          <span class="win w1"></span><span class="win w2"></span><span class="win w3"></span><span class="win w4"></span>
+        </div>
+      </div>
+      <div class="stad-light left"><span class="glow"></span></div>
+      <div class="stad-light right"><span class="glow"></span></div>
+    </div>
+
     <div class="board-wrap" id="boardWrap">
       <canvas id="gl"></canvas>
       <div class="hint3d" id="hint3d">🖱️ glisser pour tourner la vue</div>
     </div>
-  </div>
 
-  <div class="controls-zone">
-    <div class="controls-panel">
-      <div class="control-copy">
-        <div>
-          <div class="side-title">Interface Animateur</div>
-          <div class="side-label">Choisissez le nombre de cases</div>
+    <div class="side-panel">
+      <div class="controls-panel">
+        <div class="control-copy">
+          <div>
+            <div class="side-title">Interface Animateur</div>
+            <div class="side-label">Choisissez le nombre de cases</div>
+          </div>
+          <div class="selector">
+            <button class="arrow" id="minus" type="button">‹</button>
+            <div class="sel-value" id="sel">1</div>
+            <button class="arrow" id="plus" type="button">›</button>
+          </div>
         </div>
-        <div class="selector">
-          <button class="arrow" id="minus" type="button">‹</button>
-          <div class="sel-value" id="sel">1</div>
-          <button class="arrow" id="plus" type="button">›</button>
+        <button class="validate" id="validate" type="button">VALIDER</button>
+      </div>
+
+      <div class="legend">
+        <div class="legend-title">Types de cases :</div>
+        <div class="legend-list">
+          <div class="legend-row"><span class="sw sw-white"></span>Case classique</div>
+          <div class="legend-row"><span class="sw sw-yellow"></span>Gain de pièces</div>
+          <div class="legend-row"><span class="sw sw-red"></span>Perte de pièces</div>
+          <div class="legend-row"><span class="sw sw-green"></span>Cadeau</div>
+          <div class="legend-row"><span class="sw sw-purple"></span>Événement spécial</div>
         </div>
       </div>
-      <button class="validate" id="validate" type="button">VALIDER</button>
     </div>
+  </div>
 
-    <div class="legend">
-      <div class="legend-row"><span class="sw sw-white"></span>Classique</div>
-      <div class="legend-row"><span class="sw sw-yellow"></span>Gain</div>
-      <div class="legend-row"><span class="sw sw-red"></span>Perte</div>
-      <div class="legend-row"><span class="sw sw-green"></span>Cadeau</div>
-      <div class="legend-row"><span class="sw sw-purple"></span>Événement</div>
-    </div>
-
-    <div class="statusbar">
-      <span class="ball"></span>
-      <span id="status">Le joueur est prêt sur Départ.</span>
-      <button class="reset" id="reset" type="button">RECOMMENCER</button>
-    </div>
+  <div class="statusbar">
+    <span class="ball"></span>
+    <span id="status">Le joueur est prêt sur Départ.</span>
+    <button class="reset" id="reset" type="button">RECOMMENCER</button>
   </div>
 </div>
 

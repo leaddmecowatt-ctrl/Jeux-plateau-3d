@@ -3,15 +3,16 @@ import { OrbitControls } from './vendor/three/OrbitControls.js';
 
 /* =========================================================================
    Plateau de jeu en vraie 3D (WebGL / three.js) — 40 cases en anneau,
-   pion articulé qui saute case par case, props flottants animés
-   (étoile, cadeaux, pièces...) pour un plateau vivant et réaliste,
-   lumières + ombres portées, et une caméra orbitale pour explorer la scène.
+   pion articulé qui saute case par case, icônes de case fidèles au
+   modèle de référence (❓ 💰 🎁 🏢 ⭐) qui flottent au-dessus de chaque
+   case pour un plateau vivant, lumières + ombres portées, et une caméra
+   orbitale pour explorer la scène.
    ========================================================================= */
 
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/* ---------- Disposition des 40 cases sur l'anneau 11x11 (identique à
-   la logique d'origine : coins tous les 10 cases) ---------- */
+/* ---------- Disposition des 40 cases sur l'anneau 11x11 (coins tous
+   les 10 cases, comme un plateau façon Monopoly) ---------- */
 function ringPos(i){
   if(i===0) return {r:11,c:11};
   if(i<=10) return {r:11,c:11-i};
@@ -22,42 +23,135 @@ function ringPos(i){
 const CELL = 1;
 function toWorld(r,c){ return new THREE.Vector3((c-6)*CELL, 0, (r-6)*CELL); }
 
-const COLORS = {
-  orange:0xff9455, white:0xd9edff, yellow:0xffce33, green:0x2ecb7a,
-  pink:0xdf5c9a, purple:0xa85cdb, red:0xef4a58, blue:0x5c85e0
+/* dégradés (haut/bas) par catégorie, façon tuile glacée/glossy */
+const TILE_GRADIENTS = {
+  orange:['#ffc27a','#f2793a'],
+  white: ['#e7f3ff','#a9c3d6'],
+  yellow:['#ffe36b','#f2a71b'],
+  green: ['#7be89a','#1f9d55'],
+  pink:  ['#f6a0cf','#d6488f'],
+  purple:['#cf9ff5','#8a3fd1'],
+  red:   ['#ff8a8a','#e63946'],
+  blue:  ['#9ec2ff','#3f6fd1']
 };
 
-/* catégorie / prop dynamique par case (même cycle que l'original) */
+/* catégorie / icône par case (même cycle que le modèle d'origine) */
 const STYLES = [
   ['orange','star'],['white','q'],['yellow','coin'],['green','gift'],['pink','gift'],
-  ['purple','q'],['white','none'],['yellow','coin'],['red','orb'],['green','gift'],
+  ['purple','q'],['white','none'],['yellow','coin'],['red','minus'],['green','gift'],
   ['purple','q'],['blue','tower']
 ];
 function styleFor(i){ return i===0 ? ['orange','star'] : STYLES[i % STYLES.length]; }
 
-/* ---------- Textures canvas (numéro de case, icônes plates) ---------- */
-function makeLabelTexture(text, opts={}){
-  const size = 128;
-  const cvs = document.createElement('canvas');
-  cvs.width = cvs.height = size;
-  const ctx = cvs.getContext('2d');
-  ctx.clearRect(0,0,size,size);
-  if(opts.badge){
-    ctx.beginPath();
-    ctx.arc(size/2,size/2,size*0.42,0,Math.PI*2);
-    ctx.fillStyle = opts.badgeColor || 'rgba(8,20,40,.72)';
-    ctx.fill();
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = opts.ring || 'rgba(140,225,255,.85)';
-    ctx.stroke();
+/* ---------- Dessin des icônes (canvas -> texture) ---------- */
+function drawStar(ctx,cx,cy,outerR,innerR,color,glow){
+  ctx.save();
+  if(glow){ ctx.shadowColor = glow; ctx.shadowBlur = outerR*0.6; }
+  ctx.beginPath();
+  const spikes=5;
+  for(let k=0;k<spikes*2;k++){
+    const ang=(k/(spikes*2))*Math.PI*2 - Math.PI/2;
+    const r = k%2===0 ? outerR : innerR;
+    const x=cx+Math.cos(ang)*r, y=cy+Math.sin(ang)*r;
+    if(k===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
   }
-  ctx.fillStyle = opts.color || '#ffffff';
-  ctx.font = (opts.weight||900)+' '+(opts.fontSize||70)+'px Arial, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text, size/2, size/2 + (opts.dy||2));
+  ctx.closePath();
+  ctx.fillStyle=color;
+  ctx.fill();
+  ctx.restore();
+}
+function drawCoin(ctx,cx,cy,r){
+  const grad = ctx.createRadialGradient(cx-r*0.3,cy-r*0.35,r*0.15,cx,cy,r);
+  grad.addColorStop(0,'#fff5c2'); grad.addColorStop(.55,'#ffd83c'); grad.addColorStop(1,'#c9860e');
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fillStyle=grad; ctx.fill();
+  ctx.lineWidth=r*0.14; ctx.strokeStyle='#8a5a06'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx,cy,r*0.62,0,Math.PI*2);
+  ctx.lineWidth=r*0.06; ctx.strokeStyle='rgba(255,255,255,.6)'; ctx.stroke();
+}
+function drawPokeball(ctx,cx,cy,r){
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx,cy,r,Math.PI,0); ctx.fillStyle='#f5484f'; ctx.fill();
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI); ctx.fillStyle='#f6fbff'; ctx.fill();
+  ctx.fillStyle='#173a5c'; ctx.fillRect(cx-r,cy-r*0.09,r*2,r*0.18);
+  ctx.beginPath(); ctx.arc(cx,cy,r*0.36,0,Math.PI*2); ctx.fillStyle='#f6fbff'; ctx.fill();
+  ctx.lineWidth=r*0.14; ctx.strokeStyle='#173a5c'; ctx.stroke();
+  ctx.restore();
+}
+
+/* icône "plate" (texte/emoji/dessin) rendue au centre d'un canvas carré */
+function drawGlyph(ctx,size,kind){
+  const cx=size/2, cy=size/2;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  switch(kind){
+    case 'star': drawStar(ctx,cx,cy,size*0.34,size*0.14,'#ffe066','#c98a00'); break;
+    case 'q':
+      ctx.font='900 '+(size*0.62)+'px Arial,Helvetica,sans-serif';
+      ctx.fillStyle='#ffffff';
+      ctx.fillText('?',cx,cy+size*0.02);
+      break;
+    case 'coin': drawCoin(ctx,cx,cy,size*0.34); break;
+    case 'minus':
+      ctx.fillStyle='#ffffff';
+      ctx.fillRect(cx-size*0.22,cy-size*0.05,size*0.44,size*0.1);
+      break;
+    case 'gift':
+      ctx.font=(size*0.56)+'px "Segoe UI Emoji","Apple Color Emoji",Arial,sans-serif';
+      ctx.fillText('🎁',cx,cy+size*0.03);
+      break;
+    case 'tower':
+      ctx.font=(size*0.5)+'px "Segoe UI Emoji","Apple Color Emoji",Arial,sans-serif';
+      ctx.fillText('🏢',cx,cy+size*0.03);
+      break;
+    case 'pokeball': drawPokeball(ctx,cx,cy,size*0.34); break;
+  }
+}
+
+/* Texture de la face de case : tuile arrondie "glossy" façon jeu mobile,
+   dégradé diagonal + reflet + icône + petit numéro dans le coin. */
+const faceTextureCache = new Map();
+function getFaceTexture(cat, kind, isStart){
+  const key = cat+'|'+kind+'|'+(isStart?'S':'');
+  if(faceTextureCache.has(key)) return faceTextureCache.get(key);
+  const size = 256;
+  const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
+  const ctx = cvs.getContext('2d');
+  const [top,bot] = TILE_GRADIENTS[cat];
+  const r = size*0.16;
+  ctx.save();
+  ctx.beginPath(); ctx.roundRect(6,6,size-12,size-12,r); ctx.clip();
+  const grad = ctx.createLinearGradient(0,0,size,size);
+  grad.addColorStop(0,top); grad.addColorStop(1,bot);
+  ctx.fillStyle = grad; ctx.fillRect(0,0,size,size);
+  const gloss = ctx.createRadialGradient(size*0.32,size*0.26,4,size*0.32,size*0.26,size*0.6);
+  gloss.addColorStop(0,'rgba(255,255,255,.55)');
+  gloss.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.fillStyle = gloss; ctx.fillRect(0,0,size,size);
+  ctx.restore();
+  ctx.beginPath(); ctx.roundRect(6,6,size-12,size-12,r);
+  ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(255,255,255,.65)'; ctx.stroke();
+
+  if(kind && kind!=='none'){ drawGlyph(ctx,size, isStart ? 'star' : kind); }
+
   const tex = new THREE.CanvasTexture(cvs);
   tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  faceTextureCache.set(key,tex);
+  return tex;
+}
+
+/* Icône flottante transparente (même dessin, sans fond) pour l'effet
+   "case dynamique" : elle plane et tourne au-dessus de la case. */
+const iconSpriteCache = new Map();
+function getFloatingIconTexture(kind, isStart){
+  const key = isStart ? 'star' : kind;
+  if(iconSpriteCache.has(key)) return iconSpriteCache.get(key);
+  const size = 160;
+  const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
+  const ctx = cvs.getContext('2d');
+  drawGlyph(ctx,size, isStart ? 'star' : kind);
+  const tex = new THREE.CanvasTexture(cvs);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  iconSpriteCache.set(key,tex);
   return tex;
 }
 
@@ -68,91 +162,28 @@ function makeSprite(texture, scale){
   return spr;
 }
 
-/* ---------- Props 3D dynamiques posés sur certaines cases ---------- */
-function buildProp(kind){
-  const group = new THREE.Group();
-  group.userData.bob = 0.1;
-  group.userData.spin = 0.6;
-  switch(kind){
-    case 'star': {
-      const shape = new THREE.Shape();
-      const spikes = 5, outerR = 0.22, innerR = 0.09;
-      for(let k=0;k<spikes*2;k++){
-        const ang = (k/(spikes*2))*Math.PI*2 - Math.PI/2;
-        const r = k%2===0 ? outerR : innerR;
-        const x = Math.cos(ang)*r, y = Math.sin(ang)*r;
-        if(k===0) shape.moveTo(x,y); else shape.lineTo(x,y);
-      }
-      shape.closePath();
-      const geo = new THREE.ExtrudeGeometry(shape,{depth:0.09,bevelEnabled:true,bevelThickness:0.02,bevelSize:0.02,bevelSegments:2});
-      geo.rotateX(Math.PI/2);
-      geo.center();
-      const mat = new THREE.MeshStandardMaterial({color:0xffd54a,emissive:0xaa6a00,emissiveIntensity:.55,metalness:.55,roughness:.3});
-      const mesh = new THREE.Mesh(geo,mat);
-      mesh.castShadow = true;
-      group.add(mesh);
-      group.userData.bob = 0.14; group.userData.spin = 1.1;
-      break;
-    }
-    case 'gift': {
-      const bodyMat = new THREE.MeshStandardMaterial({color:0xe0455f,roughness:.55,metalness:.08});
-      const lidMat = new THREE.MeshStandardMaterial({color:0xffe066,roughness:.45,metalness:.1});
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.3,0.22,0.3),bodyMat);
-      body.position.y = 0.11;
-      const lid = new THREE.Mesh(new THREE.BoxGeometry(0.34,0.08,0.34),lidMat);
-      lid.position.y = 0.26;
-      const ribbonA = new THREE.Mesh(new THREE.BoxGeometry(0.07,0.24,0.32),lidMat);
-      ribbonA.position.y = 0.11;
-      const ribbonB = new THREE.Mesh(new THREE.BoxGeometry(0.32,0.24,0.07),lidMat);
-      ribbonB.position.y = 0.11;
-      [body,lid,ribbonA,ribbonB].forEach(m=>{m.castShadow=true;group.add(m);});
-      group.userData.bob = 0.09; group.userData.spin = 0.5;
-      break;
-    }
-    case 'coin': {
-      const geo = new THREE.CylinderGeometry(0.17,0.17,0.05,24);
-      const mat = new THREE.MeshStandardMaterial({color:0xffd83c,metalness:.85,roughness:.22,emissive:0x664400,emissiveIntensity:.25});
-      const mesh = new THREE.Mesh(geo,mat);
-      mesh.rotation.x = Math.PI/2;
-      mesh.castShadow = true;
-      group.add(mesh);
-      group.userData.bob = 0.07; group.userData.spin = 2.4;
-      group.userData.spinAxis = 'y2';
-      break;
-    }
-    case 'orb': {
-      const geo = new THREE.SphereGeometry(0.16,20,16);
-      const mat = new THREE.MeshStandardMaterial({color:0xff4552,emissive:0xff2233,emissiveIntensity:.7,roughness:.4});
-      const mesh = new THREE.Mesh(geo,mat);
-      mesh.castShadow = true;
-      group.add(mesh);
-      group.userData.pulse = true;
-      group.userData.bob = 0.06; group.userData.spin = 0.3;
-      break;
-    }
-    case 'tower': {
-      const mat = new THREE.MeshStandardMaterial({color:0x8fb2ff,roughness:.5,metalness:.15});
-      const base = new THREE.Mesh(new THREE.BoxGeometry(0.26,0.22,0.26),mat);
-      base.position.y = 0.11;
-      const mid = new THREE.Mesh(new THREE.BoxGeometry(0.18,0.16,0.18),mat);
-      mid.position.y = 0.28;
-      const roof = new THREE.Mesh(new THREE.ConeGeometry(0.16,0.18,4),mat);
-      roof.position.y = 0.44; roof.rotation.y = Math.PI/4;
-      [base,mid,roof].forEach(m=>{m.castShadow=true;group.add(m);});
-      group.userData.bob = 0.04; group.userData.spin = 0.25;
-      break;
-    }
-    case 'q': {
-      const tex = makeLabelTexture('?',{color:'#fff5ff',fontSize:88});
-      const spr = makeSprite(tex,0.34);
-      group.add(spr);
-      group.userData.bob = 0.11; group.userData.spin = 0; group.userData.isSprite = true;
-      break;
-    }
-    default: return null;
-  }
-  return group;
+function numberTexture(n){
+  const size=128;
+  const cvs=document.createElement('canvas'); cvs.width=cvs.height=size;
+  const ctx=cvs.getContext('2d');
+  ctx.font='800 '+(size*0.5)+'px Arial'; ctx.fillStyle='rgba(10,25,45,.55)';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(String(n), size/2, size/2+2);
+  const tex=new THREE.CanvasTexture(cvs);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
+
+/* vitesses/amplitudes d'animation "dynamique" par type de case */
+const MOTION = {
+  star:  {bob:0.16, spin:1.3},
+  gift:  {bob:0.10, spin:0.5},
+  coin:  {bob:0.08, spin:2.6},
+  minus: {bob:0.05, spin:0,  pulse:true},
+  tower: {bob:0.05, spin:0.3},
+  q:     {bob:0.12, spin:0},
+  none:  {bob:0,    spin:0}
+};
 
 /* ---------- Construction de la scène ---------- */
 const wrap = document.getElementById('boardWrap');
@@ -174,7 +205,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 1.08;
 
 const scene = new THREE.Scene();
 
@@ -195,15 +226,13 @@ controls.autoRotate = !reduceMotion;
 controls.autoRotateSpeed = 0.55;
 controls.update();
 
-let userInteracting = false, idleTimer = null;
+let idleTimer = null;
 controls.addEventListener('start', ()=>{
-  userInteracting = true;
   controls.autoRotate = false;
   if(hint3d) hint3d.style.opacity = '0';
   clearTimeout(idleTimer);
 });
 controls.addEventListener('end', ()=>{
-  userInteracting = false;
   clearTimeout(idleTimer);
   idleTimer = setTimeout(()=>{ if(!reduceMotion) controls.autoRotate = true; }, 3500);
 });
@@ -229,7 +258,6 @@ scene.add(rim);
 /* projecteurs de stade (halos additifs aux quatre coins, comme sur la
    photo de référence) */
 function addFloodlight(x,z){
-  const spr = makeSprite(makeLabelTexture('',{}),0);
   const glowTex = (function(){
     const c = document.createElement('canvas'); c.width=c.height=128;
     const g = c.getContext('2d');
@@ -267,26 +295,21 @@ const rimLine = new THREE.LineSegments(rimGeo, new THREE.LineBasicMaterial({colo
 rimLine.position.copy(plinth.position);
 boardGroup.add(rimLine);
 
-function makePokeballTexture(){
+function makePokeballFieldTexture(){
   const size = 512;
   const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
   const ctx = cvs.getContext('2d');
   const grad = ctx.createRadialGradient(size*0.35,size*0.32,size*0.05,size*0.5,size*0.5,size*0.62);
   grad.addColorStop(0,'#22b6e8'); grad.addColorStop(1,'#0a6fac');
   ctx.fillStyle = grad; ctx.fillRect(0,0,size,size);
-  const cx=size/2, cy=size/2, r=size*0.17;
-  ctx.beginPath(); ctx.arc(cx,cy,r,Math.PI,0); ctx.fillStyle='#f5484f'; ctx.fill();
-  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI); ctx.fillStyle='#f6fbff'; ctx.fill();
-  ctx.fillStyle='#173a5c'; ctx.fillRect(cx-r,cy-size*0.017,r*2,size*0.034);
-  ctx.beginPath(); ctx.arc(cx,cy,r*0.34,0,Math.PI*2); ctx.fillStyle='#f6fbff'; ctx.fill();
-  ctx.lineWidth = size*0.02; ctx.strokeStyle='#173a5c'; ctx.stroke();
+  drawPokeball(ctx,size/2,size/2,size*0.17);
   const tex = new THREE.CanvasTexture(cvs);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
 const centerPlate = new THREE.Mesh(
   new THREE.BoxGeometry(9*CELL,0.14,9*CELL),
-  new THREE.MeshStandardMaterial({map:makePokeballTexture(),roughness:.4,metalness:.1})
+  new THREE.MeshStandardMaterial({map:makePokeballFieldTexture(),roughness:.4,metalness:.1})
 );
 centerPlate.position.y = 0.07;
 centerPlate.receiveShadow = true;
@@ -294,12 +317,13 @@ boardGroup.add(centerPlate);
 
 /* ---------- Les 40 cases ---------- */
 const TILE = 0.9;
-const tiles = []; // {group, world, top, category, halo, prop, num, base}
+const tiles = [];
 
 for(let i=0;i<40;i++){
   const {r,c} = ringPos(i);
   const world = toWorld(r,c);
   const [cat, kind] = styleFor(i);
+  const isStart = i===0;
 
   const group = new THREE.Group();
   group.position.copy(world);
@@ -313,62 +337,68 @@ for(let i=0;i<40;i++){
   baseTile.receiveShadow = true;
   group.add(baseTile);
 
-  const topMat = new THREE.MeshStandardMaterial({color:COLORS[cat],roughness:.45,metalness:.12});
-  const topTile = new THREE.Mesh(new THREE.BoxGeometry(TILE,0.16,TILE), topMat);
-  topTile.position.y = 0.16;
-  topTile.castShadow = true;
-  topTile.receiveShadow = true;
-  group.add(topTile);
-  const tileTopY = 0.24;
+  const sideMat = new THREE.MeshStandardMaterial({color:new THREE.Color(TILE_GRADIENTS[cat][1]),roughness:.55,metalness:.1});
+  const bodyTile = new THREE.Mesh(new THREE.BoxGeometry(TILE,0.14,TILE), sideMat);
+  bodyTile.position.y = 0.15;
+  bodyTile.castShadow = true;
+  bodyTile.receiveShadow = true;
+  group.add(bodyTile);
+  const tileTopY = 0.22;
 
-  const numTex = makeLabelTexture(i===0?'D':String(i), {fontSize:i===0?60:56, color:'#eaf6ff', badge:false});
-  const numSpr = makeSprite(numTex, 0.26);
-  numSpr.position.set(TILE*0.32, tileTopY+0.01, TILE*0.32);
+  const faceMat = new THREE.MeshStandardMaterial({map:getFaceTexture(cat,kind,isStart),roughness:.35,metalness:.08});
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(TILE*0.94,TILE*0.94), faceMat);
+  face.rotation.x = -Math.PI/2;
+  face.position.y = tileTopY+0.002;
+  face.receiveShadow = true;
+  group.add(face);
+
+  const numSpr = makeSprite(numberTexture(isStart?'D':i), 0.22);
+  numSpr.position.set(TILE*0.35, tileTopY+0.01, TILE*0.36);
   numSpr.rotation.x = -Math.PI/2;
-  numSpr.material.rotation = 0;
   group.add(numSpr);
 
   const halo = new THREE.Mesh(
-    new THREE.TorusGeometry(TILE*0.52,0.035,8,32),
+    new THREE.TorusGeometry(TILE*0.56,0.035,8,32),
     new THREE.MeshBasicMaterial({color:0xffe873,transparent:true,opacity:0,blending:THREE.AdditiveBlending})
   );
   halo.rotation.x = Math.PI/2;
   halo.position.y = tileTopY+0.03;
   group.add(halo);
 
-  let prop = null, shadowDisc = null;
-  if(kind && kind!=='none'){
-    prop = buildProp(kind);
-    if(prop){
-      prop.position.y = tileTopY + 0.24;
-      group.add(prop);
-      shadowDisc = new THREE.Mesh(
-        new THREE.CircleGeometry(0.2,20),
-        new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:.28})
-      );
-      shadowDisc.rotation.x = -Math.PI/2;
-      shadowDisc.position.y = tileTopY+0.005;
-      group.add(shadowDisc);
-    }
+  const motionKind = isStart ? 'star' : kind;
+  const motion = MOTION[motionKind] || MOTION.none;
+  let iconSprite = null, shadowDisc = null;
+  if(motionKind !== 'none'){
+    iconSprite = makeSprite(getFloatingIconTexture(kind,isStart), 0.34);
+    iconSprite.position.y = tileTopY + 0.3;
+    group.add(iconSprite);
+    shadowDisc = new THREE.Mesh(
+      new THREE.CircleGeometry(0.22,20),
+      new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:.25})
+    );
+    shadowDisc.rotation.x = -Math.PI/2;
+    shadowDisc.position.y = tileTopY+0.005;
+    group.add(shadowDisc);
   }
 
   tiles.push({
-    group, world, tileTopY, category:cat, kind,
-    halo, prop, shadowDisc,
+    group, world, tileTopY, category:cat, kind:motionKind,
+    halo, iconSprite, shadowDisc, motion,
     phase: Math.random()*Math.PI*2,
     breathePhase: ((r+c)%8)*0.4
   });
 }
 
-/* ---------- Pion articulé (façon dresseur) ---------- */
+/* ---------- Pion articulé (façon dresseur, sac à dos inclus) ---------- */
 function buildToken(){
   const root = new THREE.Group();
 
   const skin = new THREE.MeshStandardMaterial({color:0xf0b98a,roughness:.6});
   const jacket = new THREE.MeshStandardMaterial({color:0x2f7de0,roughness:.5,metalness:.08});
-  const pants = new THREE.MeshStandardMaterial({color:0x27354a,roughness:.6});
+  const jeans = new THREE.MeshStandardMaterial({color:0x35528a,roughness:.65});
   const cap = new THREE.MeshStandardMaterial({color:0xe0333f,roughness:.5});
   const dark = new THREE.MeshStandardMaterial({color:0x14202f,roughness:.6});
+  const bag = new THREE.MeshStandardMaterial({color:0xc23b3b,roughness:.55});
 
   function limb(mat,r,len){
     const g = new THREE.Group();
@@ -381,8 +411,8 @@ function buildToken(){
   }
 
   const hipY = 0.34;
-  const legL = limb(pants,0.055,0.22); legL.position.set(-0.09,hipY,0); root.add(legL);
-  const legR = limb(pants,0.055,0.22); legR.position.set(0.09,hipY,0); root.add(legR);
+  const legL = limb(jeans,0.055,0.22); legL.position.set(-0.09,hipY,0); root.add(legL);
+  const legR = limb(jeans,0.055,0.22); legR.position.set(0.09,hipY,0); root.add(legR);
 
   const shoulderY = 0.56;
   const armL = limb(jacket,0.045,0.2); armL.position.set(-0.16,shoulderY,0); root.add(armL);
@@ -395,6 +425,11 @@ function buildToken(){
   torsoMesh.position.y = 0.24;
   torsoMesh.castShadow = true;
   torso.add(torsoMesh);
+
+  const backpack = new THREE.Mesh(new THREE.BoxGeometry(0.15,0.19,0.1), bag);
+  backpack.position.set(0,0.24,-0.14);
+  backpack.castShadow = true;
+  torso.add(backpack);
 
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.135,20,16), skin);
   head.position.y = 0.52;
@@ -414,11 +449,10 @@ function buildToken(){
   const eyeL = new THREE.Mesh(eyeGeo,eyeMat); eyeL.position.set(-0.045,0.52,0.125); torso.add(eyeL);
   const eyeR = new THREE.Mesh(eyeGeo,eyeMat); eyeR.position.set(0.045,0.52,0.125); torso.add(eyeR);
 
-  const shoes = [legL,legR].map(g=>{
+  [legL,legR].forEach(g=>{
     const s = new THREE.Mesh(new THREE.BoxGeometry(0.09,0.05,0.13), dark);
     s.position.set(0,-0.24,0.02);
     g.add(s);
-    return s;
   });
 
   return { root, legL, legR, armL, armR, torso };
@@ -446,7 +480,7 @@ placeTokenInstant(0);
 
 /* ---------- Boucle d'animation ---------- */
 const clock = new THREE.Clock();
-let hopState = null; // {from,to,start,duration,fromY,toY}
+let hopState = null;
 
 function easeInOutQuad(x){ return x<0.5 ? 2*x*x : 1-Math.pow(-2*x+2,2)/2; }
 
@@ -463,28 +497,28 @@ function animate(){
 
   controls.update();
 
-  // respiration + props dynamiques
+  // respiration + icônes dynamiques
   tiles.forEach(tile=>{
     if(!reduceMotion){
       const breathe = 1 + Math.sin(t*1.9 + tile.breathePhase)*0.012;
       tile.group.scale.set(1,breathe,1);
     }
-    if(tile.prop){
-      const ud = tile.prop.userData;
-      const bobAmt = reduceMotion ? 0 : ud.bob;
+    if(tile.iconSprite){
+      const m = tile.motion;
+      const bobAmt = reduceMotion ? 0 : m.bob;
       const bob = Math.sin(t*2 + tile.phase)*bobAmt;
-      tile.prop.position.y = tile.tileTopY + 0.24 + bob;
-      if(!reduceMotion && ud.spin){
-        tile.prop.rotation.y += dt*ud.spin;
+      tile.iconSprite.position.y = tile.tileTopY + 0.3 + bob;
+      if(!reduceMotion && m.spin){
+        const s = 1 + Math.sin(t*m.spin*2 + tile.phase)*0.18;
+        tile.iconSprite.scale.set(0.34*s,0.34*s,0.34*s);
       }
-      if(ud.pulse && !ud.isSprite){
-        const mesh = tile.prop.children[0];
-        if(mesh && mesh.material) mesh.material.emissiveIntensity = 0.5 + Math.sin(t*4+tile.phase)*0.35;
+      if(m.pulse){
+        tile.iconSprite.material.opacity = 0.75 + Math.sin(t*4+tile.phase)*0.25;
       }
       if(tile.shadowDisc){
-        const k = 1 - Math.min(Math.abs(bob)/ (ud.bob||1), 1)*0.55;
+        const k = 1 - Math.min(Math.abs(bob)/ (m.bob||1), 1)*0.55;
         tile.shadowDisc.scale.set(k,k,k);
-        tile.shadowDisc.material.opacity = 0.28*k;
+        tile.shadowDisc.material.opacity = 0.25*k;
       }
     }
     if(tile.isActive){
@@ -559,7 +593,7 @@ if(window.ResizeObserver){ new ResizeObserver(resize).observe(wrap); }
 resize();
 
 /* ==========================================================================
-   Interface Animateur (logique de jeu, identique dans l'esprit à l'original)
+   Interface Animateur
    ========================================================================== */
 const minus = document.getElementById('minus');
 const plus = document.getElementById('plus');
