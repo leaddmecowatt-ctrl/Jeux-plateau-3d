@@ -617,14 +617,30 @@ placeTokenInstant(0);
 
 /* ---------- Boucle d'animation ---------- */
 const clock = new THREE.Clock();
-let hopState = null;
 
-function smoothstep(x){ x = Math.max(0,Math.min(1,x)); return x*x*(3-2*x); }
+/* Marche continue : un seul mouvement fluide du départ jusqu'à la
+   case finale, sans jamais s'arrêter aux cases intermédiaires. La
+   vitesse suit un profil trapézoïdal (accélération, croisière,
+   décélération sur tout le trajet) et le cycle de marche est calé sur
+   la distance parcourue, donc parfaitement continu même dans les
+   virages du plateau. */
+let walk = null;
 
-function startHop(fromIdx,toIdx,duration,stepIndex,totalSteps){
-  const a = tiles[fromIdx].world, b = tiles[toIdx].world;
-  const yaw = Math.atan2(b.x-a.x, b.z-a.z);
-  hopState = { fromIdx, toIdx, t0: clock.getElapsedTime(), duration, yaw, stepIndex, totalSteps };
+function startWalk(fromIdx, count, stepDuration){
+  const path = [fromIdx];
+  let idx = fromIdx;
+  for(let i=0;i<count;i++){ idx=(idx+1)%40; path.push(idx); }
+  const vCruise = 1/stepDuration;
+  const rampUnits = Math.min(0.5, count/2);
+  const accelTime = rampUnits>0 ? (2*rampUnits)/vCruise : 0;
+  const cruiseUnits = count - 2*rampUnits;
+  const cruiseTime = cruiseUnits/vCruise;
+  walk = {
+    path, steps:count, vCruise, rampUnits, accelTime, cruiseTime,
+    totalTime: accelTime*2+cruiseTime,
+    t0: clock.getElapsedTime(), lastSeg:-1
+  };
+  return walk;
 }
 
 function animate(){
@@ -668,47 +684,61 @@ function animate(){
     }
   });
 
-  // marche du pion : glisse à vitesse constante d'une case à l'autre
-  // (pas d'arc de saut), avec une vraie accélération au premier pas et
-  // une décélération au dernier (comme un personnage qui se met en
-  // route puis freine), un buste qui penche légèrement en avant et
-  // se balance pendant la marche, et un cycle jambes/bras continu.
-  if(hopState){
-    const dur = hopState.duration;
-    let p = (t - hopState.t0) / dur;
-    const isFirst = hopState.stepIndex === 0;
-    const isLast = hopState.stepIndex === hopState.totalSteps-1;
-    const rampIn = isFirst ? smoothstep(p/0.45) : 1;
-    const rampOut = isLast ? smoothstep((1-p)/0.45) : 1;
-    const gait = rampIn*rampOut;
-
-    if(p >= 1){
-      p = 1;
-      const toTile = tiles[hopState.toIdx];
-      player.root.position.set(toTile.world.x, toTile.tileTopY, toTile.world.z);
-      hopState.done = true;
+  // marche continue du pion sur tout le trajet demandé
+  if(walk){
+    const te = t - walk.t0;
+    let dist, vel;
+    if(te >= walk.totalTime){
+      dist = walk.steps; vel = 0; walk.done = true;
+    } else if(walk.accelTime>0 && te < walk.accelTime){
+      vel = walk.vCruise*(te/walk.accelTime);
+      dist = 0.5*walk.vCruise*te*te/walk.accelTime;
+    } else if(te < walk.accelTime+walk.cruiseTime){
+      vel = walk.vCruise;
+      dist = walk.rampUnits + walk.vCruise*(te-walk.accelTime);
     } else {
-      const a = tiles[hopState.fromIdx].world, b = tiles[hopState.toIdx].world;
-      const x = a.x + (b.x-a.x)*p;
-      const z = a.z + (b.z-a.z)*p;
-      const bob = reduceMotion ? 0 : Math.abs(Math.sin(p*Math.PI*2))*0.028*gait;
-      player.root.position.set(x, tiles[hopState.fromIdx].tileTopY + bob, z);
-      let dyaw = hopState.yaw - player.root.rotation.y;
-      dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
-      player.root.rotation.y += dyaw*Math.min(1,dt*16);
+      const te2 = Math.max(0, walk.totalTime - te);
+      vel = walk.accelTime>0 ? walk.vCruise*(te2/walk.accelTime) : 0;
+      dist = walk.steps - 0.5*walk.vCruise*te2*te2/walk.accelTime;
     }
+    dist = Math.max(0, Math.min(walk.steps, dist));
+    const segIdx = Math.min(Math.floor(dist), walk.steps-1);
+    const localP = dist - segIdx;
+    const aTile = tiles[walk.path[segIdx]], bTile = tiles[walk.path[segIdx+1]];
+    const x = aTile.world.x + (bTile.world.x-aTile.world.x)*localP;
+    const z = aTile.world.z + (bTile.world.z-aTile.world.z)*localP;
+    const gaitAmp = walk.vCruise>0 ? vel/walk.vCruise : 0;
+    const bob = reduceMotion ? 0 : Math.abs(Math.sin(dist*Math.PI*2))*0.028*gaitAmp;
+    player.root.position.set(x, aTile.tileTopY + bob, z);
+
+    const targetYaw = Math.atan2(bTile.world.x-aTile.world.x, bTile.world.z-aTile.world.z);
+    let dyaw = targetYaw - player.root.rotation.y;
+    dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
+    player.root.rotation.y += dyaw*Math.min(1,dt*16);
+
+    if(segIdx !== walk.lastSeg){
+      walk.lastSeg = segIdx;
+      currentIndex = walk.path[segIdx];
+      setActive(currentIndex);
+    }
+
     if(!reduceMotion){
-      const swing = Math.sin(p*Math.PI*2)*0.5*gait;
+      const swing = Math.sin(dist*Math.PI*2)*0.5*gaitAmp;
       player.legL.rotation.x = swing;
       player.legR.rotation.x = -swing;
       player.armL.rotation.x = -swing;
       player.armR.rotation.x = swing;
-      player.torso.position.y = 0.3 + Math.abs(Math.sin(p*Math.PI*2))*0.016*gait;
-      const leanTarget = -0.09*gait;
+      player.torso.position.y = 0.3 + Math.abs(Math.sin(dist*Math.PI*2))*0.016*gaitAmp;
+      const leanTarget = -0.09*gaitAmp;
       player.root.rotation.x += (leanTarget - player.root.rotation.x)*Math.min(1,dt*10);
-      player.torso.rotation.z = Math.sin(p*Math.PI*2 + Math.PI/2)*0.05*gait;
+      player.torso.rotation.z = Math.sin(dist*Math.PI*2 + Math.PI/2)*0.05*gaitAmp;
     }
-    if(hopState.done){ hopState = null; }
+
+    if(walk.done){
+      currentIndex = walk.path[walk.steps];
+      setActive(currentIndex);
+      walk = null;
+    }
   } else if(!reduceMotion){
     // au repos : tout revient doucement en position neutre
     player.legL.rotation.x *= 0.8; player.legR.rotation.x *= 0.8;
@@ -755,7 +785,7 @@ function setSelected(v){
 }
 
 const wait = ms => new Promise(r=>setTimeout(r,ms));
-const HOP_DURATION = 0.42;
+const HOP_DURATION = 0.36;
 
 async function move(){
   if(moving) return;
@@ -764,14 +794,8 @@ async function move(){
   validate.disabled = minus.disabled = plus.disabled = true;
   statusEl.textContent = 'Le joueur avance de '+selected+' case'+(selected>1?'s':'')+'…';
 
-  for(let n=0;n<selected;n++){
-    if(myGen!==generation) return;
-    const from = currentIndex;
-    currentIndex = (currentIndex+1)%40;
-    setActive(currentIndex);
-    startHop(from,currentIndex,HOP_DURATION,n,selected);
-    await wait(HOP_DURATION*1000);
-  }
+  const w = startWalk(currentIndex, selected, HOP_DURATION);
+  await wait(w.totalTime*1000 + 30);
 
   if(myGen!==generation) return;
   statusEl.textContent = currentIndex===0 ? 'Le joueur est arrivé sur Départ !' : 'Le joueur est arrivé sur la case '+currentIndex+' !';
@@ -782,7 +806,7 @@ async function move(){
 function restart(){
   generation++;
   moving = false;
-  hopState = null;
+  walk = null;
   currentIndex = 0;
   player.root.scale.set(1,1,1);
   player.root.rotation.x = 0;
