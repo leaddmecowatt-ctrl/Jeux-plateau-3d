@@ -164,9 +164,12 @@ function getFlatPhotoFace(catKey, caseNum, accentColor, badge){
 
   const img = LOT_IMAGES[catKey];
   if(img){
-    const pad = size*0.05;
+    const pad = size*0.028;
     const bw = size-2*pad, bh = size-2*pad-size*0.19;
-    const scale = Math.max(bw/img.width, bh/img.height);
+    // "contain" fit (jamais "cover") : on voit toujours la carte/l'objet
+    // en entier, jamais coupé en haut ou en bas, tout en remplissant
+    // au maximum la case (zoom optimal sans rognage).
+    const scale = Math.min(bw/img.width, bh/img.height);
     const iw = img.width*scale, ih = img.height*scale;
     ctx.filter = 'saturate(1.25) contrast(1.12) brightness(1.12)';
     ctx.drawImage(img, pad+(bw-iw)/2, pad+(bh-ih)/2, iw, ih);
@@ -209,6 +212,13 @@ function getFlatPhotoFace(catKey, caseNum, accentColor, badge){
    (gradée, gros booster, ETB, jackpot final) qui flottent au-dessus
    de leur case, avec un cadre doré plus riche et un halo. */
 const framedCache = new Map();
+function drawCornerMark(ctx, cx, cy, len, hDir, vDir){
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + len*vDir);
+  ctx.lineTo(cx, cy);
+  ctx.lineTo(cx + len*hDir, cy);
+  ctx.stroke();
+}
 function getFramedPhotoTexture(catKey){
   if(framedCache.has(catKey)) return framedCache.get(catKey);
   const img = LOT_IMAGES[catKey];
@@ -217,26 +227,53 @@ function getFramedPhotoTexture(catKey){
   const h = size, w = Math.round(size*(iw/ih));
   const cvs = document.createElement('canvas'); cvs.width=w; cvs.height=h;
   const ctx = cvs.getContext('2d');
-  const r = w*0.06;
+  // Les cartes (gradée / jackpot final) gardent un vrai cadre "carte de
+  // collection" façon slab doré ; les produits (ETB, booster) flottent
+  // en photo nette avec juste des accents dorés aux coins, pour garder
+  // une forme fidèle à ce qu'ils sont réellement (une boîte/un pack,
+  // pas une carte) — sans contour blanc disgracieux.
+  const isCardLike = (catKey === 'gradee' || catKey === 'jackpot300');
+  const r = w*(isCardLike ? 0.06 : 0.09);
 
-  const frameGrad = ctx.createLinearGradient(0,0,w,h);
-  frameGrad.addColorStop(0,GOLD_BRIGHT); frameGrad.addColorStop(.5,GOLD); frameGrad.addColorStop(1,'#8a6a1e');
-  roundRectPath(ctx,0,0,w,h,r); ctx.fillStyle=frameGrad; ctx.fill();
+  if(isCardLike){
+    const frameGrad = ctx.createLinearGradient(0,0,w,h);
+    frameGrad.addColorStop(0,GOLD_BRIGHT); frameGrad.addColorStop(.5,GOLD); frameGrad.addColorStop(1,'#8a6a1e');
+    roundRectPath(ctx,0,0,w,h,r); ctx.fillStyle=frameGrad; ctx.fill();
 
-  const inset = w*0.045;
-  ctx.save();
-  roundRectPath(ctx,inset,inset,w-2*inset,h-2*inset,r*0.7); ctx.clip();
-  ctx.fillStyle = '#0c0c0c'; ctx.fillRect(0,0,w,h);
-  ctx.filter = 'saturate(1.2) contrast(1.1) brightness(1.1)';
-  if(img) ctx.drawImage(img, inset, inset, w-2*inset, h-2*inset);
-  ctx.filter = 'none';
-  const vign = ctx.createRadialGradient(w/2,h*0.35,h*0.15,w/2,h/2,h*0.75);
-  vign.addColorStop(0,'rgba(0,0,0,0)'); vign.addColorStop(1,'rgba(0,0,0,.12)');
-  ctx.fillStyle=vign; ctx.fillRect(0,0,w,h);
-  ctx.restore();
+    const inset = w*0.045;
+    ctx.save();
+    roundRectPath(ctx,inset,inset,w-2*inset,h-2*inset,r*0.7); ctx.clip();
+    ctx.fillStyle = '#0c0c0c'; ctx.fillRect(0,0,w,h);
+    ctx.filter = 'saturate(1.2) contrast(1.1) brightness(1.1)';
+    if(img) ctx.drawImage(img, inset, inset, w-2*inset, h-2*inset);
+    ctx.filter = 'none';
+    const vign = ctx.createRadialGradient(w/2,h*0.35,h*0.15,w/2,h/2,h*0.75);
+    vign.addColorStop(0,'rgba(0,0,0,0)'); vign.addColorStop(1,'rgba(0,0,0,.12)');
+    ctx.fillStyle=vign; ctx.fillRect(0,0,w,h);
+    ctx.restore();
 
-  roundRectPath(ctx,inset,inset,w-2*inset,h-2*inset,r*0.7);
-  ctx.lineWidth=w*0.012; ctx.strokeStyle='rgba(255,255,255,.55)'; ctx.stroke();
+    roundRectPath(ctx,inset,inset,w-2*inset,h-2*inset,r*0.7);
+    ctx.lineWidth=w*0.01; ctx.strokeStyle='rgba(255,224,140,.5)'; ctx.stroke();
+  } else {
+    ctx.save();
+    roundRectPath(ctx,0,0,w,h,r); ctx.clip();
+    ctx.fillStyle = '#0c0c0c'; ctx.fillRect(0,0,w,h);
+    ctx.filter = 'saturate(1.18) contrast(1.08) brightness(1.12)';
+    if(img) ctx.drawImage(img, 0, 0, w, h);
+    ctx.filter = 'none';
+    const vign = ctx.createRadialGradient(w/2,h*0.4,h*0.12,w/2,h/2,h*0.78);
+    vign.addColorStop(0,'rgba(0,0,0,0)'); vign.addColorStop(1,'rgba(0,0,0,.18)');
+    ctx.fillStyle=vign; ctx.fillRect(0,0,w,h);
+    ctx.restore();
+
+    const cornerLen = Math.min(w,h)*0.13;
+    const ci = w*0.04;
+    ctx.strokeStyle = GOLD_BRIGHT; ctx.lineWidth = w*0.014; ctx.lineCap='round';
+    drawCornerMark(ctx, ci, ci, cornerLen, 1, 1);
+    drawCornerMark(ctx, w-ci, ci, cornerLen, -1, 1);
+    drawCornerMark(ctx, ci, h-ci, cornerLen, 1, -1);
+    drawCornerMark(ctx, w-ci, h-ci, cornerLen, -1, -1);
+  }
 
   const tex = new THREE.CanvasTexture(cvs);
   tex.colorSpace = THREE.SRGBColorSpace;
