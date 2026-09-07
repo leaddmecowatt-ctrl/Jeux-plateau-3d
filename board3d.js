@@ -38,6 +38,15 @@ function ringPos(i){
 }
 const CELL = 1;
 function toWorld(r,c){ return new THREE.Vector3((c-6)*CELL, 0, (r-6)*CELL); }
+/* Oriente chaque case pour que le "bas" de la carte (le bandeau prix)
+   pointe toujours vers l'extérieur du plateau, sur les 4 côtés — pas
+   seulement sur la rangée du bas (orientation par défaut). */
+function outwardYaw(r,c){
+  if(r===11) return 0;
+  if(c===1)  return -Math.PI/2;
+  if(r===1)  return Math.PI;
+  return Math.PI/2; // c===11
+}
 
 /* =========================================================================
    Le plateau RICHE (q=79,6%, marge 50% sur mise moyenne de 9€) :
@@ -600,7 +609,7 @@ centerPlate.receiveShadow = true;
 boardGroup.add(centerPlate);
 
 /* ---------- Les 40 cases ---------- */
-const TILE = 0.9;
+const TILE = 0.95;
 const tiles = [];
 
 /* vitesses/amplitudes d'animation par catégorie */
@@ -624,6 +633,7 @@ for(let i=0;i<40;i++){
 
   const group = new THREE.Group();
   group.position.copy(world);
+  group.rotation.y = outwardYaw(r,c);
   boardGroup.add(group);
 
   const baseTile = new THREE.Mesh(
