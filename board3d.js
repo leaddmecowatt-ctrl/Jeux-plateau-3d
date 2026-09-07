@@ -1119,6 +1119,68 @@ const cardDrawOverlay = document.getElementById('cardDrawOverlay');
 const cardGrid = document.getElementById('cardGrid');
 const cardDrawTotal = document.getElementById('cardDrawTotal');
 const impactFlash = document.getElementById('impactFlash');
+const bankInput = document.getElementById('bankInput');
+const miseInput = document.getElementById('miseInput');
+const addMiseBtn = document.getElementById('addMiseBtn');
+
+/* ---------- Cagnotte : les gros lots (palier "float" — gradée, gros
+   booster, ETB, jackpot final) ne sont payés que si l'argent des
+   mises déjà encaissées les couvre. Sinon, le tirage reste honnête
+   mais le lot réellement remis redescend d'un cran (jamais un lot
+   moins cher que ce qui est dans la cagnotte), pour ne jamais mettre
+   l'animateur en perte tout en gardant un lot valorisant à chaque
+   fois. La cagnotte est alimentée manuellement (bouton "+ Ajouter")
+   à chaque mise réellement encaissée, et persiste entre les parties
+   et les rechargements de page (localStorage). */
+const BANK_KEY = 'pika_bankroll';
+const MISE_KEY = 'pika_mise';
+let bankroll = parseFloat(localStorage.getItem(BANK_KEY)) || 0;
+function saveBankroll(){
+  try{ localStorage.setItem(BANK_KEY, String(bankroll)); }catch(e){}
+  if(bankInput) bankInput.value = bankroll.toFixed(2);
+}
+saveBankroll();
+if(miseInput){
+  const savedMise = parseFloat(localStorage.getItem(MISE_KEY));
+  if(!isNaN(savedMise)) miseInput.value = savedMise;
+}
+if(bankInput) bankInput.addEventListener('change', ()=>{
+  const v = parseFloat(bankInput.value);
+  bankroll = isNaN(v) ? 0 : Math.max(0, v);
+  saveBankroll();
+});
+if(addMiseBtn) addMiseBtn.addEventListener('click', ()=>{
+  const mise = parseFloat(miseInput && miseInput.value) || 0;
+  if(mise>0){
+    try{ localStorage.setItem(MISE_KEY, String(mise)); }catch(e){}
+    bankroll += mise;
+    saveBankroll();
+  }
+});
+
+/* Paliers du plus cher au moins cher : un lot "float" non couvert par
+   la cagnotte redescend au premier palier que la cagnotte peut payer. */
+const PAYOUT_LADDER = [
+  { cat:'jackpot300', cost:300 },
+  { cat:'etb',         cost:150 },
+  { cat:'booster50',   cost:50  },
+  { cat:'gradee',      cost:50  },
+  { cat:'alternative', cost:7.2 },
+  { cat:'commune',     cost:0.68 },
+];
+function fundedCategory(catKey){
+  const startIdx = PAYOUT_LADDER.findIndex(t=>t.cat===catKey);
+  if(startIdx===-1) return catKey;
+  for(let i=startIdx;i<PAYOUT_LADDER.length;i++){
+    const tier = PAYOUT_LADDER[i];
+    if(bankroll >= tier.cost || i===PAYOUT_LADDER.length-1){
+      bankroll = Math.max(0, bankroll - tier.cost);
+      saveBankroll();
+      return tier.cat;
+    }
+  }
+  return catKey;
+}
 
 /* ---------- Mise en scène du tirage : suspense sonore/visuel autour
    du tirage honnête existant (aucun impact sur le résultat, juste du
@@ -1440,7 +1502,7 @@ resetBtn.addEventListener('click', restart);
 if(startBtn) startBtn.addEventListener('click', startGame);
 if(winBtn) winBtn.addEventListener('click', ()=>{
   if(currentIndex<0) return;
-  const cat = tiles[currentIndex].catKey;
+  const cat = fundedCategory(tiles[currentIndex].catKey);
   celebrate(cat);
   broadcastSync({type:'celebrate', catKey:cat});
 });
@@ -1607,13 +1669,21 @@ function celebrate(catKey, forcedCard){
     if(rareCardDrawn) celeb.classList.add('shake');
     // même sur une carte Chance/Caisse, si c'est la rare carte gradée
     // qui sort, on montre une vraie photo — sinon pas de lot fixe à
-    // afficher (avancer/reculer/rejouer n'ont pas de photo).
-    if(celebPhoto){
-      if(rareCardDrawn && LOT_IMAGE_URLS.gradee){
-        celebPhoto.src = LOT_IMAGE_URLS.gradee; celebPhoto.hidden = false;
-      } else celebPhoto.hidden = true;
+    // afficher (avancer/reculer/rejouer n'ont pas de photo). Comme
+    // pour les autres lots "float", la cagnotte peut faire redescendre
+    // ce lot d'un cran si elle ne couvre pas encore la carte gradée.
+    if(rareCardDrawn){
+      const payoutCat = fundedCategory('gradee');
+      if(payoutCat !== 'gradee' && celebMain) celebMain.textContent = CATEGORY_MESSAGES[payoutCat] || celebMain.textContent;
+      if(celebPhoto){
+        const url = LOT_IMAGE_URLS[payoutCat];
+        if(url){ celebPhoto.src = url; celebPhoto.hidden = false; }
+        else celebPhoto.hidden = true;
+      }
+      pushResult(payoutCat);
+    } else if(celebPhoto){
+      celebPhoto.hidden = true;
     }
-    if(rareCardDrawn) pushResult('gradee');
   } else {
     if(celebMain) celebMain.textContent = CATEGORY_MESSAGES[catKey] || '🎉 Lot remporté !';
     if(celebSub) celebSub.hidden = true;

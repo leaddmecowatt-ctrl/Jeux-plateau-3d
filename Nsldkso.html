@@ -186,6 +186,23 @@ body{overflow:hidden;color:#fff}
 button:disabled{opacity:.48;filter:grayscale(.7)}
 button:active:not(:disabled){transform:translateY(1px)}
 
+.bank-panel{
+  background:linear-gradient(180deg,#1a1406,#0d0a03);
+  border:1px solid var(--gold);border-radius:10px;padding:7px 9px;
+  display:flex;flex-direction:column;gap:5px;
+}
+.bank-row{display:flex;align-items:center;gap:6px;font-size:11px;color:#e8d8ae}
+.bank-row label{flex:0 0 auto;font-weight:800}
+.bank-row input[type="number"]{
+  flex:1 1 auto;min-width:0;height:26px;border-radius:6px;padding:0 6px;
+  border:1px solid var(--gold);background:#241a06;color:var(--gold-bright);font-size:12px;font-weight:900;
+}
+.bank-row span{flex:0 0 auto}
+.bank-row button{
+  flex:0 0 auto;border:0;border-radius:6px;padding:5px 8px;font-size:10.5px;font-weight:900;
+  background:linear-gradient(180deg,#33b46a,#1e7a48);color:#fff;
+}
+
 .legend{
   background:linear-gradient(180deg,#1a1406,#0d0a03);
   border:1px solid var(--gold);border-radius:10px;padding:9px 10px;
@@ -324,10 +341,13 @@ html.display-mode .display-badge{ display:block; }
 /* écrans larges (tablette/paysage, comme la maquette de référence) :
    panneau à droite du plateau plutôt qu'en dessous */
 @media (min-width:760px) and (min-aspect-ratio: 1/1){
-  .board-row{flex-direction:row;align-items:stretch;justify-content:center;gap:16px}
-  .board-col{flex:0 0 auto;justify-content:center}
-  .board-wrap{width:min(72vh,62vw,760px);flex:0 0 auto;align-self:center}
-  .side-panel{width:220px;max-width:220px;justify-content:flex-start;align-self:center}
+  .board-row{flex-direction:row;align-items:stretch;justify-content:center;gap:12px}
+  .board-col{flex:1 1 auto;justify-content:center;height:100%}
+  /* le plateau occupe toute la hauteur disponible (utile quand
+     l'écran est filmé en plan large lors d'un live) plutôt qu'une
+     estimation en vh qui laissait de grandes zones vides. */
+  .board-wrap{width:auto;height:100%;max-height:900px;aspect-ratio:1/1;flex:0 0 auto;align-self:center}
+  .side-panel{width:190px;max-width:190px;justify-content:flex-start;align-self:center}
 }
 
 @media(max-height:760px){
@@ -439,6 +459,19 @@ if(new URLSearchParams(location.search).get('view')==='display'){
           </div>
           <button class="validate" id="validate" type="button">🃏 TIRER LES CARTES</button>
           <button class="winbtn" id="winBtn" type="button" hidden>🎉 LOT REMPORTÉ</button>
+        </div>
+
+        <div class="bank-panel">
+          <div class="bank-row">
+            <label for="bankInput">Cagnotte</label>
+            <input type="number" id="bankInput" step="0.5" min="0" value="0">
+            <span>€</span>
+          </div>
+          <div class="bank-row">
+            <label for="miseInput">Mise</label>
+            <input type="number" id="miseInput" step="0.5" min="0" value="9">
+            <button id="addMiseBtn" type="button">+ Ajouter</button>
+          </div>
         </div>
 
         <details class="legend">
