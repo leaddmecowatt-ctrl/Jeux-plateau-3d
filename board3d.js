@@ -184,7 +184,7 @@ function getFlatPhotoFace(catKey, caseNum, accentColor, badge){
     // au maximum la case (zoom optimal sans rognage).
     const scale = Math.min(bw/img.width, bh/img.height);
     const iw = img.width*scale, ih = img.height*scale;
-    ctx.filter = 'saturate(1.25) contrast(1.12) brightness(1.12)';
+    ctx.filter = 'saturate(1.14) contrast(1.07) brightness(1.06)';
     ctx.drawImage(img, pad+(bw-iw)/2, pad+(bh-ih)/2, iw, ih);
     ctx.filter = 'none';
   }
@@ -259,7 +259,7 @@ function getFramedPhotoTexture(catKey){
     ctx.save();
     roundRectPath(ctx,inset,inset,w-2*inset,h-2*inset,r*0.7); ctx.clip();
     ctx.fillStyle = '#0c0c0c'; ctx.fillRect(0,0,w,h);
-    ctx.filter = 'saturate(1.2) contrast(1.1) brightness(1.1)';
+    ctx.filter = 'saturate(1.12) contrast(1.06) brightness(1.05)';
     if(img) ctx.drawImage(img, inset, inset, w-2*inset, h-2*inset);
     ctx.filter = 'none';
     const vign = ctx.createRadialGradient(w/2,h*0.35,h*0.15,w/2,h/2,h*0.75);
@@ -273,7 +273,7 @@ function getFramedPhotoTexture(catKey){
     ctx.save();
     roundRectPath(ctx,0,0,w,h,r); ctx.clip();
     ctx.fillStyle = '#0c0c0c'; ctx.fillRect(0,0,w,h);
-    ctx.filter = 'saturate(1.18) contrast(1.08) brightness(1.12)';
+    ctx.filter = 'saturate(1.1) contrast(1.05) brightness(1.06)';
     if(img) ctx.drawImage(img, 0, 0, w, h);
     ctx.filter = 'none';
     const vign = ctx.createRadialGradient(w/2,h*0.4,h*0.12,w/2,h/2,h*0.78);
@@ -683,7 +683,7 @@ for(let i=0;i<40;i++){
   let floatObj = null, shadowDisc = null, floatBaseScale = 0.34;
   if(catDef.tier === 'float'){
     const { tex, aspect } = getFramedPhotoTexture(catKey);
-    const scaleByCat = { gradee:0.42, booster50:0.5, etb:0.58, jackpot300:0.66 }[catKey] || 0.45;
+    const scaleByCat = { gradee:0.5, booster50:0.6, etb:0.7, jackpot300:0.8 }[catKey] || 0.5;
     const h = scaleByCat, w = h*aspect;
     const mat = new THREE.MeshBasicMaterial({map:tex, transparent:true});
     floatObj = new THREE.Mesh(new THREE.PlaneGeometry(w,h), mat);
@@ -698,7 +698,7 @@ for(let i=0;i<40;i++){
   }
   if(floatObj){
     shadowDisc = new THREE.Mesh(
-      new THREE.CircleGeometry(0.22,20),
+      new THREE.CircleGeometry(catDef.tier==='float' ? 0.28 : 0.22,20),
       new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:.3})
     );
     shadowDisc.rotation.x = -Math.PI/2;
@@ -707,7 +707,7 @@ for(let i=0;i<40;i++){
 
     // halo doré supplémentaire sous les gros lots (plus intense = plus gros)
     if(catDef.tier==='float'){
-      const glowScale = { gradee:0.5, booster50:0.62, etb:0.75, jackpot300:0.92 }[catKey] || 0.5;
+      const glowScale = { gradee:0.58, booster50:0.72, etb:0.86, jackpot300:1.05 }[catKey] || 0.58;
       const glow = new THREE.Sprite(new THREE.SpriteMaterial({
         map:goldDotTex, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.55
       }));
