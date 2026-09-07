@@ -1137,6 +1137,16 @@ function saveBankroll(){
   try{ localStorage.setItem(BANK_KEY, String(bankroll)); }catch(e){}
 }
 
+/* Bouton "Nouveau live" : remet la cagnotte à 0€ pour repartir d'un
+   direct vierge, puis disparaît pour ne pas être recliqué par erreur
+   en cours de stream. Réapparaît au prochain chargement de page. */
+const resetBankBtn = document.getElementById('resetBankBtn');
+if(resetBankBtn) resetBankBtn.addEventListener('click', ()=>{
+  bankroll = 0;
+  saveBankroll();
+  resetBankBtn.hidden = true;
+});
+
 /* Paliers du plus cher au moins cher : un lot "float" non couvert par
    la cagnotte redescend au premier palier que la cagnotte peut payer. */
 const PAYOUT_LADDER = [
