@@ -117,14 +117,16 @@ function getFlatPhotoFace(catKey, caseNum, accentColor, badge){
 
   const img = LOT_IMAGES[catKey];
   if(img){
-    const pad = size*0.09;
-    const bw = size-2*pad, bh = size-2*pad*1.35;
+    const pad = size*0.05;
+    const bw = size-2*pad, bh = size-2*pad-size*0.19;
     const scale = Math.max(bw/img.width, bh/img.height);
     const iw = img.width*scale, ih = img.height*scale;
+    ctx.filter = 'saturate(1.25) contrast(1.12) brightness(1.12)';
     ctx.drawImage(img, pad+(bw-iw)/2, pad+(bh-ih)/2, iw, ih);
+    ctx.filter = 'none';
   }
   const gloss = ctx.createLinearGradient(0,0,0,size);
-  gloss.addColorStop(0,'rgba(255,255,255,.14)'); gloss.addColorStop(.3,'rgba(255,255,255,0)');
+  gloss.addColorStop(0,'rgba(255,255,255,.06)'); gloss.addColorStop(.22,'rgba(255,255,255,0)');
   ctx.fillStyle = gloss; ctx.fillRect(0,0,size,size);
   ctx.restore();
 
@@ -178,9 +180,11 @@ function getFramedPhotoTexture(catKey){
   ctx.save();
   roundRectPath(ctx,inset,inset,w-2*inset,h-2*inset,r*0.7); ctx.clip();
   ctx.fillStyle = '#0c0c0c'; ctx.fillRect(0,0,w,h);
+  ctx.filter = 'saturate(1.2) contrast(1.1) brightness(1.1)';
   if(img) ctx.drawImage(img, inset, inset, w-2*inset, h-2*inset);
+  ctx.filter = 'none';
   const vign = ctx.createRadialGradient(w/2,h*0.35,h*0.15,w/2,h/2,h*0.75);
-  vign.addColorStop(0,'rgba(0,0,0,0)'); vign.addColorStop(1,'rgba(0,0,0,.25)');
+  vign.addColorStop(0,'rgba(0,0,0,0)'); vign.addColorStop(1,'rgba(0,0,0,.12)');
   ctx.fillStyle=vign; ctx.fillRect(0,0,w,h);
   ctx.restore();
 
@@ -463,14 +467,23 @@ function makeCenterPlateTexture(){
   }
   ctx.globalAlpha=1;
 
-  // pokeball miniature au-dessus du texte
+  // mini Hyper Ball (noir & or) au-dessus du texte, au lieu de la
+  // Poke Ball classique rouge/blanc : colle mieux au thème du plateau
   const pbY = size*0.30, pbR = size*0.075;
-  ctx.beginPath(); ctx.arc(size/2,pbY,pbR,Math.PI,0); ctx.fillStyle='#f5484f'; ctx.fill();
+  ctx.beginPath(); ctx.arc(size/2,pbY,pbR,Math.PI,0); ctx.fillStyle='#181818'; ctx.fill();
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR,0,Math.PI); ctx.fillStyle='#f6fbff'; ctx.fill();
-  ctx.fillStyle='#12283f'; ctx.fillRect(size/2-pbR,pbY-pbR*0.09,pbR*2,pbR*0.18);
-  ctx.lineWidth=pbR*0.09; ctx.strokeStyle='#12283f';
+  ctx.save();
+  ctx.beginPath(); ctx.arc(size/2,pbY,pbR,Math.PI,0); ctx.clip();
+  ctx.fillStyle = GOLD_BRIGHT;
+  ctx.beginPath();
+  ctx.ellipse(size/2-pbR*0.12, pbY-pbR*0.32, pbR*0.62, pbR*0.85, -0.35, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+  ctx.fillStyle='#181818'; ctx.fillRect(size/2-pbR,pbY-pbR*0.09,pbR*2,pbR*0.18);
+  ctx.lineWidth=pbR*0.09; ctx.strokeStyle='#181818';
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR,0,Math.PI*2); ctx.stroke();
-  ctx.beginPath(); ctx.arc(size/2,pbY,pbR*0.34,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(size/2,pbY,pbR*0.34,0,Math.PI*2); ctx.fillStyle='#cfd6db'; ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(size/2,pbY,pbR*0.2,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill();
 
   // texte PIKAJACKPOT
   ctx.textAlign='center'; ctx.textBaseline='middle';
@@ -555,7 +568,7 @@ for(let i=0;i<40;i++){
     // pour les cases "float"/"glyph", la face reste sobre noir & or
     faceTex = getFlatPhotoFace(catKey, caseNum, accentColor, null);
   }
-  const faceMat = new THREE.MeshPhysicalMaterial({map:faceTex,roughness:.32,metalness:.15,clearcoat:.7,clearcoatRoughness:.25});
+  const faceMat = new THREE.MeshBasicMaterial({map:faceTex});
   const face = new THREE.Mesh(new THREE.PlaneGeometry(TILE*0.94,TILE*0.94), faceMat);
   face.rotation.x = -Math.PI/2;
   face.position.y = tileTopY+0.002;

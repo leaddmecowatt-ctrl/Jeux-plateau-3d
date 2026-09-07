@@ -241,9 +241,14 @@ button:active:not(:disabled){transform:translateY(1px)}
 }
 .ball{
   position:absolute;left:10px;top:5px;width:30px;height:30px;border-radius:50%;
-  background:linear-gradient(#f64249 0 43%,#153657 44% 56%,#f4f9ff 57%);border:3px solid #153657
+  background:linear-gradient(#1c1c1c 0 43%,#1c1c1c 44% 56%,#f4f9ff 57%);border:3px solid #1c1c1c;
+  overflow:hidden;
 }
-.ball:after{content:"";position:absolute;left:35%;top:35%;width:30%;height:30%;border-radius:50%;background:#fff;border:2px solid #153657}
+.ball:before{
+  content:"";position:absolute;left:2px;top:1px;width:60%;height:55%;border-radius:50%;
+  background:var(--gold-bright);transform:rotate(-25deg);
+}
+.ball:after{content:"";position:absolute;left:35%;top:35%;width:30%;height:30%;border-radius:50%;background:#cfd6db;border:2px solid #1c1c1c}
 .reset{
   position:absolute;right:7px;top:5px;height:30px;padding:0 8px;border-radius:8px;border:1px solid var(--gold);
   background:#1a1406;color:var(--gold-bright);font-size:9px;font-weight:900
