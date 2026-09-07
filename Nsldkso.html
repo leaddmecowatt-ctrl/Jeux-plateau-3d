@@ -152,6 +152,17 @@ body{overflow:hidden;color:#fff}
   box-shadow:0 0 46px 16px rgba(180,225,255,.35);
 }
 
+.board-col{display:flex;flex-direction:column;align-items:center;gap:8px;min-width:0}
+.place-banner{
+  z-index:2;flex:0 0 auto;max-width:min(90vw,420px);
+  padding:5px 18px;border-radius:20px;
+  background:linear-gradient(180deg,#241a06,#120d02);
+  border:1px solid var(--gold);color:var(--gold-bright);
+  font-size:13px;font-weight:900;letter-spacing:.03em;text-align:center;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  box-shadow:0 0 10px rgba(233,195,74,.35);
+  transition:opacity .25s ease;
+}
 .board-wrap{
   width:min(95vw,560px);
   aspect-ratio:1/1;
@@ -241,14 +252,9 @@ button:active:not(:disabled){transform:translateY(1px)}
 }
 .ball{
   position:absolute;left:10px;top:5px;width:30px;height:30px;border-radius:50%;
-  background:linear-gradient(#1c1c1c 0 43%,#1c1c1c 44% 56%,#f4f9ff 57%);border:3px solid #1c1c1c;
-  overflow:hidden;
+  background:linear-gradient(#f64249 0 43%,#153657 44% 56%,#f4f9ff 57%);border:3px solid #153657
 }
-.ball:before{
-  content:"";position:absolute;left:2px;top:1px;width:60%;height:55%;border-radius:50%;
-  background:var(--gold-bright);transform:rotate(-25deg);
-}
-.ball:after{content:"";position:absolute;left:35%;top:35%;width:30%;height:30%;border-radius:50%;background:#cfd6db;border:2px solid #1c1c1c}
+.ball:after{content:"";position:absolute;left:35%;top:35%;width:30%;height:30%;border-radius:50%;background:#fff;border:2px solid #153657}
 .reset{
   position:absolute;right:7px;top:5px;height:30px;padding:0 8px;border-radius:8px;border:1px solid var(--gold);
   background:#1a1406;color:var(--gold-bright);font-size:9px;font-weight:900
@@ -273,12 +279,18 @@ button:active:not(:disabled){transform:translateY(1px)}
   animation:celebPop .4s cubic-bezier(.2,1.6,.4,1);
 }
 .celebration[data-level="0"] .celeb-text{color:#ff6b6b;border-color:#8a0e0e}
+.celeb-sub{
+  margin-top:8px;font-size:clamp(13px,3.2vw,17px);font-weight:700;color:#fff;
+  text-shadow:0 2px 3px rgba(0,0,0,.8);
+}
+.celeb-sub[hidden]{display:none}
 @keyframes celebPop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
 
 /* écrans larges (tablette/paysage, comme la maquette de référence) :
    panneau à droite du plateau plutôt qu'en dessous */
 @media (min-width:760px) and (min-aspect-ratio: 1/1){
   .board-row{flex-direction:row;align-items:stretch;justify-content:center;gap:16px}
+  .board-col{flex:0 0 auto;justify-content:center}
   .board-wrap{width:min(60vh,52vw,560px);flex:0 0 auto;align-self:center}
   .side-panel{width:258px;max-width:258px;justify-content:flex-start;align-self:center}
 }
@@ -345,9 +357,12 @@ button:active:not(:disabled){transform:translateY(1px)}
     </div>
 
     <div class="board-row">
-      <div class="board-wrap" id="boardWrap">
-        <canvas id="gl"></canvas>
-        <div class="hint3d" id="hint3d">🖱️ glisser pour tourner la vue</div>
+      <div class="board-col">
+        <div class="place-banner" id="placeBanner">Départ</div>
+        <div class="board-wrap" id="boardWrap">
+          <canvas id="gl"></canvas>
+          <div class="hint3d" id="hint3d">🖱️ glisser pour tourner la vue</div>
+        </div>
       </div>
 
       <div class="side-panel">
@@ -391,7 +406,7 @@ button:active:not(:disabled){transform:translateY(1px)}
 
   <div class="celebration" id="celebration" aria-hidden="true">
     <canvas id="celebCanvas"></canvas>
-    <div class="celeb-text" id="celebText">🎉 Lot remporté !</div>
+    <div class="celeb-text" id="celebText"><span id="celebMain">🎉 Lot remporté !</span><div class="celeb-sub" id="celebSub" hidden></div></div>
   </div>
 </div>
 

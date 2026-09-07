@@ -46,6 +46,26 @@ const CATS = {
   prison:      { label:'ALLEZ EN PRISON',            value:'0€',      tier:'glyph', swatch:'danger' },
 };
 
+/* Pioches Chance / Caisse Communautaire (mêmes decks que le modèle
+   de probabilités), tirées au sort quand le joueur appuie sur le
+   bouton de révélation. */
+const CHANCE_DECK = [
+  'Avancez de 3 cases',
+  'Reculez de 2 cases',
+  'Rejouez gratuitement (relance bonus sans risque)',
+  'Carte commune offerte (~0,68€)',
+  "Prochain «je continue» : risque réduit de moitié",
+  'Carte alternative offerte (~7,20€ en moyenne)',
+];
+const CHEST_DECK = [
+  'Carte commune offerte (~0,68€)',
+  'Rejouez gratuitement',
+  'Avancez de 2 cases',
+  'Booster à 8€ offert',
+  'Reculez de 1 case',
+  'Rien de spécial',
+];
+
 /* Case 1 -> Case 40, dans l'ordre (index 0-based). */
 const BOARD_DATA = [
   'booster8','alternative','chest','commune','commune','commune','commune','chance','commune','commune',
@@ -271,7 +291,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.08;
+renderer.toneMappingExposure = 0.96;
 
 const scene = new THREE.Scene();
 
@@ -312,7 +332,7 @@ controls.update();
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(1,1), 0.55, 0.6, 0.75);
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(1,1), 0.28, 0.55, 0.82);
 composer.addPass(bloomPass);
 composer.addPass(new OutputPass());
 
@@ -329,9 +349,9 @@ controls.addEventListener('end', ()=>{
 if(hint3d){ setTimeout(()=>{ hint3d.style.opacity = '0'; }, 5000); }
 
 /* ---------- Lumières : ambiance "roue de la fortune" dorée ---------- */
-scene.add(new THREE.HemisphereLight(0xffdca0, 0x0a0805, 0.6));
+scene.add(new THREE.HemisphereLight(0xffdca0, 0x0a0805, 0.55));
 
-const key = new THREE.DirectionalLight(0xfff2df, 1.4);
+const key = new THREE.DirectionalLight(0xfff2df, 1.05);
 key.position.set(4.2,7,3.4);
 key.castShadow = true;
 key.shadow.mapSize.set(1024,1024);
@@ -357,12 +377,12 @@ function addFloodlight(x,z){
     g.fillStyle = grad; g.fillRect(0,0,128,128);
     return new THREE.CanvasTexture(c);
   })();
-  const mat = new THREE.SpriteMaterial({map:glowTex,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending});
+  const mat = new THREE.SpriteMaterial({map:glowTex,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,opacity:.6});
   const glow = new THREE.Sprite(mat);
   glow.position.set(x,4.6,z);
-  glow.scale.set(2.6,2.6,2.6);
+  glow.scale.set(1.9,1.9,1.9);
   scene.add(glow);
-  const pl = new THREE.PointLight(0xffe3ae, 0.5, 12, 2);
+  const pl = new THREE.PointLight(0xffe3ae, 0.32, 12, 2);
   pl.position.set(x,4.2,z);
   scene.add(pl);
 }
@@ -372,7 +392,7 @@ function addFloodlight(x,z){
 const boardGroup = new THREE.Group();
 scene.add(boardGroup);
 
-const plinthMat = new THREE.MeshStandardMaterial({color:0x0a0a0a,emissive:0x2a1c05,emissiveIntensity:.4,roughness:.4,metalness:.6});
+const plinthMat = new THREE.MeshStandardMaterial({color:0x0a0a0a,emissive:0x1c1204,emissiveIntensity:.25,roughness:.65,metalness:.25});
 const plinth = new THREE.Mesh(new THREE.BoxGeometry(11*CELL+0.7,0.5,11*CELL+0.7), plinthMat);
 plinth.position.y = -0.25;
 plinth.receiveShadow = true;
@@ -467,23 +487,14 @@ function makeCenterPlateTexture(){
   }
   ctx.globalAlpha=1;
 
-  // mini Hyper Ball (noir & or) au-dessus du texte, au lieu de la
-  // Poke Ball classique rouge/blanc : colle mieux au thème du plateau
+  // mini Pokeball classique rouge/blanc au-dessus du texte
   const pbY = size*0.30, pbR = size*0.075;
-  ctx.beginPath(); ctx.arc(size/2,pbY,pbR,Math.PI,0); ctx.fillStyle='#181818'; ctx.fill();
+  ctx.beginPath(); ctx.arc(size/2,pbY,pbR,Math.PI,0); ctx.fillStyle='#f5484f'; ctx.fill();
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR,0,Math.PI); ctx.fillStyle='#f6fbff'; ctx.fill();
-  ctx.save();
-  ctx.beginPath(); ctx.arc(size/2,pbY,pbR,Math.PI,0); ctx.clip();
-  ctx.fillStyle = GOLD_BRIGHT;
-  ctx.beginPath();
-  ctx.ellipse(size/2-pbR*0.12, pbY-pbR*0.32, pbR*0.62, pbR*0.85, -0.35, 0, Math.PI*2);
-  ctx.fill();
-  ctx.restore();
-  ctx.fillStyle='#181818'; ctx.fillRect(size/2-pbR,pbY-pbR*0.09,pbR*2,pbR*0.18);
-  ctx.lineWidth=pbR*0.09; ctx.strokeStyle='#181818';
+  ctx.fillStyle='#12283f'; ctx.fillRect(size/2-pbR,pbY-pbR*0.09,pbR*2,pbR*0.18);
+  ctx.lineWidth=pbR*0.09; ctx.strokeStyle='#12283f';
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR,0,Math.PI*2); ctx.stroke();
-  ctx.beginPath(); ctx.arc(size/2,pbY,pbR*0.34,0,Math.PI*2); ctx.fillStyle='#cfd6db'; ctx.fill(); ctx.stroke();
-  ctx.beginPath(); ctx.arc(size/2,pbY,pbR*0.2,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill();
+  ctx.beginPath(); ctx.arc(size/2,pbY,pbR*0.34,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill(); ctx.stroke();
 
   // texte PIKAJACKPOT
   ctx.textAlign='center'; ctx.textBaseline='middle';
@@ -511,7 +522,7 @@ function makeCenterPlateTexture(){
 }
 const centerPlate = new THREE.Mesh(
   new THREE.BoxGeometry(9*CELL,0.14,9*CELL),
-  new THREE.MeshPhysicalMaterial({map:makeCenterPlateTexture(),roughness:.28,metalness:.35,clearcoat:.9,clearcoatRoughness:.18})
+  new THREE.MeshStandardMaterial({map:makeCenterPlateTexture(),roughness:.7,metalness:.1})
 );
 centerPlate.position.y = 0.07;
 centerPlate.receiveShadow = true;
@@ -553,7 +564,7 @@ for(let i=0;i<40;i++){
   group.add(baseTile);
 
   const accentColor = SWATCH_COLORS[catDef.swatch];
-  const sideMat = new THREE.MeshStandardMaterial({color:new THREE.Color(accentColor),roughness:.5,metalness:.35});
+  const sideMat = new THREE.MeshStandardMaterial({color:new THREE.Color(accentColor),roughness:.7,metalness:.12});
   const bodyTile = new THREE.Mesh(new THREE.BoxGeometry(TILE,0.14,TILE), sideMat);
   bodyTile.position.y = 0.15;
   bodyTile.castShadow = true;
@@ -640,7 +651,7 @@ const START_WORLD = toWorld(12.4,12.4);
 {
   const pad = new THREE.Mesh(
     new THREE.CylinderGeometry(0.42,0.46,0.14,24),
-    new THREE.MeshStandardMaterial({color:0x0c0c0c, roughness:.4, metalness:.5, emissive:0x2a1c05, emissiveIntensity:.5})
+    new THREE.MeshStandardMaterial({color:0x0c0c0c, roughness:.65, metalness:.15, emissive:0x1c1204, emissiveIntensity:.3})
   );
   pad.position.copy(START_WORLD); pad.position.y = 0.07;
   pad.receiveShadow = true;
@@ -972,6 +983,13 @@ const winBtn = document.getElementById('winBtn');
 const sel = document.getElementById('sel');
 const topNum = document.getElementById('topNum');
 const statusEl = document.getElementById('status');
+const placeBanner = document.getElementById('placeBanner');
+
+function shortPlaceName(idx){ return idx<0 ? 'Départ' : POKEMON_PLACES[idx]; }
+function updatePlaceBanner(idx, traveling){
+  if(!placeBanner) return;
+  placeBanner.textContent = traveling ? '➜ '+shortPlaceName(idx) : shortPlaceName(idx);
+}
 
 const SEL_MAX = 36; // total max plausible en un tour (double+double+non-double)
 function setSelected(v){
@@ -1007,6 +1025,7 @@ async function move(){
   if(winBtn) winBtn.hidden = true;
   const destIdx = Math.min(39, currentIndex + selected);
   statusEl.textContent = 'Le joueur avance vers '+placeLabel(destIdx)+'…';
+  updatePlaceBanner(destIdx, true);
 
   const w = startWalk(currentIndex, selected, HOP_DURATION);
   await wait(w.totalTime*1000 + 30);
@@ -1018,6 +1037,7 @@ async function move(){
   } else {
     statusEl.textContent = 'Le joueur est arrivé à '+placeLabel(currentIndex)+' !';
   }
+  updatePlaceBanner(currentIndex, false);
   moving = false;
   validate.disabled = minus.disabled = plus.disabled = finished;
   updateWinButton();
@@ -1036,6 +1056,7 @@ function restart(){
   placeTokenInstant(-1);
   setActive(-1);
   statusEl.textContent = 'Le joueur est prêt sur Départ.';
+  updatePlaceBanner(-1, false);
   validate.disabled = minus.disabled = plus.disabled = false;
   if(winBtn) winBtn.hidden = true;
   clearCelebration();
@@ -1070,6 +1091,8 @@ const TIER_LEVEL = {
 const celeb = document.getElementById('celebration');
 const celebCanvas = document.getElementById('celebCanvas');
 const celebText = document.getElementById('celebText');
+const celebMain = document.getElementById('celebMain');
+const celebSub = document.getElementById('celebSub');
 let celebCtx = celebCanvas ? celebCanvas.getContext('2d') : null;
 let celebParticles = [], celebRAF = null, celebEndAt = 0;
 
@@ -1135,7 +1158,8 @@ const TIER_MESSAGES = {
 function celebrate(catKey){
   const level = TIER_LEVEL[catKey] ?? 1;
   if(level===0){
-    if(celebText) celebText.textContent = '💀 Fin de partie...';
+    if(celebMain) celebMain.textContent = '💀 Fin de partie...';
+    if(celebSub) celebSub.hidden = true;
     if(celeb){ celeb.classList.add('show'); celeb.dataset.level='0'; }
     setTimeout(clearCelebration, 1800);
     return;
@@ -1145,7 +1169,16 @@ function celebrate(catKey){
   celeb.dataset.level = String(level);
   celeb.classList.add('show');
   if(level>=4) celeb.classList.add('shake');
-  if(celebText) celebText.textContent = TIER_MESSAGES[level];
+
+  if(catKey==='chance' || catKey==='chest'){
+    const deck = catKey==='chance' ? CHANCE_DECK : CHEST_DECK;
+    const card = deck[(Math.random()*deck.length)|0];
+    if(celebMain) celebMain.textContent = catKey==='chance' ? '🎴 CARTE CHANCE' : '🗃️ CAISSE COMMUNAUTAIRE';
+    if(celebSub){ celebSub.textContent = card; celebSub.hidden = false; }
+  } else {
+    if(celebMain) celebMain.textContent = TIER_MESSAGES[level];
+    if(celebSub) celebSub.hidden = true;
+  }
 
   const bursts = level;
   for(let b=0;b<bursts;b++){ setTimeout(()=>spawnParticles(level), b*220); }
