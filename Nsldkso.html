@@ -304,9 +304,19 @@ html.display-mode .display-badge{ display:block; }
 }
 .mini-card{
   aspect-ratio:5/7;position:relative;transform-style:preserve-3d;
-  transition:transform .55s cubic-bezier(.22,.9,.32,1);
+  transition:transform .65s cubic-bezier(.22,.9,.32,1);
 }
 .mini-card.flipped{transform:rotateY(180deg)}
+.mini-card.suspense .back{ animation:suspensePulse .5s ease-in-out infinite; }
+@keyframes suspensePulse{
+  0%,100%{ box-shadow:0 0 8px rgba(233,195,74,.35); filter:brightness(1); }
+  50%{ box-shadow:0 0 26px rgba(255,226,122,.95); filter:brightness(1.25); }
+}
+.impact-flash{
+  position:fixed;inset:0;z-index:90;background:#fff8e0;opacity:0;pointer-events:none;
+  transition:opacity .08s ease-out;
+}
+.impact-flash.hit{ opacity:.55; transition:opacity .04s ease-out; }
 .mini-card .face{
   position:absolute;inset:0;border-radius:8px;backface-visibility:hidden;
   display:flex;align-items:center;justify-content:center;
@@ -567,6 +577,7 @@ if(new URLSearchParams(location.search).get('view')==='display'){
   </div>
 
   <div class="display-badge">🖥️ Écran public — lecture seule</div>
+  <div class="impact-flash" id="impactFlash" aria-hidden="true"></div>
 
   <div class="card-draw-overlay" id="cardDrawOverlay" aria-hidden="true">
     <div class="card-draw-title">Tirage en cours…</div>

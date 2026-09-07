@@ -1118,6 +1118,84 @@ const placeBanner = document.getElementById('placeBanner');
 const cardDrawOverlay = document.getElementById('cardDrawOverlay');
 const cardGrid = document.getElementById('cardGrid');
 const cardDrawTotal = document.getElementById('cardDrawTotal');
+const impactFlash = document.getElementById('impactFlash');
+
+/* ---------- Mise en scène du tirage : suspense sonore/visuel autour
+   du tirage honnête existant (aucun impact sur le résultat, juste du
+   spectacle). Sons synthétisés en direct via Web Audio, pas de
+   fichier externe à charger. ---------- */
+let audioCtx = null;
+function getAudioCtx(){
+  if(reduceMotion) return null;
+  try{
+    if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }catch(e){ return null; }
+}
+function playRiser(durationMs){
+  const ctx = getAudioCtx(); if(!ctx) return;
+  try{
+    const now = ctx.currentTime, dur = durationMs/1000;
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(170, now);
+    osc.frequency.exponentialRampToValueAtTime(760, now+dur);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.22, now+dur*0.88);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now+dur+0.12);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(now); osc.stop(now+dur+0.15);
+  }catch(e){}
+}
+function playImpact(){
+  const ctx = getAudioCtx(); if(!ctx) return;
+  try{
+    const now = ctx.currentTime;
+    const bufSize = Math.floor(ctx.sampleRate*0.18);
+    const buffer = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for(let i=0;i<bufSize;i++){ data[i] = (Math.random()*2-1) * (1-i/bufSize); }
+    const noise = ctx.createBufferSource(); noise.buffer = buffer;
+    const lowpass = ctx.createBiquadFilter(); lowpass.type='lowpass'; lowpass.frequency.value=1100;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.32, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now+0.18);
+    noise.connect(lowpass); lowpass.connect(gain); gain.connect(ctx.destination);
+    noise.start(now);
+  }catch(e){}
+}
+/* Punch-zoom caméra via le champ de vision (pas la position) pour ne
+   jamais entrer en conflit avec OrbitControls (auto-rotation, zoom
+   utilisateur en cours, etc.). */
+function cameraPunch(){
+  if(reduceMotion) return;
+  const baseFov = camera.fov;
+  const punchFov = baseFov*0.93;
+  const start = performance.now();
+  const outDur=140, holdDur=60, inDur=260, total=outDur+holdDur+inDur;
+  function step(now){
+    const el = now-start;
+    if(el>=total){ camera.fov = baseFov; camera.updateProjectionMatrix(); return; }
+    let fov;
+    if(el<outDur) fov = baseFov + (punchFov-baseFov)*(el/outDur);
+    else if(el<outDur+holdDur) fov = punchFov;
+    else fov = punchFov + (baseFov-punchFov)*((el-outDur-holdDur)/inDur);
+    camera.fov = fov; camera.updateProjectionMatrix();
+    requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+function triggerImpactFlash(){
+  if(!impactFlash || reduceMotion) return;
+  impactFlash.classList.add('hit');
+  setTimeout(()=>impactFlash.classList.remove('hit'), 90);
+}
+function revealImpact(){
+  playImpact();
+  cameraPunch();
+  triggerImpactFlash();
+}
 
 function shortPlaceName(idx){ return idx<0 ? 'Départ' : POKEMON_PLACES[idx]; }
 let placeBannerGen = 0;
@@ -1179,9 +1257,21 @@ async function playCardDrawAnimation(draw){
   const f1 = cardEls[s1].querySelector('.front'), f2 = cardEls[s2].querySelector('.front');
   if(f1) f1.textContent = a;
   if(f2) f2.textContent = b;
+
+  // Suspense : les 2 cartes qui vont être retournées se mettent à
+  // luire avant la révélation, avec un son qui monte en tension —
+  // aucune incidence sur le tirage, déjà déterminé au-dessus.
+  cardEls[s1].classList.add('suspense');
+  cardEls[s2].classList.add('suspense');
+  playRiser(680);
+  await wait(680);
+  cardEls[s1].classList.remove('suspense');
+  cardEls[s2].classList.remove('suspense');
+
   cardEls[s1].classList.add('flipped');
   cardEls[s2].classList.add('flipped');
   await wait(700);
+  revealImpact();
   if(cardDrawTotal){
     cardDrawTotal.textContent = 'Total : '+draw.total + (draw.isDouble ? '  —  DOUBLE ! ⚡ Relancez pour la paire bonus' : '');
   }
