@@ -1172,12 +1172,16 @@ function clearCelebration(){
   if(celeb) celeb.classList.remove('show','shake');
 }
 
-const TIER_MESSAGES = {
-  1: '🎉 Lot remporté !',
-  2: '⭐ CARTE GRADÉE REMPORTÉE ! ⭐',
-  3: '⚡ GROS BOOSTER 50€ ! ⚡',
-  4: '🏅 ETB 150€ REMPORTÉ ! 🏅',
-  5: '👑 JACKPOT FINAL 300€ ! 👑',
+/* Annonce propre à chaque catégorie de lot (plutôt qu'un message
+   générique par palier) : le nom du lot réellement gagné s'affiche. */
+const CATEGORY_MESSAGES = {
+  commune:     '🃏 UNE CARTE DANS LA POCHE !',
+  booster8:    '🎁 BOOSTER POKÉMON GAGNÉ !',
+  alternative: '✨ CARTE ALTERNATIVE GAGNÉE ! ✨',
+  gradee:      '⭐ CARTE GRADÉE DÉCROCHÉE ! ⭐',
+  booster50:   '⚡ GROS BOOSTER DÉCROCHÉ ! ⚡',
+  etb:         '🏅 ETB REMPORTÉ ! 🏅',
+  jackpot300:  '👑 JACKPOT FINAL DÉCROCHÉ ! 👑',
 };
 
 function celebrate(catKey){
@@ -1206,7 +1210,7 @@ function celebrate(catKey){
     if(celebSub){ celebSub.textContent = card.text; celebSub.hidden = false; }
     if(rareCardDrawn) celeb.classList.add('shake');
   } else {
-    if(celebMain) celebMain.textContent = TIER_MESSAGES[level];
+    if(celebMain) celebMain.textContent = CATEGORY_MESSAGES[catKey] || '🎉 Lot remporté !';
     if(celebSub) celebSub.hidden = true;
   }
 
