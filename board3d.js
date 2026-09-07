@@ -149,13 +149,17 @@ function roundRectPath(ctx,x,y,w,h,r){
 /* Texture "carte plate" : la vraie photo du lot, encadrée noir & or,
    utilisée directement sur la face de la case (cartes communes,
    boosters 8€, alternatives) pour ne pas surcharger le plateau. */
+let _maxAniso = 8;
+function getMaxAniso(){ return renderer ? renderer.capabilities.getMaxAnisotropy() : _maxAniso; }
 const flatFaceCache = new Map();
 function getFlatPhotoFace(catKey, caseNum, accentColor, badge){
   const key = catKey+'|'+caseNum+'|'+badge;
   if(flatFaceCache.has(key)) return flatFaceCache.get(key);
-  const size = 384;
+  const size = 960;
   const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
   const ctx = cvs.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   const r = size*0.16;
 
   ctx.save();
@@ -203,7 +207,7 @@ function getFlatPhotoFace(catKey, caseNum, accentColor, badge){
 
   const tex = new THREE.CanvasTexture(cvs);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
+  tex.anisotropy = getMaxAniso();
   flatFaceCache.set(key,tex);
   return tex;
 }
@@ -223,10 +227,12 @@ function getFramedPhotoTexture(catKey){
   if(framedCache.has(catKey)) return framedCache.get(catKey);
   const img = LOT_IMAGES[catKey];
   const iw = img ? img.width : 3, ih = img ? img.height : 4;
-  const size = 512;
+  const size = 1100;
   const h = size, w = Math.round(size*(iw/ih));
   const cvs = document.createElement('canvas'); cvs.width=w; cvs.height=h;
   const ctx = cvs.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   // Les cartes (gradée / jackpot final) gardent un vrai cadre "carte de
   // collection" façon slab doré ; les produits (ETB, booster) flottent
   // en photo nette avec juste des accents dorés aux coins, pour garder
@@ -277,7 +283,7 @@ function getFramedPhotoTexture(catKey){
 
   const tex = new THREE.CanvasTexture(cvs);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
+  tex.anisotropy = getMaxAniso();
   const entry = { tex, aspect: w/h };
   framedCache.set(catKey, entry);
   return entry;
