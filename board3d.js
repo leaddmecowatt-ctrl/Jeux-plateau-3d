@@ -377,7 +377,7 @@ const scene = new THREE.Scene();
 /* fond "studio jeu télévisé" noir & or : dégradé profond avec une
    lueur dorée douce au centre-haut. */
 function makeStudioBackdrop(){
-  const w=512,h=512;
+  const w=1024,h=1024;
   const cvs=document.createElement('canvas'); cvs.width=w; cvs.height=h;
   const ctx=cvs.getContext('2d');
   const grad = ctx.createRadialGradient(w*0.5,h*0.22,10,w*0.5,h*0.55,h*0.95);
@@ -386,6 +386,36 @@ function makeStudioBackdrop(){
   grad.addColorStop(0.72,'#0a0805');
   grad.addColorStop(1,'#000000');
   ctx.fillStyle=grad; ctx.fillRect(0,0,w,h);
+
+  /* Identité "mur de studio" PikaJackpot : grands anneaux façon
+     Pokéball très estompés au centre-haut, + un mot-symbole
+     "PIKAJACKPOT" répété en diagonale, discret mais reconnaissable
+     — comme le fond de plateau d'une vraie émission télé. */
+  ctx.save();
+  ctx.translate(w*0.5, h*0.24);
+  ctx.strokeStyle = 'rgba(255,226,122,.10)';
+  [0.16,0.24,0.32].forEach((r,i)=>{
+    ctx.lineWidth = w*(0.012-i*0.002);
+    ctx.beginPath(); ctx.arc(0,0,w*r,0,Math.PI*2); ctx.stroke();
+  });
+  ctx.fillStyle = 'rgba(255,226,122,.14)';
+  ctx.beginPath(); ctx.arc(0,0,w*0.045,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  ctx.rotate(-0.34);
+  ctx.font = '900 '+(w*0.052)+'px Georgia, "Times New Roman", serif';
+  ctx.fillStyle = 'rgba(255,226,122,.075)';
+  ctx.textAlign = 'center'; ctx.textBaseline='middle';
+  for(let row=-1; row<=6; row++){
+    const y = row*h*0.22 - h*0.3;
+    for(let col=-1; col<=2; col++){
+      const x = col*w*0.85 + (row%2===0 ? 0 : w*0.42) - w*0.1;
+      ctx.fillText('★ PIKAJACKPOT ★', x, y);
+    }
+  }
+  ctx.restore();
+
   const tex = new THREE.CanvasTexture(cvs);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -1070,13 +1100,25 @@ const cardGrid = document.getElementById('cardGrid');
 const cardDrawTotal = document.getElementById('cardDrawTotal');
 
 function shortPlaceName(idx){ return idx<0 ? 'Départ' : POKEMON_PLACES[idx]; }
+let placeBannerGen = 0;
+/* Le nom du lieu reste affiché en grand tant que le pion y est —
+   on ne fait un fondu (sortie/entrée) que lors d'un changement de
+   case, pas une simple apparition éclair qui disparaît toute seule. */
 function updatePlaceBanner(idx, traveling){
   if(!placeBanner) return;
-  placeBanner.textContent = traveling ? '➜ '+shortPlaceName(idx) : shortPlaceName(idx);
-  // relance l'animation de glissement à chaque changement de lieu
-  placeBanner.classList.remove('enter');
-  void placeBanner.offsetWidth; // force le reflow pour rejouer le keyframe
-  placeBanner.classList.add('enter');
+  const gen = ++placeBannerGen;
+  const nextText = traveling ? '➜ '+shortPlaceName(idx) : (idx<0 ? 'Départ' : '📍 Rendez-vous : '+shortPlaceName(idx));
+  const applyText = ()=>{
+    if(gen !== placeBannerGen) return;
+    placeBanner.textContent = nextText;
+    placeBanner.classList.add('show');
+  };
+  if(placeBanner.classList.contains('show')){
+    placeBanner.classList.remove('show');
+    setTimeout(applyText, 460);
+  } else {
+    applyText();
+  }
 }
 
 /* ---------- Tirage de 2 cartes qui remplace les 2 dés ----------
