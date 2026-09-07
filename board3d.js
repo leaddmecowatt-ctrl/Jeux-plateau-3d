@@ -6,17 +6,19 @@ import { UnrealBloomPass } from './vendor/three/examples/jsm/postprocessing/Unre
 import { OutputPass } from './vendor/three/examples/jsm/postprocessing/OutputPass.js';
 
 /* =========================================================================
-   Plateau de jeu en vraie 3D (WebGL / three.js) — 40 cases en anneau,
-   pion articulé qui saute case par case, icônes de case fidèles au
-   modèle de référence (❓ 💰 🎁 🏢 ⭐) qui flottent au-dessus de chaque
-   case pour un plateau vivant, lumières + ombres portées, et une caméra
-   orbitale pour explorer la scène.
+   PIKAJACKPOT — plateau 40 cases en vraie 3D (WebGL / three.js)
+   Thème noir & or façon jeu télévisé / roue de la fortune, avec les
+   vraies photos des lots intégrées sur les cases correspondantes, des
+   lieux Pokémon mythiques à la place des noms de rues, et des
+   animations de gain qui montent en intensité pour les gros lots.
    ========================================================================= */
 
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /* ---------- Disposition des 40 cases sur l'anneau 11x11 (coins tous
-   les 10 cases, comme un plateau façon Monopoly) ---------- */
+   les 10 cases, comme un plateau façon Monopoly). tiles[0] = Case 1
+   ... tiles[39] = Case 40 (jackpot final) : pas de case "Départ"
+   séparée, les 40 cases sont toutes des lots réels. ---------- */
 function ringPos(i){
   if(i===0) return {r:11,c:11};
   if(i<=10) return {r:11,c:11-i};
@@ -27,161 +29,202 @@ function ringPos(i){
 const CELL = 1;
 function toWorld(r,c){ return new THREE.Vector3((c-6)*CELL, 0, (r-6)*CELL); }
 
-/* dégradés (haut/bas) par catégorie, façon tuile glacée/glossy */
-const TILE_GRADIENTS = {
-  orange:['#ffc27a','#f2793a'],
-  white: ['#e7f3ff','#a9c3d6'],
-  yellow:['#ffe36b','#f2a71b'],
-  green: ['#7be89a','#1f9d55'],
-  pink:  ['#f6a0cf','#d6488f'],
-  purple:['#cf9ff5','#8a3fd1'],
-  red:   ['#ff8a8a','#e63946'],
-  blue:  ['#9ec2ff','#3f6fd1']
+/* =========================================================================
+   Le plateau RICHE (q=79,6%, marge 50% sur mise moyenne de 9€) :
+   40 cases, catégories confirmées avec l'utilisateur.
+   ========================================================================= */
+const CATS = {
+  commune:     { label:'Carte commune / holo rare', value:'~0,68€',  tier:'flat',  swatch:'bronze' },
+  booster8:    { label:'Booster Pokémon',            value:'8€',      tier:'flat',  swatch:'blue'   },
+  alternative: { label:'Carte alternative',          value:'~7,20€',  tier:'flat',  swatch:'red'    },
+  gradee:      { label:'★ Carte gradée aléatoire',   value:'20-80€',  tier:'float', swatch:'gold'   },
+  booster50:   { label:'GROS BOOSTER',               value:'50€',     tier:'float', swatch:'gold'   },
+  etb:         { label:'JACKPOT — ETB',               value:'150€',    tier:'float', swatch:'gold'   },
+  jackpot300:  { label:'JACKPOT FINAL — carte',        value:'300€',    tier:'float', swatch:'gold'   },
+  chance:      { label:'Chance',                     value:'tirage',  tier:'glyph', swatch:'purple' },
+  chest:       { label:'Caisse Communautaire',       value:'tirage',  tier:'glyph', swatch:'green'  },
+  prison:      { label:'ALLEZ EN PRISON',            value:'0€',      tier:'glyph', swatch:'danger' },
 };
 
-/* catégorie / icône par case (même cycle que le modèle d'origine) */
-const STYLES = [
-  ['orange','star'],['white','q'],['yellow','coin'],['green','gift'],['pink','gift'],
-  ['purple','q'],['white','none'],['yellow','coin'],['red','minus'],['green','gift'],
-  ['purple','q'],['blue','tower']
+/* Case 1 -> Case 40, dans l'ordre (index 0-based). */
+const BOARD_DATA = [
+  'booster8','alternative','chest','commune','commune','commune','commune','chance','commune','commune',
+  'gradee','booster8','alternative','gradee','commune','commune','chest','commune','commune','commune',
+  'commune','chance','commune','commune','commune','commune','gradee','commune','booster50','prison',
+  'commune','commune','commune','commune','booster8','booster8','chance','commune','etb','jackpot300',
+].map((cat,i)=>({ cat, isVisite: i===9 })); // case 10 (index 9) = "Prison, simple visite" (thématique uniquement)
+
+/* Lieux Pokémon mythiques affichés à la place des noms de rues type
+   Monopoly ("vous marchez vers ..."). */
+const POKEMON_PLACES = [
+  'Bourg Palette','Route 1','Jadielle','Centre Pokémon','Forêt de Jade','Mont Sélénite','Argenta','Azuria',
+  'Cascade d\'Azuria','Carmin-sur-Mer','Route 24','Lavanville','Tour Pokémon','Zone Safari','Céladopole',
+  'Casino de Céladopole','Fuchsia','Île Écume','Parmanie','Manoir Pokémon','Île Cramoisie','Route 21',
+  'Doublonville','Centrale Électrique','Ligue Pokémon','Plateau Indigo','Grotte Taupiqueur','Route 11',
+  'Chenaptôme','Verdaphage','Bourg Geon','Écorcia','Rosalia','Cerisia','Blackthorn','Route 46','Grotte Sombre',
+  'Antre Draco','Salle du Conseil des 4','Ligue Pokémon — Salle du Champion',
 ];
-function styleFor(i){ return i===0 ? ['orange','star'] : STYLES[i % STYLES.length]; }
 
-/* ---------- Dessin des icônes (canvas -> texture) ---------- */
-function drawStar(ctx,cx,cy,outerR,innerR,color,glow){
-  ctx.save();
-  if(glow){ ctx.shadowColor = glow; ctx.shadowBlur = outerR*0.6; }
+/* ---------- Chargement des vraies photos des lots ---------- */
+const LOT_IMAGE_URLS = {
+  commune:    './assets/lots/commune.jpg',
+  booster8:   './assets/lots/booster8.jpg',
+  alternative:'./assets/lots/alternative.jpg',
+  gradee:     './assets/lots/gradee.jpg',
+  booster50:  './assets/lots/booster50.jpg',
+  etb:        './assets/lots/etb150.jpg',
+  jackpot300: './assets/lots/jackpot300.jpg',
+};
+function loadImage(url){
+  return new Promise((resolve)=>{
+    const img = new Image();
+    img.onload = ()=>resolve(img);
+    img.onerror = ()=>resolve(null);
+    img.src = url;
+  });
+}
+const LOT_IMAGES = {};
+await Promise.all(Object.entries(LOT_IMAGE_URLS).map(async ([k,url])=>{ LOT_IMAGES[k] = await loadImage(url); }));
+
+/* ---------- Palette noir & or, avec accents Pokémon bleu/blanc/rouge ---------- */
+const GOLD = '#e9c34a';
+const GOLD_BRIGHT = '#ffe27a';
+const SWATCH_COLORS = {
+  bronze:'#a9793a', blue:'#2f6fdc', red:'#e0323f', purple:'#9a5fe0',
+  green:'#33b46a', gold:'#e9c34a', danger:'#d62b2b',
+};
+
+function roundRectPath(ctx,x,y,w,h,r){
   ctx.beginPath();
-  const spikes=5;
-  for(let k=0;k<spikes*2;k++){
-    const ang=(k/(spikes*2))*Math.PI*2 - Math.PI/2;
-    const r = k%2===0 ? outerR : innerR;
-    const x=cx+Math.cos(ang)*r, y=cy+Math.sin(ang)*r;
-    if(k===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-  }
-  ctx.closePath();
-  ctx.fillStyle=color;
-  ctx.fill();
-  ctx.restore();
-}
-function drawCoin(ctx,cx,cy,r){
-  const grad = ctx.createRadialGradient(cx-r*0.3,cy-r*0.35,r*0.15,cx,cy,r);
-  grad.addColorStop(0,'#fff5c2'); grad.addColorStop(.55,'#ffd83c'); grad.addColorStop(1,'#c9860e');
-  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fillStyle=grad; ctx.fill();
-  ctx.lineWidth=r*0.14; ctx.strokeStyle='#8a5a06'; ctx.stroke();
-  ctx.beginPath(); ctx.arc(cx,cy,r*0.62,0,Math.PI*2);
-  ctx.lineWidth=r*0.06; ctx.strokeStyle='rgba(255,255,255,.6)'; ctx.stroke();
-}
-function drawPokeball(ctx,cx,cy,r){
-  ctx.save();
-  // ombre douce sous la sphère
-  const shadow = ctx.createRadialGradient(cx,cy+r*0.1,r*0.4,cx,cy+r*0.1,r*1.15);
-  shadow.addColorStop(0,'rgba(0,0,0,.35)'); shadow.addColorStop(1,'rgba(0,0,0,0)');
-  ctx.fillStyle = shadow; ctx.beginPath(); ctx.arc(cx,cy,r*1.15,0,Math.PI*2); ctx.fill();
-
-  const topGrad = ctx.createRadialGradient(cx-r*0.3,cy-r*0.55,r*0.1,cx,cy,r*1.05);
-  topGrad.addColorStop(0,'#ff7b80'); topGrad.addColorStop(.55,'#f5484f'); topGrad.addColorStop(1,'#c22b34');
-  ctx.beginPath(); ctx.arc(cx,cy,r,Math.PI,0); ctx.fillStyle=topGrad; ctx.fill();
-
-  const botGrad = ctx.createRadialGradient(cx-r*0.3,cy+r*0.15,r*0.1,cx,cy,r*1.05);
-  botGrad.addColorStop(0,'#ffffff'); botGrad.addColorStop(.6,'#f6fbff'); botGrad.addColorStop(1,'#c7d6e2');
-  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI); ctx.fillStyle=botGrad; ctx.fill();
-
-  ctx.fillStyle='#152c46'; ctx.fillRect(cx-r,cy-r*0.1,r*2,r*0.2);
-  ctx.lineWidth=r*0.05; ctx.strokeStyle='#0c1a2b';
-  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.stroke();
-
-  const btnGrad = ctx.createRadialGradient(cx-r*0.12,cy-r*0.12,r*0.05,cx,cy,r*0.4);
-  btnGrad.addColorStop(0,'#ffffff'); btnGrad.addColorStop(.7,'#eef6fb'); btnGrad.addColorStop(1,'#c7d6e2');
-  ctx.beginPath(); ctx.arc(cx,cy,r*0.4,0,Math.PI*2); ctx.fillStyle=btnGrad; ctx.fill();
-  ctx.lineWidth=r*0.09; ctx.strokeStyle='#152c46'; ctx.stroke();
-  ctx.beginPath(); ctx.arc(cx,cy,r*0.24,0,Math.PI*2); ctx.fillStyle='rgba(255,255,255,.9)'; ctx.fill();
-  ctx.lineWidth=r*0.045; ctx.strokeStyle='#8fa6b8'; ctx.stroke();
-
-  // reflet de brillance
-  ctx.beginPath();
-  ctx.ellipse(cx-r*0.42,cy-r*0.5,r*0.28,r*0.16,-0.5,0,Math.PI*2);
-  ctx.fillStyle='rgba(255,255,255,.55)'; ctx.fill();
-  ctx.restore();
+  ctx.roundRect(x,y,w,h,r);
 }
 
-/* icône "plate" (texte/emoji/dessin) rendue au centre d'un canvas carré */
-function drawGlyph(ctx,size,kind){
-  const cx=size/2, cy=size/2;
-  ctx.textAlign='center'; ctx.textBaseline='middle';
-  switch(kind){
-    case 'star': drawStar(ctx,cx,cy,size*0.34,size*0.14,'#ffe066','#c98a00'); break;
-    case 'q':
-      ctx.font='900 '+(size*0.62)+'px Arial,Helvetica,sans-serif';
-      ctx.fillStyle='#ffffff';
-      ctx.fillText('?',cx,cy+size*0.02);
-      break;
-    case 'coin': drawCoin(ctx,cx,cy,size*0.34); break;
-    case 'minus':
-      ctx.fillStyle='#ffffff';
-      ctx.fillRect(cx-size*0.22,cy-size*0.05,size*0.44,size*0.1);
-      break;
-    case 'gift':
-      ctx.font=(size*0.56)+'px "Segoe UI Emoji","Apple Color Emoji",Arial,sans-serif';
-      ctx.fillText('🎁',cx,cy+size*0.03);
-      break;
-    case 'tower':
-      ctx.font=(size*0.5)+'px "Segoe UI Emoji","Apple Color Emoji",Arial,sans-serif';
-      ctx.fillText('🏢',cx,cy+size*0.03);
-      break;
-    case 'pokeball': drawPokeball(ctx,cx,cy,size*0.34); break;
-  }
-}
-
-/* Texture de la face de case : tuile arrondie "glossy" façon jeu mobile,
-   dégradé diagonal + reflet + icône + petit numéro dans le coin. */
-const faceTextureCache = new Map();
-function getFaceTexture(cat, kind, isStart){
-  const key = cat+'|'+kind+'|'+(isStart?'S':'');
-  if(faceTextureCache.has(key)) return faceTextureCache.get(key);
+/* Texture "carte plate" : la vraie photo du lot, encadrée noir & or,
+   utilisée directement sur la face de la case (cartes communes,
+   boosters 8€, alternatives) pour ne pas surcharger le plateau. */
+const flatFaceCache = new Map();
+function getFlatPhotoFace(catKey, caseNum, accentColor, badge){
+  const key = catKey+'|'+caseNum+'|'+badge;
+  if(flatFaceCache.has(key)) return flatFaceCache.get(key);
   const size = 384;
   const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
   const ctx = cvs.getContext('2d');
-  const [top,bot] = TILE_GRADIENTS[cat];
   const r = size*0.16;
-  ctx.save();
-  ctx.beginPath(); ctx.roundRect(9,9,size-18,size-18,r); ctx.clip();
-  const grad = ctx.createLinearGradient(0,0,size,size);
-  grad.addColorStop(0,top); grad.addColorStop(1,bot);
-  ctx.fillStyle = grad; ctx.fillRect(0,0,size,size);
-  const gloss = ctx.createRadialGradient(size*0.32,size*0.24,4,size*0.32,size*0.24,size*0.62);
-  gloss.addColorStop(0,'rgba(255,255,255,.6)');
-  gloss.addColorStop(1,'rgba(255,255,255,0)');
-  ctx.fillStyle = gloss; ctx.fillRect(0,0,size,size);
-  const innerShadow = ctx.createRadialGradient(size*0.5,size*0.5,size*0.3,size*0.5,size*0.5,size*0.52);
-  innerShadow.addColorStop(0,'rgba(0,0,0,0)'); innerShadow.addColorStop(1,'rgba(0,0,0,.18)');
-  ctx.fillStyle = innerShadow; ctx.fillRect(0,0,size,size);
-  ctx.restore();
-  ctx.beginPath(); ctx.roundRect(9,9,size-18,size-18,r);
-  ctx.lineWidth = 9; ctx.strokeStyle = 'rgba(255,255,255,.68)'; ctx.stroke();
 
-  if(kind && kind!=='none'){ drawGlyph(ctx,size, isStart ? 'star' : kind); }
+  ctx.save();
+  roundRectPath(ctx,9,9,size-18,size-18,r); ctx.clip();
+  ctx.fillStyle = '#0c0c0c'; ctx.fillRect(0,0,size,size);
+
+  const img = LOT_IMAGES[catKey];
+  if(img){
+    const pad = size*0.09;
+    const bw = size-2*pad, bh = size-2*pad*1.35;
+    const scale = Math.max(bw/img.width, bh/img.height);
+    const iw = img.width*scale, ih = img.height*scale;
+    ctx.drawImage(img, pad+(bw-iw)/2, pad+(bh-ih)/2, iw, ih);
+  }
+  const gloss = ctx.createLinearGradient(0,0,0,size);
+  gloss.addColorStop(0,'rgba(255,255,255,.14)'); gloss.addColorStop(.3,'rgba(255,255,255,0)');
+  ctx.fillStyle = gloss; ctx.fillRect(0,0,size,size);
+  ctx.restore();
+
+  roundRectPath(ctx,9,9,size-18,size-18,r);
+  ctx.lineWidth = 10; ctx.strokeStyle = GOLD; ctx.stroke();
+  roundRectPath(ctx,15,15,size-30,size-30,r*0.85);
+  ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.stroke();
+
+  // bandeau valeur en bas
+  const bandH = size*0.22;
+  ctx.fillStyle = accentColor;
+  roundRectPath(ctx,9,size-9-bandH,size-18,bandH,r*0.7); ctx.fill();
+  ctx.fillStyle = '#0c0c0c'; ctx.globalAlpha=.28;
+  roundRectPath(ctx,9,size-9-bandH,size-18,bandH,r*0.7); ctx.fill(); ctx.globalAlpha=1;
+  ctx.fillStyle = '#fff9e6'; ctx.font='900 '+(size*0.1)+'px Arial,Helvetica,sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(CATS[catKey].value, size/2, size-9-bandH/2+2);
+
+  if(badge){
+    ctx.font=(size*0.15)+'px "Segoe UI Emoji","Apple Color Emoji",Arial,sans-serif';
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillText(badge, 16, 16);
+  }
 
   const tex = new THREE.CanvasTexture(cvs);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
-  faceTextureCache.set(key,tex);
+  flatFaceCache.set(key,tex);
   return tex;
 }
 
-/* Icône flottante transparente (même dessin, sans fond) pour l'effet
-   "case dynamique" : elle plane et tourne au-dessus de la case. */
-const iconSpriteCache = new Map();
-function getFloatingIconTexture(kind, isStart){
-  const key = isStart ? 'star' : kind;
-  if(iconSpriteCache.has(key)) return iconSpriteCache.get(key);
-  const size = 160;
-  const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
+/* Texture "carte flottante encadrée or" : utilisée pour les gros lots
+   (gradée, gros booster, ETB, jackpot final) qui flottent au-dessus
+   de leur case, avec un cadre doré plus riche et un halo. */
+const framedCache = new Map();
+function getFramedPhotoTexture(catKey){
+  if(framedCache.has(catKey)) return framedCache.get(catKey);
+  const img = LOT_IMAGES[catKey];
+  const iw = img ? img.width : 3, ih = img ? img.height : 4;
+  const size = 512;
+  const h = size, w = Math.round(size*(iw/ih));
+  const cvs = document.createElement('canvas'); cvs.width=w; cvs.height=h;
   const ctx = cvs.getContext('2d');
-  drawGlyph(ctx,size, isStart ? 'star' : kind);
+  const r = w*0.06;
+
+  const frameGrad = ctx.createLinearGradient(0,0,w,h);
+  frameGrad.addColorStop(0,GOLD_BRIGHT); frameGrad.addColorStop(.5,GOLD); frameGrad.addColorStop(1,'#8a6a1e');
+  roundRectPath(ctx,0,0,w,h,r); ctx.fillStyle=frameGrad; ctx.fill();
+
+  const inset = w*0.045;
+  ctx.save();
+  roundRectPath(ctx,inset,inset,w-2*inset,h-2*inset,r*0.7); ctx.clip();
+  ctx.fillStyle = '#0c0c0c'; ctx.fillRect(0,0,w,h);
+  if(img) ctx.drawImage(img, inset, inset, w-2*inset, h-2*inset);
+  const vign = ctx.createRadialGradient(w/2,h*0.35,h*0.15,w/2,h/2,h*0.75);
+  vign.addColorStop(0,'rgba(0,0,0,0)'); vign.addColorStop(1,'rgba(0,0,0,.25)');
+  ctx.fillStyle=vign; ctx.fillRect(0,0,w,h);
+  ctx.restore();
+
+  roundRectPath(ctx,inset,inset,w-2*inset,h-2*inset,r*0.7);
+  ctx.lineWidth=w*0.012; ctx.strokeStyle='rgba(255,255,255,.55)'; ctx.stroke();
+
   const tex = new THREE.CanvasTexture(cvs);
   tex.colorSpace = THREE.SRGBColorSpace;
-  iconSpriteCache.set(key,tex);
+  tex.anisotropy = 4;
+  const entry = { tex, aspect: w/h };
+  framedCache.set(catKey, entry);
+  return entry;
+}
+
+/* Icônes "glyphe" or/noir pour Chance, Caisse Communautaire, Prison */
+const glyphCache = new Map();
+function getGlyphTexture(kind){
+  if(glyphCache.has(kind)) return glyphCache.get(kind);
+  const size = 200;
+  const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
+  const ctx = cvs.getContext('2d');
+  const cx=size/2, cy=size/2;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  if(kind==='chance'){
+    ctx.shadowColor = 'rgba(154,95,224,.9)'; ctx.shadowBlur = size*0.22;
+    ctx.font='900 '+(size*0.62)+'px Arial,Helvetica,sans-serif';
+    ctx.fillStyle = GOLD_BRIGHT;
+    ctx.fillText('?',cx,cy+size*0.02);
+  } else if(kind==='chest'){
+    ctx.shadowColor = 'rgba(51,180,106,.9)'; ctx.shadowBlur = size*0.2;
+    ctx.font=(size*0.58)+'px "Segoe UI Emoji","Apple Color Emoji",Arial,sans-serif';
+    ctx.fillText('🗃️',cx,cy+size*0.03);
+  } else if(kind==='prison'){
+    ctx.shadowColor = 'rgba(214,43,43,.95)'; ctx.shadowBlur = size*0.28;
+    ctx.font=(size*0.56)+'px "Segoe UI Emoji","Apple Color Emoji",Arial,sans-serif';
+    ctx.fillText('🔒',cx,cy+size*0.03);
+  } else if(kind==='visite'){
+    ctx.shadowColor = 'rgba(255,255,255,.6)'; ctx.shadowBlur = size*0.12;
+    ctx.font=(size*0.4)+'px "Segoe UI Emoji","Apple Color Emoji",Arial,sans-serif';
+    ctx.fillText('🔓',cx,cy+size*0.03);
+  }
+  const tex = new THREE.CanvasTexture(cvs);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  glyphCache.set(kind,tex);
   return tex;
 }
 
@@ -196,24 +239,13 @@ function numberTexture(n){
   const size=128;
   const cvs=document.createElement('canvas'); cvs.width=cvs.height=size;
   const ctx=cvs.getContext('2d');
-  ctx.font='800 '+(size*0.5)+'px Arial'; ctx.fillStyle='rgba(10,25,45,.55)';
+  ctx.font='800 '+(size*0.5)+'px Arial'; ctx.fillStyle=GOLD_BRIGHT;
   ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.fillText(String(n), size/2, size/2+2);
   const tex=new THREE.CanvasTexture(cvs);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
-
-/* vitesses/amplitudes d'animation "dynamique" par type de case */
-const MOTION = {
-  star:  {bob:0.16, spin:1.3},
-  gift:  {bob:0.10, spin:0.5},
-  coin:  {bob:0.08, spin:2.6},
-  minus: {bob:0.05, spin:0,  pulse:true},
-  tower: {bob:0.05, spin:0.3},
-  q:     {bob:0.12, spin:0},
-  none:  {bob:0,    spin:0}
-};
 
 /* ---------- Construction de la scène ---------- */
 const wrap = document.getElementById('boardWrap');
@@ -239,19 +271,17 @@ renderer.toneMappingExposure = 1.08;
 
 const scene = new THREE.Scene();
 
-/* fond "studio" façon plateau télé/casino : dégradé profond avec une
-   lueur douce au centre-haut, plutôt qu'un canvas transparent — ça
-   permet aussi d'ajouter un vrai effet de brillance (bloom) sans que
-   le fond ne devienne noir. */
+/* fond "studio jeu télévisé" noir & or : dégradé profond avec une
+   lueur dorée douce au centre-haut. */
 function makeStudioBackdrop(){
   const w=512,h=512;
   const cvs=document.createElement('canvas'); cvs.width=w; cvs.height=h;
   const ctx=cvs.getContext('2d');
   const grad = ctx.createRadialGradient(w*0.5,h*0.22,10,w*0.5,h*0.55,h*0.95);
-  grad.addColorStop(0,'#154a82');
-  grad.addColorStop(0.4,'#0b2c58');
-  grad.addColorStop(0.75,'#051733');
-  grad.addColorStop(1,'#020714');
+  grad.addColorStop(0,'#3a2e0f');
+  grad.addColorStop(0.35,'#1c1608');
+  grad.addColorStop(0.72,'#0a0805');
+  grad.addColorStop(1,'#000000');
   ctx.fillStyle=grad; ctx.fillRect(0,0,w,h);
   const tex = new THREE.CanvasTexture(cvs);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -278,7 +308,7 @@ controls.update();
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(1,1), 0.45, 0.55, 0.8);
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(1,1), 0.55, 0.6, 0.75);
 composer.addPass(bloomPass);
 composer.addPass(new OutputPass());
 
@@ -294,10 +324,10 @@ controls.addEventListener('end', ()=>{
 });
 if(hint3d){ setTimeout(()=>{ hint3d.style.opacity = '0'; }, 5000); }
 
-/* ---------- Lumières : ambiance stade nocturne ---------- */
-scene.add(new THREE.HemisphereLight(0x8fd0ff, 0x081226, 0.65));
+/* ---------- Lumières : ambiance "roue de la fortune" dorée ---------- */
+scene.add(new THREE.HemisphereLight(0xffdca0, 0x0a0805, 0.6));
 
-const key = new THREE.DirectionalLight(0xfff2df, 1.35);
+const key = new THREE.DirectionalLight(0xfff2df, 1.4);
 key.position.set(4.2,7,3.4);
 key.castShadow = true;
 key.shadow.mapSize.set(1024,1024);
@@ -307,20 +337,19 @@ key.shadow.camera.near = 1; key.shadow.camera.far = 20;
 key.shadow.bias = -0.0025;
 scene.add(key);
 
-const rim = new THREE.DirectionalLight(0x4fc9ff, 0.55);
+const rim = new THREE.DirectionalLight(0xffcf6b, 0.55);
 rim.position.set(-5,4,-4);
 scene.add(rim);
 
-/* projecteurs de stade (halos additifs aux quatre coins, comme sur la
-   photo de référence) */
+/* projecteurs de studio dorés aux quatre coins */
 function addFloodlight(x,z){
   const glowTex = (function(){
     const c = document.createElement('canvas'); c.width=c.height=128;
     const g = c.getContext('2d');
     const grad = g.createRadialGradient(64,64,0,64,64,64);
-    grad.addColorStop(0,'rgba(255,255,255,.9)');
-    grad.addColorStop(0.4,'rgba(180,225,255,.45)');
-    grad.addColorStop(1,'rgba(180,225,255,0)');
+    grad.addColorStop(0,'rgba(255,240,200,.9)');
+    grad.addColorStop(0.4,'rgba(255,210,120,.45)');
+    grad.addColorStop(1,'rgba(255,210,120,0)');
     g.fillStyle = grad; g.fillRect(0,0,128,128);
     return new THREE.CanvasTexture(c);
   })();
@@ -329,7 +358,7 @@ function addFloodlight(x,z){
   glow.position.set(x,4.6,z);
   glow.scale.set(2.6,2.6,2.6);
   scene.add(glow);
-  const pl = new THREE.PointLight(0xcfe9ff, 0.5, 12, 2);
+  const pl = new THREE.PointLight(0xffe3ae, 0.5, 12, 2);
   pl.position.set(x,4.2,z);
   scene.add(pl);
 }
@@ -339,7 +368,7 @@ function addFloodlight(x,z){
 const boardGroup = new THREE.Group();
 scene.add(boardGroup);
 
-const plinthMat = new THREE.MeshStandardMaterial({color:0x0a2a52,emissive:0x0c3d6b,emissiveIntensity:.35,roughness:.55,metalness:.2});
+const plinthMat = new THREE.MeshStandardMaterial({color:0x0a0a0a,emissive:0x2a1c05,emissiveIntensity:.4,roughness:.4,metalness:.6});
 const plinth = new THREE.Mesh(new THREE.BoxGeometry(11*CELL+0.7,0.5,11*CELL+0.7), plinthMat);
 plinth.position.y = -0.25;
 plinth.receiveShadow = true;
@@ -347,12 +376,26 @@ plinth.castShadow = true;
 boardGroup.add(plinth);
 
 const rimGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(11*CELL+0.7,0.5,11*CELL+0.7));
-const rimLine = new THREE.LineSegments(rimGeo, new THREE.LineBasicMaterial({color:0x7fe9ff}));
+const rimLine = new THREE.LineSegments(rimGeo, new THREE.LineBasicMaterial({color:0xffd76a}));
 rimLine.position.copy(plinth.position);
 boardGroup.add(rimLine);
 
-/* liseré de loupiotes façon plateau de jeu télévisé/casino, qui
-   "chassent" tout autour du bord du plateau */
+/* petit liseré tricolore (clin d'oeil Pokémon bleu/blanc/rouge) au
+   pied du plinthe, discret sous le thème noir & or */
+{
+  const stripe = new THREE.Mesh(
+    new THREE.BoxGeometry(11*CELL+0.74,0.06,0.09),
+    new THREE.MeshStandardMaterial({color:0xffffff, roughness:.5})
+  );
+  [[0x1a56db,-0.10],[0xffffff,0],[0xe0323f,0.10]].forEach(([c,dz])=>{
+    const s = new THREE.Mesh(new THREE.BoxGeometry(11*CELL+0.74,0.02,0.03), new THREE.MeshStandardMaterial({color:c,roughness:.5}));
+    s.position.set(0,-0.49,(11*CELL+0.7)/2+0.05+dz);
+    boardGroup.add(s);
+  });
+}
+
+/* points lumineux dorés qui tournent en continu autour du plateau,
+   façon roue de jeu télévisé (en plus du liseré de loupiotes fixes) */
 function makeGlowDotTexture(colorCss){
   const c=document.createElement('canvas'); c.width=c.height=64;
   const g=c.getContext('2d');
@@ -363,20 +406,20 @@ function makeGlowDotTexture(colorCss){
   return new THREE.CanvasTexture(c);
 }
 const goldDotTex = makeGlowDotTexture('rgba(255,214,120,1)');
-const cyanDotTex = makeGlowDotTexture('rgba(140,225,255,1)');
+const brightGoldTex = makeGlowDotTexture('rgba(255,245,210,1)');
 const trimLights = [];
+const perimeterPts = [];
 {
   const half = (11*CELL+0.7)/2;
   const perEdge = 13;
-  const pts = [];
-  for(let i=0;i<perEdge;i++){ pts.push([-half+(i/(perEdge-1))*half*2, -half]); }
-  for(let i=1;i<perEdge;i++){ pts.push([half, -half+(i/(perEdge-1))*half*2]); }
-  for(let i=1;i<perEdge;i++){ pts.push([half-(i/(perEdge-1))*half*2, half]); }
-  for(let i=1;i<perEdge-1;i++){ pts.push([-half, half-(i/(perEdge-1))*half*2]); }
-  pts.forEach(([x,z],idx)=>{
+  for(let i=0;i<perEdge;i++){ perimeterPts.push([-half+(i/(perEdge-1))*half*2, -half]); }
+  for(let i=1;i<perEdge;i++){ perimeterPts.push([half, -half+(i/(perEdge-1))*half*2]); }
+  for(let i=1;i<perEdge;i++){ perimeterPts.push([half-(i/(perEdge-1))*half*2, half]); }
+  for(let i=1;i<perEdge-1;i++){ perimeterPts.push([-half, half-(i/(perEdge-1))*half*2]); }
+  perimeterPts.forEach(([x,z],idx)=>{
     const mat = new THREE.SpriteMaterial({
-      map: idx%2===0 ? goldDotTex : cyanDotTex,
-      transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.6
+      map: goldDotTex,
+      transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.55
     });
     const spr = new THREE.Sprite(mat);
     spr.scale.set(0.26,0.26,0.26);
@@ -385,22 +428,77 @@ const trimLights = [];
     trimLights.push({ spr, idx });
   });
 }
+/* 4 loupiotes brillantes qui parcourent réellement le pourtour, en
+   continu, comme sur une roue de la fortune */
+const orbiterLights = [];
+for(let k=0;k<4;k++){
+  const spr = makeSprite(brightGoldTex, 0.42);
+  spr.material.blending = THREE.AdditiveBlending;
+  spr.position.y = 0.04;
+  boardGroup.add(spr);
+  orbiterLights.push({ spr, offset:k/4 });
+}
+function perimeterPosAt(u){ // u in [0,1)
+  const n = perimeterPts.length;
+  const f = ((u%1)+1)%1 * n;
+  const i0 = Math.floor(f), i1=(i0+1)%n, lp=f-i0;
+  const [x0,z0]=perimeterPts[i0], [x1,z1]=perimeterPts[i1];
+  return [x0+(x1-x0)*lp, z0+(z1-z0)*lp];
+}
 
-function makePokeballFieldTexture(){
-  const size = 512;
+/* ---------- Plaque centrale "PIKAJACKPOT" ---------- */
+function makeCenterPlateTexture(){
+  const size = 640;
   const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
   const ctx = cvs.getContext('2d');
-  const grad = ctx.createRadialGradient(size*0.35,size*0.32,size*0.05,size*0.5,size*0.5,size*0.62);
-  grad.addColorStop(0,'#22b6e8'); grad.addColorStop(1,'#0a6fac');
+  const grad = ctx.createRadialGradient(size*0.5,size*0.4,size*0.05,size*0.5,size*0.5,size*0.66);
+  grad.addColorStop(0,'#241a06'); grad.addColorStop(0.55,'#120d02'); grad.addColorStop(1,'#000000');
   ctx.fillStyle = grad; ctx.fillRect(0,0,size,size);
-  drawPokeball(ctx,size/2,size/2,size*0.17);
+
+  // anneaux dorés concentriques façon roue
+  for(let i=0;i<3;i++){
+    ctx.beginPath(); ctx.arc(size/2,size/2,size*(0.46-i*0.07),0,Math.PI*2);
+    ctx.lineWidth = size*0.012; ctx.strokeStyle = i===1?GOLD_BRIGHT:GOLD; ctx.globalAlpha=0.85-i*0.15;
+    ctx.stroke();
+  }
+  ctx.globalAlpha=1;
+
+  // pokeball miniature au-dessus du texte
+  const pbY = size*0.30, pbR = size*0.075;
+  ctx.beginPath(); ctx.arc(size/2,pbY,pbR,Math.PI,0); ctx.fillStyle='#f5484f'; ctx.fill();
+  ctx.beginPath(); ctx.arc(size/2,pbY,pbR,0,Math.PI); ctx.fillStyle='#f6fbff'; ctx.fill();
+  ctx.fillStyle='#12283f'; ctx.fillRect(size/2-pbR,pbY-pbR*0.09,pbR*2,pbR*0.18);
+  ctx.lineWidth=pbR*0.09; ctx.strokeStyle='#12283f';
+  ctx.beginPath(); ctx.arc(size/2,pbY,pbR,0,Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(size/2,pbY,pbR*0.34,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill(); ctx.stroke();
+
+  // texte PIKAJACKPOT
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.font='900 '+(size*0.108)+'px Arial,Helvetica,sans-serif';
+  ctx.fillStyle = GOLD_BRIGHT;
+  ctx.shadowColor = 'rgba(255,210,110,.9)'; ctx.shadowBlur = size*0.02;
+  ctx.save();
+  ctx.translate(size/2, size*0.53);
+  ctx.fillText('PIKA', -size*0.001, -size*0.06);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('JACKPOT', 0, size*0.075);
+  ctx.restore();
+  ctx.shadowBlur = 0;
+
+  // liseré tricolore (clin d'oeil Pokémon) sous le texte
+  const stripeY = size*0.66, stripeW = size*0.42, stripeH = size*0.018;
+  [[-1,'#1a56db'],[0,'#ffffff'],[1,'#e0323f']].forEach(([d,c])=>{
+    ctx.fillStyle = c;
+    ctx.fillRect(size/2 - stripeW/2, stripeY + d*stripeH, stripeW, stripeH);
+  });
+
   const tex = new THREE.CanvasTexture(cvs);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
 const centerPlate = new THREE.Mesh(
   new THREE.BoxGeometry(9*CELL,0.14,9*CELL),
-  new THREE.MeshPhysicalMaterial({map:makePokeballFieldTexture(),roughness:.28,metalness:.05,clearcoat:.9,clearcoatRoughness:.18})
+  new THREE.MeshPhysicalMaterial({map:makeCenterPlateTexture(),roughness:.28,metalness:.35,clearcoat:.9,clearcoatRoughness:.18})
 );
 centerPlate.position.y = 0.07;
 centerPlate.receiveShadow = true;
@@ -410,11 +508,24 @@ boardGroup.add(centerPlate);
 const TILE = 0.9;
 const tiles = [];
 
+/* vitesses/amplitudes d'animation par catégorie */
+const MOTION = {
+  gradee:    {bob:0.11, swing:0.35},
+  booster50: {bob:0.13, swing:0.3},
+  etb:       {bob:0.15, swing:0.28},
+  jackpot300:{bob:0.17, swing:0.25},
+  chance:    {bob:0.12, spin:0},
+  chest:     {bob:0.09, spin:0},
+  prison:    {bob:0.07, pulse:true},
+};
+
 for(let i=0;i<40;i++){
   const {r,c} = ringPos(i);
   const world = toWorld(r,c);
-  const [cat, kind] = styleFor(i);
-  const isStart = i===0;
+  const data = BOARD_DATA[i];
+  const catKey = data.cat;
+  const catDef = CATS[catKey];
+  const caseNum = i+1;
 
   const group = new THREE.Group();
   group.position.copy(world);
@@ -422,13 +533,14 @@ for(let i=0;i<40;i++){
 
   const baseTile = new THREE.Mesh(
     new THREE.BoxGeometry(TILE+0.05,0.08,TILE+0.05),
-    new THREE.MeshStandardMaterial({color:0x0b2242,roughness:.7})
+    new THREE.MeshStandardMaterial({color:0x050505, roughness:.6, metalness:.3})
   );
   baseTile.position.y = 0.04;
   baseTile.receiveShadow = true;
   group.add(baseTile);
 
-  const sideMat = new THREE.MeshStandardMaterial({color:new THREE.Color(TILE_GRADIENTS[cat][1]),roughness:.55,metalness:.1});
+  const accentColor = SWATCH_COLORS[catDef.swatch];
+  const sideMat = new THREE.MeshStandardMaterial({color:new THREE.Color(accentColor),roughness:.5,metalness:.35});
   const bodyTile = new THREE.Mesh(new THREE.BoxGeometry(TILE,0.14,TILE), sideMat);
   bodyTile.position.y = 0.15;
   bodyTile.castShadow = true;
@@ -436,14 +548,21 @@ for(let i=0;i<40;i++){
   group.add(bodyTile);
   const tileTopY = 0.22;
 
-  const faceMat = new THREE.MeshPhysicalMaterial({map:getFaceTexture(cat,kind,isStart),roughness:.32,metalness:.06,clearcoat:.7,clearcoatRoughness:.25});
+  let faceTex;
+  if(catDef.tier === 'flat'){
+    faceTex = getFlatPhotoFace(catKey, caseNum, accentColor, data.isVisite ? '🔓' : null);
+  } else {
+    // pour les cases "float"/"glyph", la face reste sobre noir & or
+    faceTex = getFlatPhotoFace(catKey, caseNum, accentColor, null);
+  }
+  const faceMat = new THREE.MeshPhysicalMaterial({map:faceTex,roughness:.32,metalness:.15,clearcoat:.7,clearcoatRoughness:.25});
   const face = new THREE.Mesh(new THREE.PlaneGeometry(TILE*0.94,TILE*0.94), faceMat);
   face.rotation.x = -Math.PI/2;
   face.position.y = tileTopY+0.002;
   face.receiveShadow = true;
   group.add(face);
 
-  const numSpr = makeSprite(numberTexture(isStart?'D':i), 0.22);
+  const numSpr = makeSprite(numberTexture(caseNum), 0.2);
   numSpr.position.set(TILE*0.35, tileTopY+0.01, TILE*0.36);
   numSpr.rotation.x = -Math.PI/2;
   group.add(numSpr);
@@ -456,29 +575,68 @@ for(let i=0;i<40;i++){
   halo.position.y = tileTopY+0.03;
   group.add(halo);
 
-  const motionKind = isStart ? 'star' : kind;
-  const motion = MOTION[motionKind] || MOTION.none;
-  let iconSprite = null, shadowDisc = null;
-  if(motionKind !== 'none'){
-    iconSprite = makeSprite(getFloatingIconTexture(kind,isStart), 0.34);
-    iconSprite.position.y = tileTopY + 0.3;
-    group.add(iconSprite);
+  let floatObj = null, shadowDisc = null, floatBaseScale = 0.34;
+  if(catDef.tier === 'float'){
+    const { tex, aspect } = getFramedPhotoTexture(catKey);
+    const scaleByCat = { gradee:0.42, booster50:0.5, etb:0.58, jackpot300:0.66 }[catKey] || 0.45;
+    const h = scaleByCat, w = h*aspect;
+    const mat = new THREE.MeshBasicMaterial({map:tex, transparent:true});
+    floatObj = new THREE.Mesh(new THREE.PlaneGeometry(w,h), mat);
+    floatObj.position.y = tileTopY + 0.32 + h*0.5;
+    group.add(floatObj);
+    floatBaseScale = h;
+  } else if(catDef.tier === 'glyph'){
+    const glyphKind = data.isVisite ? 'visite' : catKey;
+    floatObj = makeSprite(getGlyphTexture(glyphKind), 0.3);
+    floatObj.position.y = tileTopY + 0.3;
+    group.add(floatObj);
+  }
+  if(floatObj){
     shadowDisc = new THREE.Mesh(
       new THREE.CircleGeometry(0.22,20),
-      new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:.25})
+      new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:.3})
     );
     shadowDisc.rotation.x = -Math.PI/2;
     shadowDisc.position.y = tileTopY+0.005;
     group.add(shadowDisc);
+
+    // halo doré supplémentaire sous les gros lots (plus intense = plus gros)
+    if(catDef.tier==='float'){
+      const glowScale = { gradee:0.5, booster50:0.62, etb:0.75, jackpot300:0.92 }[catKey] || 0.5;
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+        map:goldDotTex, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.55
+      }));
+      glow.position.y = tileTopY+0.06;
+      glow.scale.set(glowScale,glowScale,glowScale);
+      group.add(glow);
+    }
   }
 
   tiles.push({
-    group, world, tileTopY, category:cat, kind:motionKind,
-    halo, iconSprite, shadowDisc, motion,
+    group, world, tileTopY, catKey, catDef, caseNum, isVisite:data.isVisite,
+    halo, floatObj, shadowDisc, floatBaseScale, motion: MOTION[catKey]||{bob:0.08},
     phase: Math.random()*Math.PI*2,
     breathePhase: ((r+c)%8)*0.4
   });
 }
+
+/* petit repère "DÉPART" hors plateau, juste avant la case 1 : le
+   joueur y attend son premier lancer (pas de case Départ parmi les
+   40 cases, qui sont toutes des lots réels). */
+const START_WORLD = toWorld(12.4,12.4);
+{
+  const pad = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.42,0.46,0.14,24),
+    new THREE.MeshStandardMaterial({color:0x0c0c0c, roughness:.4, metalness:.5, emissive:0x2a1c05, emissiveIntensity:.5})
+  );
+  pad.position.copy(START_WORLD); pad.position.y = 0.07;
+  pad.receiveShadow = true;
+  boardGroup.add(pad);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.44,0.03,8,28), new THREE.MeshBasicMaterial({color:0xffe27a}));
+  ring.rotation.x = Math.PI/2; ring.position.copy(START_WORLD); ring.position.y=0.15;
+  boardGroup.add(ring);
+}
+const START_NODE = { world: START_WORLD, tileTopY: 0.22 };
 
 /* ---------- Pion articulé (façon dresseur, sac à dos inclus) ---------- */
 function buildToken(){
@@ -599,45 +757,54 @@ const player = buildToken();
 scene.add(player.root);
 
 /* ---------- État de jeu ---------- */
-let currentIndex = 0;
+let currentIndex = -1; // -1 = au départ, pas encore sur le plateau
 let selected = 1;
 let moving = false;
 let generation = 0;
+let finished = false;
+
+function tileAt(idx){ return idx===-1 ? START_NODE : tiles[idx]; }
 
 function setActive(index){
   tiles.forEach((t,i)=>{ t.isActive = (i===index); if(!t.isActive){ t.halo.material.opacity = 0; } });
 }
-setActive(0);
+setActive(-1);
 
-function placeTokenInstant(index){
-  const t = tiles[index];
+function placeTokenInstant(idx){
+  const t = tileAt(idx);
   player.root.position.set(t.world.x, t.tileTopY, t.world.z);
 }
-placeTokenInstant(0);
+placeTokenInstant(-1);
 
 /* ---------- Boucle d'animation ---------- */
 const clock = new THREE.Clock();
 
 /* Marche continue : un seul mouvement fluide du départ jusqu'à la
-   case finale, sans jamais s'arrêter aux cases intermédiaires. La
-   vitesse suit un profil trapézoïdal (accélération, croisière,
-   décélération sur tout le trajet) et le cycle de marche est calé sur
-   la distance parcourue, donc parfaitement continu même dans les
-   virages du plateau. */
+   case finale demandée, sans jamais s'arrêter aux cases
+   intermédiaires. Le trajet est capé à la case 40 (jackpot final) :
+   pas de retour à la case 1, la partie s'arrête là. */
 let walk = null;
 
 function startWalk(fromIdx, count, stepDuration){
-  const path = [fromIdx];
+  const path = [ tileAt(fromIdx) ];
+  const indices = [ fromIdx ];
   let idx = fromIdx;
-  for(let i=0;i<count;i++){ idx=(idx+1)%40; path.push(idx); }
-  const vCruise = 1/stepDuration;
-  const rampUnits = Math.min(0.5, count/2);
+  let steps = 0;
+  for(let i=0;i<count;i++){
+    if(idx>=39) break;
+    idx = idx+1;
+    path.push(tiles[idx]);
+    indices.push(idx);
+    steps++;
+  }
+  const vCruise = steps>0 ? 1/stepDuration : 0;
+  const rampUnits = Math.min(0.5, steps/2);
   const accelTime = rampUnits>0 ? (2*rampUnits)/vCruise : 0;
-  const cruiseUnits = count - 2*rampUnits;
-  const cruiseTime = cruiseUnits/vCruise;
+  const cruiseUnits = steps - 2*rampUnits;
+  const cruiseTime = vCruise>0 ? cruiseUnits/vCruise : 0;
   walk = {
-    path, steps:count, vCruise, rampUnits, accelTime, cruiseTime,
-    totalTime: accelTime*2+cruiseTime,
+    path, indices, steps, vCruise, rampUnits, accelTime, cruiseTime,
+    totalTime: Math.max(0.001, accelTime*2+cruiseTime),
     t0: clock.getElapsedTime(), lastSeg:-1
   };
   return walk;
@@ -651,31 +818,43 @@ function animate(){
   controls.update();
 
   trimLights.forEach(tl=>{
-    tl.spr.material.opacity = reduceMotion ? 0.6 : 0.32 + 0.55*Math.max(0, Math.sin(t*2.2 - tl.idx*0.5));
+    tl.spr.material.opacity = reduceMotion ? 0.5 : 0.28 + 0.45*Math.max(0, Math.sin(t*2.2 - tl.idx*0.5));
   });
+  if(!reduceMotion){
+    orbiterLights.forEach(ol=>{
+      const u = (t*0.06 + ol.offset) % 1;
+      const [x,z] = perimeterPosAt(u);
+      ol.spr.position.set(x,0.05,z);
+      ol.spr.material.opacity = 0.85 + Math.sin(t*6)*0.15;
+    });
+  }
 
-  // respiration + icônes dynamiques
+  // respiration + icônes/lots dynamiques
   tiles.forEach(tile=>{
     if(!reduceMotion){
       const breathe = 1 + Math.sin(t*1.9 + tile.breathePhase)*0.012;
       tile.group.scale.set(1,breathe,1);
     }
-    if(tile.iconSprite){
+    if(tile.floatObj){
       const m = tile.motion;
       const bobAmt = reduceMotion ? 0 : m.bob;
       const bob = Math.sin(t*2 + tile.phase)*bobAmt;
-      tile.iconSprite.position.y = tile.tileTopY + 0.3 + bob;
-      if(!reduceMotion && m.spin){
-        const s = 1 + Math.sin(t*m.spin*2 + tile.phase)*0.18;
-        tile.iconSprite.scale.set(0.34*s,0.34*s,0.34*s);
+      const baseY = tile.tileTopY + 0.32 + (tile.catDef.tier==='float' ? tile.floatBaseScale*0.5 : -0.02);
+      tile.floatObj.position.y = baseY + bob;
+      if(!reduceMotion && m.swing){
+        tile.floatObj.rotation.y = Math.sin(t*0.7 + tile.phase)*m.swing;
+      }
+      if(!reduceMotion && tile.catDef.tier==='glyph' && !m.pulse){
+        const s = 1 + Math.sin(t*1.6 + tile.phase)*0.14;
+        tile.floatObj.scale.set(0.3*s,0.3*s,0.3*s);
       }
       if(m.pulse){
-        tile.iconSprite.material.opacity = 0.75 + Math.sin(t*4+tile.phase)*0.25;
+        tile.floatObj.material.opacity = 0.7 + Math.sin(t*4.5+tile.phase)*0.3;
       }
       if(tile.shadowDisc){
-        const k = 1 - Math.min(Math.abs(bob)/ (m.bob||1), 1)*0.55;
+        const k = 1 - Math.min(Math.abs(bob)/ (m.bob||1), 1)*0.5;
         tile.shadowDisc.scale.set(k,k,k);
-        tile.shadowDisc.material.opacity = 0.25*k;
+        tile.shadowDisc.material.opacity = 0.3*k;
       }
     }
     if(tile.isActive){
@@ -688,7 +867,7 @@ function animate(){
   if(walk){
     const te = t - walk.t0;
     let dist, vel;
-    if(te >= walk.totalTime){
+    if(walk.steps===0 || te >= walk.totalTime){
       dist = walk.steps; vel = 0; walk.done = true;
     } else if(walk.accelTime>0 && te < walk.accelTime){
       vel = walk.vCruise*(te/walk.accelTime);
@@ -702,23 +881,25 @@ function animate(){
       dist = walk.steps - 0.5*walk.vCruise*te2*te2/walk.accelTime;
     }
     dist = Math.max(0, Math.min(walk.steps, dist));
-    const segIdx = Math.min(Math.floor(dist), walk.steps-1);
-    const localP = dist - segIdx;
-    const aTile = tiles[walk.path[segIdx]], bTile = tiles[walk.path[segIdx+1]];
+    const segIdx = Math.min(Math.floor(dist), Math.max(0,walk.steps-1));
+    const localP = walk.steps>0 ? dist - segIdx : 0;
+    const aTile = walk.path[segIdx], bTile = walk.path[Math.min(segIdx+1, walk.path.length-1)];
     const x = aTile.world.x + (bTile.world.x-aTile.world.x)*localP;
     const z = aTile.world.z + (bTile.world.z-aTile.world.z)*localP;
     const gaitAmp = walk.vCruise>0 ? vel/walk.vCruise : 0;
     const bob = reduceMotion ? 0 : Math.abs(Math.sin(dist*Math.PI*2))*0.028*gaitAmp;
     player.root.position.set(x, aTile.tileTopY + bob, z);
 
-    const targetYaw = Math.atan2(bTile.world.x-aTile.world.x, bTile.world.z-aTile.world.z);
-    let dyaw = targetYaw - player.root.rotation.y;
-    dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
-    player.root.rotation.y += dyaw*Math.min(1,dt*16);
+    if(bTile!==aTile){
+      const targetYaw = Math.atan2(bTile.world.x-aTile.world.x, bTile.world.z-aTile.world.z);
+      let dyaw = targetYaw - player.root.rotation.y;
+      dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
+      player.root.rotation.y += dyaw*Math.min(1,dt*16);
+    }
 
     if(segIdx !== walk.lastSeg){
       walk.lastSeg = segIdx;
-      currentIndex = walk.path[segIdx];
+      currentIndex = walk.indices[segIdx];
       setActive(currentIndex);
     }
 
@@ -735,7 +916,7 @@ function animate(){
     }
 
     if(walk.done){
-      currentIndex = walk.path[walk.steps];
+      currentIndex = walk.indices[walk.indices.length-1];
       setActive(currentIndex);
       walk = null;
     }
@@ -774,56 +955,188 @@ const minus = document.getElementById('minus');
 const plus = document.getElementById('plus');
 const validate = document.getElementById('validate');
 const resetBtn = document.getElementById('reset');
+const winBtn = document.getElementById('winBtn');
 const sel = document.getElementById('sel');
 const topNum = document.getElementById('topNum');
 const statusEl = document.getElementById('status');
 
+const SEL_MAX = 36; // total max plausible en un tour (double+double+non-double)
 function setSelected(v){
-  selected = v<1?12:(v>12?1:v);
+  selected = v<1?SEL_MAX:(v>SEL_MAX?1:v);
   sel.textContent = selected;
   topNum.textContent = selected;
+}
+
+function placeLabel(idx){
+  if(idx<0) return 'Départ';
+  return POKEMON_PLACES[idx] + ' (case ' + (idx+1) + ')';
+}
+
+function updateWinButton(){
+  if(!winBtn) return;
+  const onPrize = currentIndex>=0 && !moving;
+  winBtn.hidden = !onPrize;
+  if(onPrize){
+    const t = tiles[currentIndex];
+    winBtn.textContent = t.catKey==='prison' ? '💀 FIN DE PARTIE' : '🎉 LOT REMPORTÉ';
+    winBtn.dataset.tier = t.catKey;
+  }
 }
 
 const wait = ms => new Promise(r=>setTimeout(r,ms));
 const HOP_DURATION = 0.36;
 
 async function move(){
-  if(moving) return;
+  if(moving || finished) return;
   moving = true;
   const myGen = ++generation;
   validate.disabled = minus.disabled = plus.disabled = true;
-  statusEl.textContent = 'Le joueur avance de '+selected+' case'+(selected>1?'s':'')+'…';
+  if(winBtn) winBtn.hidden = true;
+  const destIdx = Math.min(39, currentIndex + selected);
+  statusEl.textContent = 'Le joueur avance vers '+placeLabel(destIdx)+'…';
 
   const w = startWalk(currentIndex, selected, HOP_DURATION);
   await wait(w.totalTime*1000 + 30);
 
   if(myGen!==generation) return;
-  statusEl.textContent = currentIndex===0 ? 'Le joueur est arrivé sur Départ !' : 'Le joueur est arrivé sur la case '+currentIndex+' !';
+  if(currentIndex===39){
+    statusEl.textContent = '🏆 Arrivé à '+placeLabel(39)+' — JACKPOT FINAL !';
+    finished = true;
+  } else {
+    statusEl.textContent = 'Le joueur est arrivé à '+placeLabel(currentIndex)+' !';
+  }
   moving = false;
-  validate.disabled = minus.disabled = plus.disabled = false;
+  validate.disabled = minus.disabled = plus.disabled = finished;
+  updateWinButton();
 }
 
 function restart(){
   generation++;
   moving = false;
+  finished = false;
   walk = null;
-  currentIndex = 0;
+  currentIndex = -1;
   player.root.scale.set(1,1,1);
   player.root.rotation.x = 0;
   player.torso.rotation.z = 0;
   player.legL.rotation.x = player.legR.rotation.x = player.armL.rotation.x = player.armR.rotation.x = 0;
-  placeTokenInstant(0);
-  setActive(0);
+  placeTokenInstant(-1);
+  setActive(-1);
   statusEl.textContent = 'Le joueur est prêt sur Départ.';
   validate.disabled = minus.disabled = plus.disabled = false;
+  if(winBtn) winBtn.hidden = true;
+  clearCelebration();
 }
 
 minus.addEventListener('click', ()=>setSelected(selected-1));
 plus.addEventListener('click', ()=>setSelected(selected+1));
 validate.addEventListener('click', move);
 resetBtn.addEventListener('click', restart);
-[minus,plus,validate,resetBtn].forEach(btn=>{
+if(winBtn) winBtn.addEventListener('click', ()=>{
+  if(currentIndex<0) return;
+  celebrate(tiles[currentIndex].catKey);
+});
+[minus,plus,validate,resetBtn,winBtn].forEach(btn=>{
+  if(!btn) return;
   btn.addEventListener('touchend', e=>{ e.preventDefault(); btn.click(); }, {passive:false});
 });
 
 setSelected(1);
+
+/* ==========================================================================
+   Célébration "Lot remporté" — intensité croissante selon le lot :
+   commune/booster8/alt/chance/chest (1) < gradée (2) < gros booster (3)
+   < ETB 150€ (4) < jackpot final 300€ (5). Esprit Pokémon : étincelles
+   électriques façon Pikachu, éclat façon Pokéball qui s'ouvre, pluie
+   dorée pour le jackpot.
+   ========================================================================= */
+const TIER_LEVEL = {
+  commune:1, booster8:1, alternative:1, chance:1, chest:1,
+  gradee:2, booster50:3, etb:4, jackpot300:5, prison:0,
+};
+const celeb = document.getElementById('celebration');
+const celebCanvas = document.getElementById('celebCanvas');
+const celebText = document.getElementById('celebText');
+let celebCtx = celebCanvas ? celebCanvas.getContext('2d') : null;
+let celebParticles = [], celebRAF = null, celebEndAt = 0;
+
+function resizeCelebCanvas(){
+  if(!celebCanvas) return;
+  celebCanvas.width = window.innerWidth;
+  celebCanvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeCelebCanvas, {passive:true});
+
+function spawnParticles(level){
+  const W = celebCanvas.width, H = celebCanvas.height;
+  const count = [0,24,40,60,90,140][level];
+  const colors = level>=4 ? ['#ffe27a','#fff2c2','#ffffff','#ffd200'] : ['#ffe27a','#e0323f','#1a56db','#ffffff'];
+  for(let i=0;i<count;i++){
+    const ang = Math.random()*Math.PI*2;
+    const spd = (2+Math.random()*5) * (1+level*0.25);
+    celebParticles.push({
+      x:W/2, y:H*0.4, vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd - 2,
+      g: 0.12+Math.random()*0.06, size: 3+Math.random()*5,
+      color: colors[(Math.random()*colors.length)|0], life:1, decay: 0.006+Math.random()*0.006,
+      shape: Math.random()<0.5?'rect':'circle', rot:Math.random()*Math.PI, vr:(Math.random()-0.5)*0.3
+    });
+  }
+}
+
+function celebFrame(){
+  if(!celebCtx) return;
+  const W = celebCanvas.width, H = celebCanvas.height;
+  celebCtx.clearRect(0,0,W,H);
+  celebParticles.forEach(p=>{
+    p.x += p.vx; p.y += p.vy; p.vy += p.g; p.life -= p.decay; p.rot += p.vr;
+    celebCtx.save();
+    celebCtx.globalAlpha = Math.max(0,p.life);
+    celebCtx.translate(p.x,p.y); celebCtx.rotate(p.rot);
+    celebCtx.fillStyle = p.color;
+    if(p.shape==='rect') celebCtx.fillRect(-p.size/2,-p.size/2,p.size,p.size*0.6);
+    else { celebCtx.beginPath(); celebCtx.arc(0,0,p.size/2,0,Math.PI*2); celebCtx.fill(); }
+    celebCtx.restore();
+  });
+  celebParticles = celebParticles.filter(p=>p.life>0 && p.y<H+50);
+  if(performance.now() < celebEndAt || celebParticles.length){
+    celebRAF = requestAnimationFrame(celebFrame);
+  } else {
+    celeb.classList.remove('show');
+  }
+}
+
+function clearCelebration(){
+  if(celebRAF) cancelAnimationFrame(celebRAF);
+  celebParticles = [];
+  if(celeb) celeb.classList.remove('show','shake');
+}
+
+const TIER_MESSAGES = {
+  1: '🎉 Lot remporté !',
+  2: '⭐ CARTE GRADÉE REMPORTÉE ! ⭐',
+  3: '⚡ GROS BOOSTER 50€ ! ⚡',
+  4: '🏅 ETB 150€ REMPORTÉ ! 🏅',
+  5: '👑 JACKPOT FINAL 300€ ! 👑',
+};
+
+function celebrate(catKey){
+  const level = TIER_LEVEL[catKey] ?? 1;
+  if(level===0){
+    if(celebText) celebText.textContent = '💀 Fin de partie...';
+    if(celeb){ celeb.classList.add('show'); celeb.dataset.level='0'; }
+    setTimeout(clearCelebration, 1800);
+    return;
+  }
+  if(!celeb || !celebCanvas) return;
+  resizeCelebCanvas();
+  celeb.dataset.level = String(level);
+  celeb.classList.add('show');
+  if(level>=4) celeb.classList.add('shake');
+  if(celebText) celebText.textContent = TIER_MESSAGES[level];
+
+  const bursts = level;
+  for(let b=0;b<bursts;b++){ setTimeout(()=>spawnParticles(level), b*220); }
+  celebEndAt = performance.now() + 1400 + level*350;
+  if(!celebRAF) celebFrame();
+  setTimeout(()=>{ celeb.classList.remove('shake'); }, 700);
+}
