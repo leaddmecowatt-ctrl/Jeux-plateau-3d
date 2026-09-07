@@ -54,23 +54,23 @@ const CATS = {
    (4%) de tomber dessus, pour rester rarissime et ne pas casser la
    rentabilité (le q nécessaire remonte légèrement, 80,1% au lieu de
    79,6%, mais la marge reste pile à 50%, vérifié). */
-const RARE_GRADEE_CARD = { text: '★ CARTE GRADÉE OFFERTE (20-80€) — TRÈS RARE ★', weight: 1, rare: true };
+const RARE_GRADEE_CARD = { text: '★ CARTE GRADÉE OFFERTE (20-80€) — TRÈS RARE ★', weight: 1, rare: true, effect:{type:'prize'} };
 const CHANCE_DECK = [
-  { text: 'Avancez de 3 cases', weight: 4 },
-  { text: 'Reculez de 2 cases', weight: 4 },
-  { text: 'Rejouez gratuitement (relance bonus sans risque)', weight: 4 },
-  { text: 'Carte commune offerte (~0,68€)', weight: 4 },
-  { text: "Prochain «je continue» : risque réduit de moitié", weight: 4 },
-  { text: 'Carte alternative offerte (~7,20€ en moyenne)', weight: 4 },
+  { text: 'Avancez de 3 cases', weight: 4, effect:{type:'move', delta:3} },
+  { text: 'Reculez de 2 cases', weight: 4, effect:{type:'move', delta:-2} },
+  { text: 'Rejouez gratuitement (relance bonus sans risque)', weight: 4, effect:{type:'replay'} },
+  { text: 'Carte commune offerte (~0,68€)', weight: 4, effect:{type:'prize'} },
+  { text: "Prochain «je continue» : risque réduit de moitié", weight: 4, effect:{type:'riskHalved'} },
+  { text: 'Carte alternative offerte (~7,20€ en moyenne)', weight: 4, effect:{type:'prize'} },
   RARE_GRADEE_CARD,
 ];
 const CHEST_DECK = [
-  { text: 'Carte commune offerte (~0,68€)', weight: 4 },
-  { text: 'Rejouez gratuitement', weight: 4 },
-  { text: 'Avancez de 2 cases', weight: 4 },
-  { text: 'Booster à 8€ offert', weight: 4 },
-  { text: 'Reculez de 1 case', weight: 4 },
-  { text: 'Rien de spécial', weight: 4 },
+  { text: 'Carte commune offerte (~0,68€)', weight: 4, effect:{type:'prize'} },
+  { text: 'Rejouez gratuitement', weight: 4, effect:{type:'replay'} },
+  { text: 'Avancez de 2 cases', weight: 4, effect:{type:'move', delta:2} },
+  { text: 'Booster à 8€ offert', weight: 4, effect:{type:'prize'} },
+  { text: 'Reculez de 1 case', weight: 4, effect:{type:'move', delta:-1} },
+  { text: 'Rien de spécial', weight: 4, effect:{type:'none'} },
   RARE_GRADEE_CARD,
 ];
 function drawCard(deck){
@@ -821,15 +821,20 @@ function startWalk(fromIdx, count, stepDuration){
   // Le pion démarre visuellement SUR la case 1 (pas sur une case
   // "0" séparée) : un lancer de N doit donc avancer de N cases
   // PLEINES depuis la case 1, comme depuis n'importe quelle autre
-  // case déjà atteinte.
+  // case déjà atteinte. `count` peut être négatif (cartes "Reculez
+  // de N cases") : le pion recule alors case par case, sans jamais
+  // dépasser la case 1.
   const startPos = fromIdx === -1 ? 0 : fromIdx;
+  const dir = count >= 0 ? 1 : -1;
+  const n = Math.abs(count);
   const path = [ tiles[startPos] ];
   const indices = [ fromIdx ];
   let idx = startPos;
   let steps = 0;
-  for(let i=0;i<count;i++){
-    if(idx>=39) break;
-    idx = idx+1;
+  for(let i=0;i<n;i++){
+    const next = idx + dir;
+    if(next < 0 || next > 39) break;
+    idx = next;
     path.push(tiles[idx]);
     indices.push(idx);
     steps++;
@@ -1020,11 +1025,14 @@ function placeLabel(idx){
 function updateWinButton(){
   if(!winBtn) return;
   const onPrize = currentIndex>=0 && !moving;
-  winBtn.hidden = !onPrize;
-  if(onPrize){
-    const t = tiles[currentIndex];
-    winBtn.textContent = t.catKey==='prison' ? '💀 FIN DE PARTIE' : '🎉 LOT REMPORTÉ';
-    winBtn.dataset.tier = t.catKey;
+  const cat = onPrize ? tiles[currentIndex].catKey : null;
+  // Chance / Caisse Communautaire se révèlent tout seuls (pas de
+  // bouton à cliquer, la partie continue automatiquement après).
+  const autoResolved = cat==='chance' || cat==='chest';
+  winBtn.hidden = !onPrize || autoResolved;
+  if(onPrize && !autoResolved){
+    winBtn.textContent = cat==='prison' ? '💀 FIN DE PARTIE' : '🎉 LOT REMPORTÉ';
+    winBtn.dataset.tier = cat;
   }
 }
 
@@ -1052,9 +1060,47 @@ async function move(){
     statusEl.textContent = 'Le joueur est arrivé à '+placeLabel(currentIndex)+' !';
   }
   updatePlaceBanner(currentIndex, false);
+
+  const arrivedCat = currentIndex>=0 ? tiles[currentIndex].catKey : null;
+  if(!finished && (arrivedCat==='chance' || arrivedCat==='chest')){
+    await resolveChanceChest(myGen);
+    if(myGen!==generation) return;
+  }
+
   moving = false;
   validate.disabled = minus.disabled = plus.disabled = finished;
   updateWinButton();
+}
+
+/* Chance / Caisse Communautaire se révèlent automatiquement (pas de
+   bouton à cliquer) : la carte s'affiche, son effet éventuel
+   (avancer/reculer) est joué directement sur le plateau, puis
+   l'annonce disparaît toute seule et la partie continue. */
+async function resolveChanceChest(myGen){
+  const idx = currentIndex;
+  const catKey = tiles[idx].catKey;
+  const deck = catKey==='chance' ? CHANCE_DECK : CHEST_DECK;
+  const card = drawCard(deck);
+  celebrate(catKey, card);
+
+  await wait(card.rare ? 2600 : 1900);
+  if(myGen!==generation) return;
+
+  if(card.effect && card.effect.type==='move' && card.effect.delta){
+    const goingForward = card.effect.delta>0;
+    statusEl.textContent = 'La carte le fait '+(goingForward?'avancer':'reculer')+' automatiquement de '+Math.abs(card.effect.delta)+' case'+(Math.abs(card.effect.delta)>1?'s':'')+'…';
+    const w = startWalk(idx, card.effect.delta, HOP_DURATION);
+    await wait(w.totalTime*1000 + 30);
+    if(myGen!==generation) return;
+    if(currentIndex===39){
+      statusEl.textContent = '🏆 Arrivé à '+placeLabel(39)+' — JACKPOT FINAL !';
+      finished = true;
+    } else {
+      statusEl.textContent = 'Le joueur est arrivé à '+placeLabel(currentIndex)+' !';
+    }
+    updatePlaceBanner(currentIndex, false);
+  }
+  clearCelebration();
 }
 
 function restart(){
@@ -1184,7 +1230,7 @@ const CATEGORY_MESSAGES = {
   jackpot300:  '👑 GRAND JACKPOT ! 👑',
 };
 
-function celebrate(catKey){
+function celebrate(catKey, forcedCard){
   const level = TIER_LEVEL[catKey] ?? 1;
   if(level===0){
     if(celebMain) celebMain.textContent = '💀 Fin de partie...';
@@ -1202,7 +1248,7 @@ function celebrate(catKey){
   let rareCardDrawn = false;
   if(catKey==='chance' || catKey==='chest'){
     const deck = catKey==='chance' ? CHANCE_DECK : CHEST_DECK;
-    const card = drawCard(deck);
+    const card = forcedCard || drawCard(deck);
     rareCardDrawn = !!card.rare;
     if(celebMain) celebMain.textContent = rareCardDrawn
       ? '🌟 JACKPOT DE PIOCHE ! 🌟'
