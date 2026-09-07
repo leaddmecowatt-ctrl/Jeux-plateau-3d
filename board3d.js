@@ -337,6 +337,7 @@ composer.addPass(bloomPass);
 composer.addPass(new OutputPass());
 
 let idleTimer = null;
+let gameStarted = false;
 controls.addEventListener('start', ()=>{
   controls.autoRotate = false;
   if(hint3d) hint3d.style.opacity = '0';
@@ -344,7 +345,7 @@ controls.addEventListener('start', ()=>{
 });
 controls.addEventListener('end', ()=>{
   clearTimeout(idleTimer);
-  idleTimer = setTimeout(()=>{ if(!reduceMotion) controls.autoRotate = true; }, 3500);
+  idleTimer = setTimeout(()=>{ if(!reduceMotion && !gameStarted) controls.autoRotate = true; }, 3500);
 });
 if(hint3d){ setTimeout(()=>{ hint3d.style.opacity = '0'; }, 5000); }
 
@@ -980,6 +981,7 @@ const plus = document.getElementById('plus');
 const validate = document.getElementById('validate');
 const resetBtn = document.getElementById('reset');
 const winBtn = document.getElementById('winBtn');
+const startBtn = document.getElementById('startBtn');
 const sel = document.getElementById('sel');
 const topNum = document.getElementById('topNum');
 const statusEl = document.getElementById('status');
@@ -1060,17 +1062,28 @@ function restart(){
   validate.disabled = minus.disabled = plus.disabled = false;
   if(winBtn) winBtn.hidden = true;
   clearCelebration();
+  gameStarted = false;
+  controls.autoRotate = !reduceMotion;
+  if(startBtn){ startBtn.hidden = false; startBtn.textContent = '▶ DÉMARRER LA PARTIE'; }
+}
+
+function startGame(){
+  gameStarted = true;
+  controls.autoRotate = false;
+  clearTimeout(idleTimer);
+  if(startBtn) startBtn.hidden = true;
 }
 
 minus.addEventListener('click', ()=>setSelected(selected-1));
 plus.addEventListener('click', ()=>setSelected(selected+1));
 validate.addEventListener('click', move);
 resetBtn.addEventListener('click', restart);
+if(startBtn) startBtn.addEventListener('click', startGame);
 if(winBtn) winBtn.addEventListener('click', ()=>{
   if(currentIndex<0) return;
   celebrate(tiles[currentIndex].catKey);
 });
-[minus,plus,validate,resetBtn,winBtn].forEach(btn=>{
+[minus,plus,validate,resetBtn,winBtn,startBtn].forEach(btn=>{
   if(!btn) return;
   btn.addEventListener('touchend', e=>{ e.preventDefault(); btn.click(); }, {passive:false});
 });
