@@ -1638,10 +1638,13 @@ function clearCelebration(){
 }
 
 /* Aperçu du lot dès l'arrivée sur la case, avant toute décision de le
-   garder ou de continuer : juste la photo, en grand, sans confettis
-   ni minuterie — il reste jusqu'à ce qu'un nouveau tirage l'efface
-   (le joueur continue) ou qu'il soit validé (voir celebrate, qui le
-   verrouille alors à l'écran). */
+   garder ou de continuer : juste la photo, en grand, sans confettis,
+   qui s'efface toute seule après quelques secondes pour laisser les
+   boutons "TIRER LES CARTES" / "LOT REMPORTÉ" bien dégagés — un
+   nouveau tirage l'efface aussi immédiatement s'il arrive avant.
+   Si le lot est validé entre-temps, celebrate() le verrouille à
+   l'écran (celebLocked) et cet effacement automatique est annulé. */
+let previewGen = 0;
 function showLotPreview(catKey){
   if(!celeb || !celebCanvas) return;
   const url = LOT_IMAGE_URLS[catKey];
@@ -1653,6 +1656,10 @@ function showLotPreview(catKey){
   if(celebSub) celebSub.hidden = true;
   if(celebPhoto){ celebPhoto.src = url; celebPhoto.hidden = false; }
   celeb.classList.add('show');
+  const myPreviewGen = ++previewGen;
+  setTimeout(()=>{
+    if(myPreviewGen===previewGen && !celebLocked) celeb.classList.remove('show');
+  }, 2600);
 }
 
 /* Annonce propre à chaque catégorie de lot (plutôt qu'un message
