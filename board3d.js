@@ -1036,16 +1036,13 @@ function shuffledSlots(){
   return a;
 }
 function computeCardDraw(){
-  const pairs = [];
-  let total = 0;
-  for(let chain=0; chain<3; chain++){
-    const a = 1+Math.floor(Math.random()*6);
-    const b = 1+Math.floor(Math.random()*6);
-    pairs.push({a,b});
-    total += a+b;
-    if(a!==b) break;
-  }
-  return { pairs, total, slotOrder: shuffledSlots() };
+  // Un seul tirage de 2 cartes par clic. Sur un double, l'hôte
+  // relance lui-même manuellement (nouveau clic sur "TIRER LES
+  // CARTES") pour la paire bonus, au lieu d'un enchaînement
+  // automatique dans le logiciel.
+  const a = 1+Math.floor(Math.random()*6);
+  const b = 1+Math.floor(Math.random()*6);
+  return { pairs: [{a,b}], total: a+b, isDouble: a===b, slotOrder: shuffledSlots() };
 }
 async function playCardDrawAnimation(draw){
   if(!cardDrawOverlay || !cardGrid) return;
@@ -1062,28 +1059,18 @@ async function playCardDrawAnimation(draw){
   if(cardDrawTotal) cardDrawTotal.textContent = '';
   await wait(400);
 
-  let running = 0;
-  for(let i=0;i<draw.pairs.length;i++){
-    const {a,b} = draw.pairs[i];
-    const isDouble = a===b;
-    const isLast = i===draw.pairs.length-1;
-    const s1 = draw.slotOrder[(2*i)%12], s2 = draw.slotOrder[(2*i+1)%12];
-    const f1 = cardEls[s1].querySelector('.front'), f2 = cardEls[s2].querySelector('.front');
-    if(f1) f1.textContent = a;
-    if(f2) f2.textContent = b;
-    cardEls[s1].classList.add('flipped');
-    cardEls[s2].classList.add('flipped');
-    await wait(700);
-    running += a+b;
-    if(cardDrawTotal){
-      cardDrawTotal.textContent = 'Total : '+running + (isDouble && !isLast ? '  —  DOUBLE ! ⚡' : '');
-    }
-    // Sur un double, la paire bonus enchaîne tout de suite (pas de
-    // longue pause) pour que ça se lise comme "4 cartes qui se
-    // retournent d'un coup" plutôt que deux tirages séparés.
-    await wait(isDouble && !isLast ? 250 : 750);
+  const {a,b} = draw.pairs[0];
+  const s1 = draw.slotOrder[0], s2 = draw.slotOrder[1];
+  const f1 = cardEls[s1].querySelector('.front'), f2 = cardEls[s2].querySelector('.front');
+  if(f1) f1.textContent = a;
+  if(f2) f2.textContent = b;
+  cardEls[s1].classList.add('flipped');
+  cardEls[s2].classList.add('flipped');
+  await wait(700);
+  if(cardDrawTotal){
+    cardDrawTotal.textContent = 'Total : '+draw.total + (draw.isDouble ? '  —  DOUBLE ! ⚡ Relancez pour la paire bonus' : '');
   }
-  await wait(500);
+  await wait(draw.isDouble ? 1600 : 900);
   cardDrawOverlay.classList.remove('show');
 }
 
