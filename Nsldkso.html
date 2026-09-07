@@ -279,6 +279,24 @@ button:active:not(:disabled){transform:translateY(1px)}
   background:#1a1406;color:var(--gold-bright);font-size:9px;font-weight:900
 }
 
+.opendisplay{
+  border:0;border-radius:10px;padding:11px;font-weight:900;font-size:13px;letter-spacing:.01em;
+  background:linear-gradient(180deg,#2f6fdc,#1a4aa0);color:#fff;
+  box-shadow:0 0 12px rgba(47,111,220,.5);
+}
+
+/* ---------- Écran public (?view=display) : masque toute l'interface
+   de contrôle, ne laisse que le plateau, l'annonce et le statut. ---------- */
+html.display-mode .side-panel,
+html.display-mode .reset{ display:none!important; }
+.display-badge{
+  display:none;position:fixed;right:10px;top:6px;z-index:60;
+  background:rgba(10,8,2,.8);border:1px solid var(--gold);color:var(--gold-bright);
+  font-size:10px;font-weight:800;letter-spacing:.05em;padding:4px 10px;border-radius:20px;
+  pointer-events:none;
+}
+html.display-mode .display-badge{ display:block; }
+
 /* ---------- Overlay de célébration "Lot remporté" ---------- */
 .celebration{
   position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
@@ -327,6 +345,11 @@ button:active:not(:disabled){transform:translateY(1px)}
 </style>
 </head>
 <body>
+<script>
+if(new URLSearchParams(location.search).get('view')==='display'){
+  document.documentElement.classList.add('display-mode');
+}
+</script>
 <div id="app">
   <div class="top-hud">
     <div class="brand">★ PIKAJACKPOT ★</div>
@@ -385,6 +408,7 @@ button:active:not(:disabled){transform:translateY(1px)}
       </div>
 
       <div class="side-panel">
+        <button class="opendisplay" id="openDisplayBtn" type="button">🖥️ Ouvrir l'écran plateau</button>
         <button class="startbtn" id="startBtn" type="button">▶ DÉMARRER LA PARTIE</button>
         <div class="controls-panel">
           <div class="control-copy">
@@ -423,6 +447,8 @@ button:active:not(:disabled){transform:translateY(1px)}
     <span id="status">Le joueur est prêt sur Départ.</span>
     <button class="reset" id="reset" type="button">RECOMMENCER</button>
   </div>
+
+  <div class="display-badge">🖥️ Écran public — lecture seule</div>
 
   <div class="celebration" id="celebration" aria-hidden="true">
     <canvas id="celebCanvas"></canvas>

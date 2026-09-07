@@ -15,6 +15,16 @@ import { OutputPass } from './vendor/three/examples/jsm/postprocessing/OutputPas
 
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+/* ---------- Écran public séparé (?view=display) : une deuxième
+   fenêtre, ouverte sur le même ordinateur, qui n'affiche que le
+   plateau (aucun bouton) et se synchronise en temps réel avec la
+   fenêtre de contrôle via BroadcastChannel — pas besoin de serveur,
+   ça marche tant que les deux fenêtres sont dans le même navigateur.
+   ---------- */
+const isDisplay = document.documentElement.classList.contains('display-mode');
+const syncChannel = ('BroadcastChannel' in window) ? new BroadcastChannel('pikajackpot-sync') : null;
+function broadcastSync(msg){ if(syncChannel && !isDisplay) syncChannel.postMessage(msg); }
+
 /* ---------- Disposition des 40 cases sur l'anneau 11x11 (coins tous
    les 10 cases, comme un plateau façon Monopoly). tiles[0] = Case 1
    ... tiles[39] = Case 40 (jackpot final) : pas de case "Départ"
@@ -1019,6 +1029,7 @@ function setSelected(v){
   selected = v<1?SEL_MAX:(v>SEL_MAX?1:v);
   sel.textContent = selected;
   topNum.textContent = selected;
+  broadcastSync({type:'select', value:selected});
 }
 
 function placeLabel(idx){
@@ -1043,20 +1054,41 @@ function updateWinButton(){
 const wait = ms => new Promise(r=>setTimeout(r,ms));
 const HOP_DURATION = 0.36;
 
-async function move(){
+async function move(forcedCount, forcedCard){
   if(moving || finished) return;
   moving = true;
   const myGen = ++generation;
   validate.disabled = minus.disabled = plus.disabled = true;
   if(winBtn) winBtn.hidden = true;
-  const destIdx = Math.min(39, (currentIndex===-1?0:currentIndex) + selected);
+  const count = forcedCount!=null ? forcedCount : selected;
+  const destIdx = Math.min(39, (currentIndex===-1?0:currentIndex) + count);
+  const destCat = tiles[destIdx].catKey;
+  // Si la case d'arrivée est Chance/Caisse, on tire la carte TOUT DE
+  // SUITE (avant l'animation) pour pouvoir l'envoyer d'un coup à
+  // l'écran public : les deux écrans doivent afficher la même carte.
+  let card = forcedCard || null;
+  if(!card && (destCat==='chance' || destCat==='chest')){
+    card = drawCard(destCat==='chance' ? CHANCE_DECK : CHEST_DECK);
+  }
+  broadcastSync({type:'move', count, card});
+
   statusEl.textContent = 'Le joueur avance vers '+placeLabel(destIdx)+'…';
   updatePlaceBanner(destIdx, true);
 
-  const w = startWalk(currentIndex, selected, HOP_DURATION);
+  const w = startWalk(currentIndex, count, HOP_DURATION);
   await wait(w.totalTime*1000 + 30);
 
   if(myGen!==generation) return;
+  // Filet de sécurité : si la fenêtre était en arrière-plan (ex. un
+  // navigateur qui met en pause l'animation d'un onglet/fenêtre
+  // caché·e), l'état logique se corrige quand même à la bonne case
+  // au lieu de rester bloqué sur l'ancienne position.
+  if(currentIndex !== destIdx){
+    currentIndex = destIdx;
+    walk = null;
+    placeTokenInstant(destIdx);
+    setActive(destIdx);
+  }
   if(currentIndex===39){
     statusEl.textContent = '🏆 Arrivé à '+placeLabel(39)+' — JACKPOT FINAL !';
     finished = true;
@@ -1067,7 +1099,7 @@ async function move(){
 
   const arrivedCat = currentIndex>=0 ? tiles[currentIndex].catKey : null;
   if(!finished && (arrivedCat==='chance' || arrivedCat==='chest')){
-    await resolveChanceChest(myGen);
+    await resolveChanceChest(myGen, card);
     if(myGen!==generation) return;
   }
 
@@ -1080,11 +1112,11 @@ async function move(){
    bouton à cliquer) : la carte s'affiche, son effet éventuel
    (avancer/reculer) est joué directement sur le plateau, puis
    l'annonce disparaît toute seule et la partie continue. */
-async function resolveChanceChest(myGen){
+async function resolveChanceChest(myGen, forcedCard){
   const idx = currentIndex;
   const catKey = tiles[idx].catKey;
   const deck = catKey==='chance' ? CHANCE_DECK : CHEST_DECK;
-  const card = drawCard(deck);
+  const card = forcedCard || drawCard(deck);
   celebrate(catKey, card);
 
   await wait(card.rare ? 2600 : 1900);
@@ -1096,6 +1128,13 @@ async function resolveChanceChest(myGen){
     const w = startWalk(idx, card.effect.delta, HOP_DURATION);
     await wait(w.totalTime*1000 + 30);
     if(myGen!==generation) return;
+    const expectedIdx = Math.max(0, Math.min(39, idx + card.effect.delta));
+    if(currentIndex !== expectedIdx){
+      currentIndex = expectedIdx;
+      walk = null;
+      placeTokenInstant(expectedIdx);
+      setActive(expectedIdx);
+    }
     if(currentIndex===39){
       statusEl.textContent = '🏆 Arrivé à '+placeLabel(39)+' — JACKPOT FINAL !';
       finished = true;
@@ -1127,6 +1166,7 @@ function restart(){
   gameStarted = false;
   controls.autoRotate = !reduceMotion;
   if(startBtn){ startBtn.hidden = false; startBtn.textContent = '▶ DÉMARRER LA PARTIE'; }
+  broadcastSync({type:'restart'});
 }
 
 function startGame(){
@@ -1134,17 +1174,40 @@ function startGame(){
   controls.autoRotate = false;
   clearTimeout(idleTimer);
   if(startBtn) startBtn.hidden = true;
+  broadcastSync({type:'start'});
 }
 
 minus.addEventListener('click', ()=>setSelected(selected-1));
 plus.addEventListener('click', ()=>setSelected(selected+1));
-validate.addEventListener('click', move);
+validate.addEventListener('click', ()=>move());
 resetBtn.addEventListener('click', restart);
 if(startBtn) startBtn.addEventListener('click', startGame);
 if(winBtn) winBtn.addEventListener('click', ()=>{
   if(currentIndex<0) return;
-  celebrate(tiles[currentIndex].catKey);
+  const cat = tiles[currentIndex].catKey;
+  celebrate(cat);
+  broadcastSync({type:'celebrate', catKey:cat});
 });
+
+if(syncChannel && isDisplay){
+  syncChannel.onmessage = (e)=>{
+    const m = e.data || {};
+    if(m.type==='move') move(m.count, m.card);
+    else if(m.type==='celebrate') celebrate(m.catKey);
+    else if(m.type==='restart') restart();
+    else if(m.type==='start') startGame();
+    else if(m.type==='select') setSelected(m.value);
+  };
+}
+
+const openDisplayBtn = document.getElementById('openDisplayBtn');
+if(openDisplayBtn){
+  openDisplayBtn.addEventListener('click', ()=>{
+    const url = new URL(location.href);
+    url.searchParams.set('view','display');
+    window.open(url.toString(), 'pikajackpot_display', 'width=1280,height=820');
+  });
+}
 [minus,plus,validate,resetBtn,winBtn,startBtn].forEach(btn=>{
   if(!btn) return;
   btn.addEventListener('touchend', e=>{ e.preventDefault(); btn.click(); }, {passive:false});
