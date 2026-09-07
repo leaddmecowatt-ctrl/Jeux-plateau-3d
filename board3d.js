@@ -1396,6 +1396,7 @@ const celebCanvas = document.getElementById('celebCanvas');
 const celebText = document.getElementById('celebText');
 const celebMain = document.getElementById('celebMain');
 const celebSub = document.getElementById('celebSub');
+const celebPhoto = document.getElementById('celebPhoto');
 let celebCtx = celebCanvas ? celebCanvas.getContext('2d') : null;
 let celebParticles = [], celebRAF = null, celebEndAt = 0;
 
@@ -1465,6 +1466,7 @@ const CATEGORY_MESSAGES = {
 function celebrate(catKey, forcedCard){
   const level = TIER_LEVEL[catKey] ?? 1;
   if(level===0){
+    if(celebPhoto) celebPhoto.hidden = true;
     if(celebMain) celebMain.textContent = '💀 Fin de partie...';
     if(celebSub) celebSub.hidden = true;
     if(celeb){ celeb.classList.add('show'); celeb.dataset.level='0'; }
@@ -1487,9 +1489,24 @@ function celebrate(catKey, forcedCard){
       : (catKey==='chance' ? '🎴 CARTE CHANCE' : '🗃️ CAISSE COMMUNAUTAIRE');
     if(celebSub){ celebSub.textContent = card.text; celebSub.hidden = false; }
     if(rareCardDrawn) celeb.classList.add('shake');
+    // même sur une carte Chance/Caisse, si c'est la rare carte gradée
+    // qui sort, on montre une vraie photo — sinon pas de lot fixe à
+    // afficher (avancer/reculer/rejouer n'ont pas de photo).
+    if(celebPhoto){
+      if(rareCardDrawn && LOT_IMAGE_URLS.gradee){
+        celebPhoto.src = LOT_IMAGE_URLS.gradee; celebPhoto.hidden = false;
+      } else celebPhoto.hidden = true;
+    }
   } else {
     if(celebMain) celebMain.textContent = CATEGORY_MESSAGES[catKey] || '🎉 Lot remporté !';
     if(celebSub) celebSub.hidden = true;
+    // le cœur de la demande : on ne se contente plus d'un texte,
+    // on montre la vraie photo du lot gagné en grand.
+    if(celebPhoto){
+      const url = LOT_IMAGE_URLS[catKey];
+      if(url){ celebPhoto.src = url; celebPhoto.hidden = false; }
+      else celebPhoto.hidden = true;
+    }
   }
 
   const effectiveLevel = rareCardDrawn ? 5 : level;
