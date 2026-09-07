@@ -1458,11 +1458,14 @@ if(syncChannel && isDisplay){
 
 const openDisplayBtn = document.getElementById('openDisplayBtn');
 if(openDisplayBtn){
-  openDisplayBtn.addEventListener('click', ()=>{
-    const url = new URL(location.href);
-    url.searchParams.set('view','display');
-    window.open(url.toString(), 'pikajackpot_display', 'width=1280,height=820');
-  });
+  // Un vrai lien <a target="_blank"> plutôt qu'un window.open() : sur
+  // mobile et dans les navigateurs intégrés (in-app), une fenêtre
+  // ouverte par script est très souvent bloquée silencieusement,
+  // alors qu'un vrai lien cliqué par l'utilisateur passe presque
+  // toujours.
+  const url = new URL(location.href);
+  url.searchParams.set('view','display');
+  openDisplayBtn.href = url.toString();
 }
 [validate,resetBtn,winBtn,startBtn].forEach(btn=>{
   if(!btn) return;

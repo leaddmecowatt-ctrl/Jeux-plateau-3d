@@ -271,6 +271,7 @@ button:active:not(:disabled){transform:translateY(1px)}
 }
 
 .opendisplay{
+  display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;cursor:pointer;
   border:0;border-radius:10px;padding:11px;font-weight:900;font-size:13px;letter-spacing:.01em;
   background:linear-gradient(180deg,#2f6fdc,#1a4aa0);color:#fff;
   box-shadow:0 0 12px rgba(47,111,220,.5);
@@ -541,7 +542,7 @@ if(new URLSearchParams(location.search).get('view')==='display'){
       </div>
 
       <div class="side-panel">
-        <button class="opendisplay" id="openDisplayBtn" type="button">🖥️ Ouvrir l'écran plateau</button>
+        <a class="opendisplay" id="openDisplayBtn" href="?view=display" target="_blank" rel="noopener">🖥️ Ouvrir l'écran plateau</a>
         <button class="startbtn" id="startBtn" type="button">▶ DÉMARRER LA PARTIE</button>
         <div class="controls-panel">
           <div class="control-copy">
