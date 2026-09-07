@@ -804,9 +804,14 @@ const clock = new THREE.Clock();
 let walk = null;
 
 function startWalk(fromIdx, count, stepDuration){
-  const path = [ tileAt(fromIdx) ];
+  // Le pion démarre visuellement SUR la case 1 (pas sur une case
+  // "0" séparée) : un lancer de N doit donc avancer de N cases
+  // PLEINES depuis la case 1, comme depuis n'importe quelle autre
+  // case déjà atteinte.
+  const startPos = fromIdx === -1 ? 0 : fromIdx;
+  const path = [ tiles[startPos] ];
   const indices = [ fromIdx ];
-  let idx = fromIdx;
+  let idx = startPos;
   let steps = 0;
   for(let i=0;i<count;i++){
     if(idx>=39) break;
@@ -1018,7 +1023,7 @@ async function move(){
   const myGen = ++generation;
   validate.disabled = minus.disabled = plus.disabled = true;
   if(winBtn) winBtn.hidden = true;
-  const destIdx = Math.min(39, currentIndex + selected);
+  const destIdx = Math.min(39, (currentIndex===-1?0:currentIndex) + selected);
   statusEl.textContent = 'Le joueur avance vers '+placeLabel(destIdx)+'…';
   updatePlaceBanner(destIdx, true);
 
