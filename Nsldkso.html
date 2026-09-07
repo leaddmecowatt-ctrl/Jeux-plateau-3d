@@ -186,22 +186,23 @@ body{overflow:hidden;color:#fff}
 button:disabled{opacity:.48;filter:grayscale(.7)}
 button:active:not(:disabled){transform:translateY(1px)}
 
-.bank-panel{
-  background:linear-gradient(180deg,#1a1406,#0d0a03);
-  border:1px solid var(--gold);border-radius:10px;padding:7px 9px;
-  display:flex;flex-direction:column;gap:5px;
+.place-banner-wrap{
+  flex:0 0 auto;width:100%;height:clamp(30px,6vw,44px);margin:2px 0;
+  display:flex;align-items:center;justify-content:center;overflow:hidden;pointer-events:none;
 }
-.bank-row{display:flex;align-items:center;gap:6px;font-size:11px;color:#e8d8ae}
-.bank-row label{flex:0 0 auto;font-weight:800}
-.bank-row input[type="number"]{
-  flex:1 1 auto;min-width:0;height:26px;border-radius:6px;padding:0 6px;
-  border:1px solid var(--gold);background:#241a06;color:var(--gold-bright);font-size:12px;font-weight:900;
+.place-banner{
+  font-family:'Cinzel',Georgia,'Times New Roman',serif;font-weight:900;
+  font-size:clamp(15px,4.2vw,24px);letter-spacing:.06em;text-transform:uppercase;
+  text-align:center;white-space:nowrap;
+  background:linear-gradient(180deg,#fff6d8 10%,var(--gold-bright) 55%,var(--gold) 100%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:var(--gold-bright);
+  filter:drop-shadow(0 0 10px rgba(255,226,122,.55)) drop-shadow(0 2px 2px rgba(0,0,0,.7));
+  opacity:0;transform:translateY(10px) scale(.94);
+  transition:opacity .45s cubic-bezier(.22,.9,.32,1), transform .45s cubic-bezier(.22,.9,.32,1);
 }
-.bank-row span{flex:0 0 auto}
-.bank-row button{
-  flex:0 0 auto;border:0;border-radius:6px;padding:5px 8px;font-size:10.5px;font-weight:900;
-  background:linear-gradient(180deg,#33b46a,#1e7a48);color:#fff;
-}
+/* Le nom du lieu reste affiché tant que le pion y est — il ne
+   glisse/disparaît que lors du changement de case suivant. */
+.place-banner.show{ opacity:1; transform:translateY(0) scale(1); }
 
 .legend{
   background:linear-gradient(180deg,#1a1406,#0d0a03);
@@ -461,19 +462,6 @@ if(new URLSearchParams(location.search).get('view')==='display'){
           <button class="winbtn" id="winBtn" type="button" hidden>🎉 LOT REMPORTÉ</button>
         </div>
 
-        <div class="bank-panel">
-          <div class="bank-row">
-            <label for="bankInput">Cagnotte</label>
-            <input type="number" id="bankInput" step="0.5" min="0" value="0">
-            <span>€</span>
-          </div>
-          <div class="bank-row">
-            <label for="miseInput">Mise</label>
-            <input type="number" id="miseInput" step="0.5" min="0" value="9">
-            <button id="addMiseBtn" type="button">+ Ajouter</button>
-          </div>
-        </div>
-
         <details class="legend">
           <summary class="legend-title">Types de cases</summary>
           <div class="legend-list">
@@ -489,6 +477,8 @@ if(new URLSearchParams(location.search).get('view')==='display'){
       </div>
     </div>
   </div>
+
+  <div class="place-banner-wrap"><div class="place-banner" id="placeBanner">Départ</div></div>
 
   <div class="statusbar">
     <span class="ball"></span>

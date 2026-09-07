@@ -1119,44 +1119,23 @@ const cardDrawOverlay = document.getElementById('cardDrawOverlay');
 const cardGrid = document.getElementById('cardGrid');
 const cardDrawTotal = document.getElementById('cardDrawTotal');
 const impactFlash = document.getElementById('impactFlash');
-const bankInput = document.getElementById('bankInput');
-const miseInput = document.getElementById('miseInput');
-const addMiseBtn = document.getElementById('addMiseBtn');
 
-/* ---------- Cagnotte : les gros lots (palier "float" — gradée, gros
-   booster, ETB, jackpot final) ne sont payés que si l'argent des
-   mises déjà encaissées les couvre. Sinon, le tirage reste honnête
-   mais le lot réellement remis redescend d'un cran (jamais un lot
-   moins cher que ce qui est dans la cagnotte), pour ne jamais mettre
-   l'animateur en perte tout en gardant un lot valorisant à chaque
-   fois. La cagnotte est alimentée manuellement (bouton "+ Ajouter")
-   à chaque mise réellement encaissée, et persiste entre les parties
-   et les rechargements de page (localStorage). */
+/* ---------- Cagnotte (entièrement automatique, invisible) : les gros
+   lots (palier "float" — gradée, gros booster, ETB, jackpot final) ne
+   sont payés que si l'argent des mises déjà encaissées les couvre.
+   Sinon, le tirage reste honnête mais le lot réellement remis
+   redescend d'un cran (jamais un lot à 0€, toujours quelque chose de
+   valorisant), pour ne jamais mettre l'animateur en perte tout en
+   gardant l'ambiance intacte — sans aucune saisie manuelle : chaque
+   nouvelle partie (un tour complet = une mise) crédite automatiquement
+   la mise moyenne. La cagnotte persiste entre les parties et les
+   rechargements de page (localStorage), sans jamais s'afficher. */
 const BANK_KEY = 'pika_bankroll';
-const MISE_KEY = 'pika_mise';
+const AVG_MISE = 9;
 let bankroll = parseFloat(localStorage.getItem(BANK_KEY)) || 0;
 function saveBankroll(){
   try{ localStorage.setItem(BANK_KEY, String(bankroll)); }catch(e){}
-  if(bankInput) bankInput.value = bankroll.toFixed(2);
 }
-saveBankroll();
-if(miseInput){
-  const savedMise = parseFloat(localStorage.getItem(MISE_KEY));
-  if(!isNaN(savedMise)) miseInput.value = savedMise;
-}
-if(bankInput) bankInput.addEventListener('change', ()=>{
-  const v = parseFloat(bankInput.value);
-  bankroll = isNaN(v) ? 0 : Math.max(0, v);
-  saveBankroll();
-});
-if(addMiseBtn) addMiseBtn.addEventListener('click', ()=>{
-  const mise = parseFloat(miseInput && miseInput.value) || 0;
-  if(mise>0){
-    try{ localStorage.setItem(MISE_KEY, String(mise)); }catch(e){}
-    bankroll += mise;
-    saveBankroll();
-  }
-});
 
 /* Paliers du plus cher au moins cher : un lot "float" non couvert par
    la cagnotte redescend au premier palier que la cagnotte peut payer. */
@@ -1489,6 +1468,10 @@ function startGame(){
 
 async function drawAndMove(){
   if(moving || finished) return;
+  // Premier lancer d'une partie (le pion est encore sur Départ) : une
+  // partie complète = une mise, créditée automatiquement à la
+  // cagnotte interne, sans aucune saisie manuelle.
+  if(currentIndex===-1){ bankroll += AVG_MISE; saveBankroll(); }
   validate.disabled = true;
   const draw = computeCardDraw();
   broadcastSync({type:'draw', draw});
