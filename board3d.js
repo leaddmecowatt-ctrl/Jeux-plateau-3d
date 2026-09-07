@@ -1008,6 +1008,10 @@ function shortPlaceName(idx){ return idx<0 ? 'Départ' : POKEMON_PLACES[idx]; }
 function updatePlaceBanner(idx, traveling){
   if(!placeBanner) return;
   placeBanner.textContent = traveling ? '➜ '+shortPlaceName(idx) : shortPlaceName(idx);
+  // relance l'animation de glissement à chaque changement de lieu
+  placeBanner.classList.remove('enter');
+  void placeBanner.offsetWidth; // force le reflow pour rejouer le keyframe
+  placeBanner.classList.add('enter');
 }
 
 const SEL_MAX = 36; // total max plausible en un tour (double+double+non-double)
@@ -1147,6 +1151,7 @@ if(winBtn) winBtn.addEventListener('click', ()=>{
 });
 
 setSelected(1);
+updatePlaceBanner(-1, false);
 
 /* ==========================================================================
    Célébration "Lot remporté" — intensité croissante selon le lot :

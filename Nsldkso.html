@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>PikaJackpot — Plateau Live 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;900&display=swap" rel="stylesheet">
 <style>
 :root{
   --gold:#e9c34a; --gold-bright:#ffe27a; --black:#0a0a0a; --black2:#161208;
@@ -152,16 +155,26 @@ body{overflow:hidden;color:#fff}
   box-shadow:0 0 46px 16px rgba(180,225,255,.35);
 }
 
-.board-col{display:flex;flex-direction:column;align-items:center;gap:8px;min-width:0}
+.board-col{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0}
+.place-banner-wrap{
+  z-index:2;flex:0 0 auto;width:100%;max-width:560px;height:clamp(38px,9vw,56px);
+  display:flex;align-items:center;justify-content:center;overflow:hidden;pointer-events:none;
+}
 .place-banner{
-  z-index:2;flex:0 0 auto;max-width:min(90vw,420px);
-  padding:5px 18px;border-radius:20px;
-  background:linear-gradient(180deg,#241a06,#120d02);
-  border:1px solid var(--gold);color:var(--gold-bright);
-  font-size:13px;font-weight:900;letter-spacing:.03em;text-align:center;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  box-shadow:0 0 10px rgba(233,195,74,.35);
-  transition:opacity .25s ease;
+  font-family:'Cinzel',Georgia,'Times New Roman',serif;font-weight:900;
+  font-size:clamp(20px,6.4vw,34px);letter-spacing:.07em;text-transform:uppercase;
+  text-align:center;white-space:nowrap;
+  background:linear-gradient(180deg,#fff6d8 10%,var(--gold-bright) 55%,var(--gold) 100%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:var(--gold-bright);
+  filter:drop-shadow(0 0 10px rgba(255,226,122,.55)) drop-shadow(0 2px 2px rgba(0,0,0,.7));
+  opacity:0;transform:translateY(-22px) scale(.92);
+}
+.place-banner.enter{ animation:placeSlide 3.1s cubic-bezier(.22,.9,.32,1) forwards; }
+@keyframes placeSlide{
+  0%{opacity:0;transform:translateY(-24px) scale(.9)}
+  13%{opacity:1;transform:translateY(0) scale(1)}
+  78%{opacity:1;transform:translateY(0) scale(1)}
+  100%{opacity:0;transform:translateY(20px) scale(.95)}
 }
 .board-wrap{
   width:min(95vw,560px);
@@ -364,7 +377,7 @@ button:active:not(:disabled){transform:translateY(1px)}
 
     <div class="board-row">
       <div class="board-col">
-        <div class="place-banner" id="placeBanner">Départ</div>
+        <div class="place-banner-wrap"><div class="place-banner" id="placeBanner">Départ</div></div>
         <div class="board-wrap" id="boardWrap">
           <canvas id="gl"></canvas>
           <div class="hint3d" id="hint3d">🖱️ glisser pour tourner la vue</div>
