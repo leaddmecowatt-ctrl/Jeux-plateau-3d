@@ -234,8 +234,15 @@ button:active:not(:disabled){transform:translateY(1px)}
   background:linear-gradient(180deg,#1a1406,#0d0a03);
   border:1px solid var(--gold);border-radius:10px;padding:9px 10px;
 }
-.legend-title{font-size:11px;font-weight:900;color:var(--gold-bright);margin-bottom:7px;letter-spacing:.02em}
-.legend-list{display:flex;flex-direction:column;gap:6px}
+.legend-title{
+  font-size:11px;font-weight:900;color:var(--gold-bright);letter-spacing:.02em;
+  cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;
+}
+.legend-title::-webkit-details-marker{display:none}
+.legend-title::after{content:"▾";font-size:12px;transition:transform .2s ease}
+.legend[open] .legend-title{margin-bottom:7px}
+.legend[open] .legend-title::after{transform:rotate(180deg)}
+.legend-list{display:flex;flex-direction:column;gap:6px;margin-top:2px}
 .legend-row{display:flex;align-items:center;gap:7px;font-size:10.5px}
 .sw{width:11px;height:11px;border-radius:3px;flex:none}
 .sw-bronze{background:linear-gradient(145deg,#c99a5a,#8a6a3a)}
@@ -367,6 +374,44 @@ html.display-mode .display-badge{ display:block; }
 @media(max-height:620px){
   .stadium-slot{height:0;overflow:hidden}
 }
+
+/* ---------- Téléphone : le plateau doit dominer l'écran ---------- */
+@media(max-width:480px){
+  .main-row{padding:2px 6px 4px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .stadium-slot{height:66px}
+  .tail-logo{width:min(78%,260px)}
+  .tail-text{font-size:15px}
+  .place-banner-wrap{height:clamp(28px,7vw,38px)}
+  .place-banner{font-size:clamp(16px,5.4vw,24px)}
+  /* le plateau n'a plus besoin de rester un carré parfait : en le
+     laissant respirer verticalement, la caméra 3D (qui s'adapte à
+     n'importe quel ratio) montre plus de décor et remplit l'écran
+     au lieu de laisser deux grandes bandes vides au-dessus/dessous.
+     max-height garde toujours les boutons de jeu atteignables sans
+     avoir à faire défiler la page. */
+  .board-wrap{width:min(96vw,480px);aspect-ratio:3/4;max-height:48vh}
+  .opendisplay,.startbtn{padding:9px;font-size:13px}
+  .controls-panel{padding:7px}
+  .legend{padding:7px 9px}
+}
+/* Écran public sur téléphone : uniquement le plateau + le fond,
+   header réduit au minimum pour que le plateau prenne quasiment
+   tout l'écran. */
+@media(max-width:480px){
+  html.display-mode .stadium-slot{height:0;overflow:hidden}
+  html.display-mode .place-banner-wrap{height:clamp(26px,7vw,36px)}
+  /* pas de header décoratif à gérer ici : tout le gain de place va
+     au plateau, qui reste dans un ratio encore raisonnable pour la
+     caméra (au-delà, les colonnes de gauche/droite sortent du
+     cadre). */
+  html.display-mode .board-wrap{width:min(98vw,480px);aspect-ratio:2/3;max-height:none}
+  html.display-mode .board-col{justify-content:center;flex:1 1 auto;min-height:0}
+  html.display-mode .top-hud{padding:max(6px,env(safe-area-inset-top)) 8px 4px}
+  html.display-mode .player-card{height:42px}
+  html.display-mode .next-card{height:46px}
+  html.display-mode .display-badge{font-size:9px;padding:3px 8px;right:8px;bottom:8px}
+  html.display-mode .statusbar{padding-right:100px}
+}
 </style>
 </head>
 <body>
@@ -447,8 +492,8 @@ if(new URLSearchParams(location.search).get('view')==='display'){
           <button class="winbtn" id="winBtn" type="button" hidden>🎉 LOT REMPORTÉ</button>
         </div>
 
-        <div class="legend">
-          <div class="legend-title">Types de cases :</div>
+        <details class="legend">
+          <summary class="legend-title">Types de cases</summary>
           <div class="legend-list">
             <div class="legend-row"><span class="sw sw-bronze"></span>Carte commune (~0,68€)</div>
             <div class="legend-row"><span class="sw sw-blue"></span>Booster Pokémon (8€)</div>
@@ -458,7 +503,7 @@ if(new URLSearchParams(location.search).get('view')==='display'){
             <div class="legend-row"><span class="sw sw-green"></span>Caisse Communautaire</div>
             <div class="legend-row"><span class="sw sw-danger"></span>Prison</div>
           </div>
-        </div>
+        </details>
       </div>
     </div>
   </div>

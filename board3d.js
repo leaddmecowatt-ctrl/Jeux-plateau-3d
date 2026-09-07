@@ -437,6 +437,26 @@ controls.maxPolarAngle = 1.15;
 controls.enablePan = false;
 controls.autoRotate = !reduceMotion;
 controls.autoRotateSpeed = 0.55;
+
+/* Sur un écran portrait étroit (téléphone), le plateau carré ne
+   remplit qu'une petite bande au centre si on garde le cadrage
+   large par défaut (la caméra a un champ de vision vertical fixe,
+   donc un cadre plus haut que large réduit surtout le champ
+   horizontal et rogne les bords). On recule la caméra pour garder
+   tout le plateau visible en largeur — l'effet bonus est que ça
+   révèle plus de décor en haut/bas et que le plateau occupe
+   presque tout l'écran au lieu de laisser de grandes bandes vides. */
+{
+  const aspect0 = wrap.clientWidth / wrap.clientHeight;
+  if(aspect0 > 0 && aspect0 < 1){
+    const factor = Math.min(1/aspect0, 2.2);
+    const dir = camera.position.clone().sub(controls.target).normalize();
+    const dist = camera.position.distanceTo(controls.target) * factor;
+    camera.position.copy(controls.target).add(dir.multiplyScalar(dist));
+    controls.minDistance *= factor;
+    controls.maxDistance *= factor;
+  }
+}
 controls.update();
 
 const composer = new EffectComposer(renderer);
