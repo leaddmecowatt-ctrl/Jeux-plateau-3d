@@ -92,11 +92,14 @@ function drawCard(deck){
 
 /* Case 1 -> Case 40, dans l'ordre (index 0-based). */
 const BOARD_DATA = [
-  'booster8','alternative','chest','commune','gradee','commune','commune','chance','commune','commune',
+  'booster8','alternative','chest','commune','commune','commune','commune','chance','commune','commune',
   'gradee','booster8','alternative','gradee','commune','commune','chest','commune','commune','commune',
-  'commune','gradee','commune','commune','commune','commune','gradee','commune','booster50','prison',
+  'commune','chance','commune','commune','commune','commune','gradee','commune','booster50','prison',
   'commune','commune','commune','commune','booster8','booster8','chance','commune','etb','jackpot300',
 ].map((cat,i)=>({ cat, isVisite: i===9 })); // case 10 (index 9) = "Prison, simple visite" (thématique uniquement)
+// NB : cases 5 et 22 remises en commune/chance (au lieu de gradée) car
+// ça cassait la rentabilité même à risque maximal (marge 20%). En
+// attente d'une solution de compensation pour les réintroduire.
 
 /* Lieux Pokémon mythiques affichés à la place des noms de rues type
    Monopoly ("vous marchez vers ..."). */

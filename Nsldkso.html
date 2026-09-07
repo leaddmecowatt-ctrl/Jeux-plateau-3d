@@ -18,10 +18,23 @@ body{overflow:hidden;color:#fff}
 #app{
   width:100vw;height:100dvh;overflow:hidden;
   display:flex;flex-direction:column;
-  background:
+  background-image:
     radial-gradient(circle at 50% 38%,rgba(233,195,74,.16),transparent 34%),
-    linear-gradient(#120d02 0 16%,#1c1608 44%,#000000 100%);
+    linear-gradient(#120d02 0 16%,#1c1608 44%,#000000 100%),
+    url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNjAiIGhlaWdodD0iMTYwIj4KICA8ZyBmaWxsPSJub25lIiBzdHJva2U9InJnYmEoMjMzLDE5NSw3NCwwLjE2KSIgc3Ryb2tlLXdpZHRoPSIyLjIiPgogICAgPGNpcmNsZSBjeD0iMzQiIGN5PSIzNCIgcj0iMTUiLz4KICAgIDxsaW5lIHgxPSIxOSIgeTE9IjM0IiB4Mj0iNDkiIHkyPSIzNCIvPgogICAgPGNpcmNsZSBjeD0iMzQiIGN5PSIzNCIgcj0iNC41Ii8+CiAgPC9nPgogIDxwYXRoIGQ9Ik0xMTggMTggTDEwOCA0MCBMMTIwIDQwIEwxMDYgNjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyMzMsMTk1LDc0LDAuMTUpIiBzdHJva2Utd2lkdGg9IjIuNCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHRleHQgeD0iMjAiIHk9IjEyMCIgZm9udC1mYW1pbHk9Ikdlb3JnaWEsc2VyaWYiIGZvbnQtc2l6ZT0iMTMiIGZvbnQtd2VpZ2h0PSI5MDAiIGxldHRlci1zcGFjaW5nPSIxIiBmaWxsPSJyZ2JhKDIzMywxOTUsNzQsMC4xMikiPlBJS0FKQUNLUE9UPC90ZXh0Pgo8L3N2Zz4=");
+  background-repeat:no-repeat,no-repeat,repeat;
+  background-size:auto,auto,160px 160px;
+  animation:bgDrift 90s linear infinite;
 }
+/* Motif de logos PikaJackpot (pokeball + éclair façon queue de
+   Pikachu) qui dérive très lentement en arrière-plan, en très
+   faible opacité pour ne jamais fatiguer les yeux ni gêner la
+   lecture — juste un mouvement linéaire constant, sans clignotement. */
+@keyframes bgDrift{
+  from{ background-position:0 0,0 0,0 0; }
+  to{ background-position:0 0,0 0,-160px -160px; }
+}
+@media (prefers-reduced-motion: reduce){ #app{ animation:none; } }
 
 /* HUD haut */
 .top-hud{
