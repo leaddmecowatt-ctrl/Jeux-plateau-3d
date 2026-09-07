@@ -645,23 +645,16 @@ for(let i=0;i<40;i++){
   });
 }
 
-/* petit repère "DÉPART" hors plateau, juste avant la case 1 : le
-   joueur y attend son premier lancer (pas de case Départ parmi les
-   40 cases, qui sont toutes des lots réels). */
-const START_WORLD = toWorld(12.4,12.4);
+/* Le "Départ" n'est pas une case à part hors plateau : le joueur
+   démarre directement sur la case 1 elle-même (pas de lot réclamé
+   tant qu'aucun lancer n'a eu lieu), avec juste un anneau doré au
+   sol pour marquer visuellement ce point de départ. */
+const START_NODE = tiles[0];
 {
-  const pad = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.42,0.46,0.14,24),
-    new THREE.MeshStandardMaterial({color:0x0c0c0c, roughness:.65, metalness:.15, emissive:0x1c1204, emissiveIntensity:.3})
-  );
-  pad.position.copy(START_WORLD); pad.position.y = 0.07;
-  pad.receiveShadow = true;
-  boardGroup.add(pad);
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.44,0.03,8,28), new THREE.MeshBasicMaterial({color:0xffe27a}));
-  ring.rotation.x = Math.PI/2; ring.position.copy(START_WORLD); ring.position.y=0.15;
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.56,0.03,8,28), new THREE.MeshBasicMaterial({color:0xffe27a}));
+  ring.rotation.x = Math.PI/2; ring.position.copy(START_NODE.world); ring.position.y = 0.03;
   boardGroup.add(ring);
 }
-const START_NODE = { world: START_WORLD, tileTopY: 0.22 };
 
 /* ---------- Pion articulé (façon dresseur, sac à dos inclus) ---------- */
 function buildToken(){
