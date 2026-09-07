@@ -341,15 +341,15 @@ function makeStudioBackdrop(){
 scene.background = makeStudioBackdrop();
 
 const camera = new THREE.PerspectiveCamera(40,1,0.1,100);
-camera.position.set(0,17,14);
+camera.position.set(0,13.5,11);
 scene.add(camera);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0,0.3,0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
-controls.minDistance = 14;
-controls.maxDistance = 26;
+controls.minDistance = 10.5;
+controls.maxDistance = 21;
 controls.minPolarAngle = 0.35;
 controls.maxPolarAngle = 1.15;
 controls.enablePan = false;
