@@ -79,12 +79,12 @@ body{overflow:hidden;color:#fff}
 /* emplacement réservé pour le bâtiment : jamais recouvert par le
    canvas 3D (qui est opaque), toujours au-dessus du plateau */
 .stadium-slot{
-  flex:0 0 auto;height:96px;position:relative;z-index:0;pointer-events:none;
+  flex:0 0 auto;height:130px;position:relative;z-index:0;pointer-events:none;
   display:flex;align-items:flex-end;justify-content:center;
 }
 .board-row{
   flex:1 1 auto;min-height:0;position:relative;z-index:1;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+  display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:8px;
 }
 
 /* ---------- décor d'arène (bâtiment, montagnes, projecteurs), tout
@@ -105,52 +105,19 @@ body{overflow:hidden;color:#fff}
 .stad-mountain.m2{right:-14%;bottom:33%;height:20%;opacity:.4;filter:hue-rotate(10deg)}
 .stad-mountain.m3{left:22%;bottom:37%;width:40%;height:15%;opacity:.28;filter:blur(.5px)}
 
-.stad-building{position:relative;flex:0 0 auto;width:172px;height:126px;transform:scale(.72);transform-origin:bottom center}
-.stad-building .antenna{
-  position:absolute;left:50%;top:-22px;width:2px;height:22px;background:#9fc4e8;
+/* Logo "queue de Pikachu" : le nom PIKAJACKPOT suit un trait façon
+   éclair/queue, terminé par une pointe en zigzag — l'identité de
+   marque qui manquait au-dessus du plateau. */
+.tail-logo{width:min(92%,380px);flex:0 0 auto;margin-bottom:6px}
+.tail-logo svg{width:100%;height:auto;display:block;overflow:visible}
+#tailPath{fill:none}
+.tail-text{
+  font-family:'Cinzel',Georgia,'Times New Roman',serif;font-weight:900;
+  font-size:25px;letter-spacing:.05em;
+  fill:url(#tailGold);
+  filter:drop-shadow(0 0 8px rgba(255,226,122,.6)) drop-shadow(0 2px 2px rgba(0,0,0,.6));
 }
-.stad-building .flag{
-  position:absolute;left:50%;top:-22px;width:16px;height:10px;
-  background:linear-gradient(90deg,#ffd54a,#ffb020);
-  clip-path:polygon(0 0,100% 20%,0 40%);
-}
-.stad-building .roof{
-  position:absolute;left:50%;top:0;transform:translateX(-50%);width:0;height:0;
-  border-left:92px solid transparent;border-right:92px solid transparent;border-bottom:30px solid #2f5fa8;
-  filter:drop-shadow(0 3px 3px rgba(0,0,0,.35));
-}
-.stad-building .roof:after{
-  content:"";position:absolute;left:-92px;top:-30px;width:184px;height:6px;
-  background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent);
-}
-.stad-building .facade{
-  position:absolute;inset:26px 0 0;background:linear-gradient(180deg,#eef6ff,#a9c6e2);
-  border-radius:6px 6px 3px 3px;box-shadow:0 14px 28px rgba(0,0,0,.5),inset 0 -18px 20px -10px rgba(30,60,100,.25);
-}
-.stad-building .badge{
-  position:absolute;left:50%;top:14px;transform:translateX(-50%);width:34px;height:34px;border-radius:50%;
-  background:radial-gradient(circle at 35% 30%,#fff,#bfe0ff 45%,#4f8fdc 100%);
-  border:3px solid #1c3f6e;box-shadow:0 2px 6px rgba(0,0,0,.35);
-  display:flex;align-items:center;justify-content:center;
-}
-.stad-building .badge:before{
-  content:"";width:12px;height:12px;
-  background:#1c3f6e;
-  clip-path:polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%);
-}
-.stad-building .winrow{position:absolute;left:12px;right:12px;display:flex;justify-content:space-between}
-.stad-building .winrow.r1{top:56px}
-.stad-building .winrow.r2{top:80px}
-.stad-building .win{width:11px;height:14px;background:#ffe37a;border-radius:2px;box-shadow:0 0 9px rgba(255,220,120,.85)}
-.stad-building .win.off{background:#3a5a86;box-shadow:none;opacity:.7}
-.stad-building .door{
-  position:absolute;left:50%;bottom:0;transform:translateX(-50%);width:34px;height:22px;
-  background:linear-gradient(180deg,#264a76,#132842);border-radius:4px 4px 0 0;
-}
-.stad-building .glow-pool{
-  position:absolute;left:50%;bottom:-10px;transform:translateX(-50%);width:140px;height:26px;border-radius:50%;
-  background:radial-gradient(ellipse,rgba(160,210,255,.35),transparent 70%);
-}
+.tail-tip{fill:url(#tailGold);filter:drop-shadow(0 0 6px rgba(255,226,122,.65))}
 
 .stad-light{position:absolute;top:4%;width:6px;height:34%;background:linear-gradient(180deg,#0e2c52,#04101f);border-radius:3px}
 .stad-light.left{left:4%}
@@ -393,8 +360,9 @@ html.display-mode .display-badge{ display:block; }
   .main-row{padding-top:0}.board-wrap{width:min(88vw,78vh,500px)}
   html.display-mode .board-wrap{width:min(94vw,80vh,900px)}
   .statusbar{margin-top:4px;min-height:38px}
-  .stadium-slot{height:60px}
-  .stad-building{transform:scale(.44)}
+  .stadium-slot{height:100px}
+  .tail-logo{width:min(80%,300px)}
+  .tail-text{font-size:19px}
 }
 @media(max-height:620px){
   .stadium-slot{height:0;overflow:hidden}
@@ -437,21 +405,22 @@ if(new URLSearchParams(location.search).get('view')==='display'){
     </div>
 
     <div class="stadium-slot" aria-hidden="true">
-      <div class="stad-building">
-        <div class="flag"></div>
-        <div class="antenna"></div>
-        <div class="roof"></div>
-        <div class="facade">
-          <div class="badge"></div>
-          <div class="winrow r1">
-            <span class="win"></span><span class="win off"></span><span class="win"></span><span class="win"></span>
-          </div>
-          <div class="winrow r2">
-            <span class="win off"></span><span class="win"></span><span class="win"></span><span class="win off"></span>
-          </div>
-          <div class="door"></div>
-        </div>
-        <div class="glow-pool"></div>
+      <div class="tail-logo">
+        <svg viewBox="0 0 400 130" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <linearGradient id="tailGold" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#fff6d8"/>
+              <stop offset=".5" stop-color="#ffe27a"/>
+              <stop offset="1" stop-color="#e9c34a"/>
+            </linearGradient>
+          </defs>
+          <path id="tailPath" d="M14,85 C80,43 130,105 205,67 C265,37 300,77 340,59" fill="none"/>
+          <text class="tail-text">
+            <textPath href="#tailPath" startOffset="3">★ PIKAJACKPOT ★</textPath>
+          </text>
+          <!-- pointe façon queue de Pikachu, en éclair, dans le prolongement du trait -->
+          <polygon class="tail-tip" points="338,55 372,35 356,57 384,51 344,83 356,61"/>
+        </svg>
       </div>
     </div>
 
