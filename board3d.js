@@ -82,9 +82,9 @@ function drawCard(deck){
 
 /* Case 1 -> Case 40, dans l'ordre (index 0-based). */
 const BOARD_DATA = [
-  'booster8','alternative','chest','commune','commune','commune','commune','chance','commune','commune',
+  'booster8','alternative','chest','commune','gradee','commune','commune','chance','commune','commune',
   'gradee','booster8','alternative','gradee','commune','commune','chest','commune','commune','commune',
-  'commune','chance','commune','commune','commune','commune','gradee','commune','booster50','prison',
+  'commune','gradee','commune','commune','commune','commune','gradee','commune','booster50','prison',
   'commune','commune','commune','commune','booster8','booster8','chance','commune','etb','jackpot300',
 ].map((cat,i)=>({ cat, isVisite: i===9 })); // case 10 (index 9) = "Prison, simple visite" (thématique uniquement)
 
