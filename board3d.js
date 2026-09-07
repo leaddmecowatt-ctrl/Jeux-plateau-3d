@@ -1179,9 +1179,9 @@ const CATEGORY_MESSAGES = {
   booster8:    '🎁 BOOSTER POKÉMON GAGNÉ !',
   alternative: '✨ CARTE ALTERNATIVE GAGNÉE ! ✨',
   gradee:      '⭐ CARTE GRADÉE DÉCROCHÉE ! ⭐',
-  booster50:   '⚡ GROS BOOSTER DÉCROCHÉ ! ⚡',
-  etb:         '🏅 ETB REMPORTÉ ! 🏅',
-  jackpot300:  '👑 JACKPOT FINAL DÉCROCHÉ ! 👑',
+  booster50:   '🎰 MINI JACKPOT ! 🎰',
+  etb:         '🎰 MAJOR JACKPOT ! 🎰',
+  jackpot300:  '👑 GRAND JACKPOT ! 👑',
 };
 
 function celebrate(catKey){
