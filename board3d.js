@@ -1065,6 +1065,8 @@ async function playCardDrawAnimation(draw){
   let running = 0;
   for(let i=0;i<draw.pairs.length;i++){
     const {a,b} = draw.pairs[i];
+    const isDouble = a===b;
+    const isLast = i===draw.pairs.length-1;
     const s1 = draw.slotOrder[(2*i)%12], s2 = draw.slotOrder[(2*i+1)%12];
     const f1 = cardEls[s1].querySelector('.front'), f2 = cardEls[s2].querySelector('.front');
     if(f1) f1.textContent = a;
@@ -1074,9 +1076,12 @@ async function playCardDrawAnimation(draw){
     await wait(700);
     running += a+b;
     if(cardDrawTotal){
-      cardDrawTotal.textContent = 'Total : '+running + (a===b ? '  —  DOUBLE ! Nouveau tirage…' : '');
+      cardDrawTotal.textContent = 'Total : '+running + (isDouble && !isLast ? '  —  DOUBLE ! ⚡' : '');
     }
-    await wait(750);
+    // Sur un double, la paire bonus enchaîne tout de suite (pas de
+    // longue pause) pour que ça se lise comme "4 cartes qui se
+    // retournent d'un coup" plutôt que deux tirages séparés.
+    await wait(isDouble && !isLast ? 250 : 750);
   }
   await wait(500);
   cardDrawOverlay.classList.remove('show');
