@@ -419,6 +419,49 @@ html.display-mode .display-badge{ display:block; }
   html.display-mode .display-badge{font-size:9px;padding:3px 8px;right:8px;bottom:8px}
   html.display-mode .statusbar{padding-right:100px}
 }
+
+/* ---------- Page "commandes" (celle que l'animateur utilise pour
+   jouer, jamais filmée/affichée aux spectateurs) : le plateau n'a
+   plus sa place ici, tout l'espace va aux boutons — bien plus
+   grands, faciles à taper. Le vrai plateau, immersif et presque
+   plein écran, ne vit que sur l'écran public (?view=display),
+   ouvert dans une autre fenêtre via le bouton ci-dessous. ---------- */
+html:not(.display-mode) .top-hud,
+html:not(.display-mode) .stadium,
+html:not(.display-mode) .stadium-slot,
+html:not(.display-mode) .place-banner-wrap,
+html:not(.display-mode) .board-wrap{
+  display:none;
+}
+html:not(.display-mode) .main-row{ justify-content:center;padding-top:0 }
+html:not(.display-mode) .board-row{ justify-content:center }
+html:not(.display-mode) .board-col{ width:100%;max-width:520px }
+html:not(.display-mode) .side-panel{ width:100%;max-width:520px;gap:16px }
+html:not(.display-mode) .opendisplay,
+html:not(.display-mode) .startbtn{ padding:18px;font-size:17px }
+html:not(.display-mode) .controls-panel{ padding:16px }
+html:not(.display-mode) .validate{ font-size:18px;padding:18px }
+html:not(.display-mode) .winbtn{ font-size:17px;padding:16px }
+html:not(.display-mode) .legend{ padding:12px 14px }
+html:not(.display-mode) .legend-title{ font-size:13px }
+html:not(.display-mode) .legend-row{ font-size:12.5px }
+
+/* ---------- Bandeau "derniers gains" sur l'écran public : compact,
+   juste des vignettes des lots remportés récemment, pour que le
+   plateau reste l'élément dominant à l'écran. ---------- */
+.results-ticker{
+  display:none;position:absolute;left:8px;right:8px;bottom:8px;z-index:3;
+  align-items:center;justify-content:center;gap:7px;pointer-events:none;
+}
+html.display-mode .results-ticker{ display:flex }
+.results-ticker .ticker-item{
+  width:36px;height:36px;border-radius:8px;overflow:hidden;flex:none;
+  border:2px solid var(--gold-bright);background:#0c0c0c;
+  box-shadow:0 2px 8px rgba(0,0,0,.65),0 0 8px rgba(255,226,122,.35);
+}
+.results-ticker .ticker-item img{ width:100%;height:100%;object-fit:cover;display:block }
+.results-ticker .ticker-item.new{ animation:tickerPop .5s cubic-bezier(.2,1.6,.4,1) }
+@keyframes tickerPop{ from{transform:scale(.3);opacity:0} to{transform:scale(1);opacity:1} }
 </style>
 </head>
 <body>
@@ -482,6 +525,7 @@ if(new URLSearchParams(location.search).get('view')==='display'){
         <div class="board-wrap" id="boardWrap">
           <canvas id="gl"></canvas>
           <div class="hint3d" id="hint3d">🖱️ glisser pour tourner la vue</div>
+          <div class="results-ticker" id="resultsTicker" aria-hidden="true"></div>
         </div>
       </div>
 

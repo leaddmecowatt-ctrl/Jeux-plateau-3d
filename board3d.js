@@ -1397,6 +1397,27 @@ const celebText = document.getElementById('celebText');
 const celebMain = document.getElementById('celebMain');
 const celebSub = document.getElementById('celebSub');
 const celebPhoto = document.getElementById('celebPhoto');
+
+/* Bandeau "derniers gains" affiché sur l'écran public : chaque
+   camp (contrôle et affichage) reçoit exactement les mêmes appels
+   à celebrate(), donc chacun peut construire sa propre liste en
+   toute autonomie, sans message de sync supplémentaire. */
+const resultsTicker = document.getElementById('resultsTicker');
+let lastResults = [];
+function pushResult(catKey){
+  const url = LOT_IMAGE_URLS[catKey];
+  if(!url || !resultsTicker) return;
+  lastResults = [{catKey,url}, ...lastResults].slice(0,5);
+  resultsTicker.innerHTML = '';
+  lastResults.forEach((r,i)=>{
+    const item = document.createElement('div');
+    item.className = 'ticker-item' + (i===0 ? ' new' : '');
+    const img = document.createElement('img');
+    img.src = r.url; img.alt = '';
+    item.appendChild(img);
+    resultsTicker.appendChild(item);
+  });
+}
 let celebCtx = celebCanvas ? celebCanvas.getContext('2d') : null;
 let celebParticles = [], celebRAF = null, celebEndAt = 0;
 
@@ -1497,6 +1518,7 @@ function celebrate(catKey, forcedCard){
         celebPhoto.src = LOT_IMAGE_URLS.gradee; celebPhoto.hidden = false;
       } else celebPhoto.hidden = true;
     }
+    if(rareCardDrawn) pushResult('gradee');
   } else {
     if(celebMain) celebMain.textContent = CATEGORY_MESSAGES[catKey] || '🎉 Lot remporté !';
     if(celebSub) celebSub.hidden = true;
@@ -1507,6 +1529,7 @@ function celebrate(catKey, forcedCard){
       if(url){ celebPhoto.src = url; celebPhoto.hidden = false; }
       else celebPhoto.hidden = true;
     }
+    pushResult(catKey);
   }
 
   const effectiveLevel = rareCardDrawn ? 5 : level;
