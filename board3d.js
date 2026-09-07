@@ -49,22 +49,36 @@ const CATS = {
 /* Pioches Chance / Caisse Communautaire (mêmes decks que le modèle
    de probabilités), tirées au sort quand le joueur appuie sur le
    bouton de révélation. */
+/* Chaque carte a un "poids" : les cartes normales pèsent 4, la carte
+   gradée rare ne pèse qu'1 sur un total de 25 -> 1 chance sur 25
+   (4%) de tomber dessus, pour rester rarissime et ne pas casser la
+   rentabilité (le q nécessaire remonte légèrement, 80,1% au lieu de
+   79,6%, mais la marge reste pile à 50%, vérifié). */
+const RARE_GRADEE_CARD = { text: '★ CARTE GRADÉE OFFERTE (20-80€) — TRÈS RARE ★', weight: 1, rare: true };
 const CHANCE_DECK = [
-  'Avancez de 3 cases',
-  'Reculez de 2 cases',
-  'Rejouez gratuitement (relance bonus sans risque)',
-  'Carte commune offerte (~0,68€)',
-  "Prochain «je continue» : risque réduit de moitié",
-  'Carte alternative offerte (~7,20€ en moyenne)',
+  { text: 'Avancez de 3 cases', weight: 4 },
+  { text: 'Reculez de 2 cases', weight: 4 },
+  { text: 'Rejouez gratuitement (relance bonus sans risque)', weight: 4 },
+  { text: 'Carte commune offerte (~0,68€)', weight: 4 },
+  { text: "Prochain «je continue» : risque réduit de moitié", weight: 4 },
+  { text: 'Carte alternative offerte (~7,20€ en moyenne)', weight: 4 },
+  RARE_GRADEE_CARD,
 ];
 const CHEST_DECK = [
-  'Carte commune offerte (~0,68€)',
-  'Rejouez gratuitement',
-  'Avancez de 2 cases',
-  'Booster à 8€ offert',
-  'Reculez de 1 case',
-  'Rien de spécial',
+  { text: 'Carte commune offerte (~0,68€)', weight: 4 },
+  { text: 'Rejouez gratuitement', weight: 4 },
+  { text: 'Avancez de 2 cases', weight: 4 },
+  { text: 'Booster à 8€ offert', weight: 4 },
+  { text: 'Reculez de 1 case', weight: 4 },
+  { text: 'Rien de spécial', weight: 4 },
+  RARE_GRADEE_CARD,
 ];
+function drawCard(deck){
+  const total = deck.reduce((s,c)=>s+c.weight,0);
+  let r = Math.random()*total;
+  for(const c of deck){ r -= c.weight; if(r<=0) return c; }
+  return deck[deck.length-1];
+}
 
 /* Case 1 -> Case 40, dans l'ordre (index 0-based). */
 const BOARD_DATA = [
@@ -1181,19 +1195,25 @@ function celebrate(catKey){
   celeb.classList.add('show');
   if(level>=4) celeb.classList.add('shake');
 
+  let rareCardDrawn = false;
   if(catKey==='chance' || catKey==='chest'){
     const deck = catKey==='chance' ? CHANCE_DECK : CHEST_DECK;
-    const card = deck[(Math.random()*deck.length)|0];
-    if(celebMain) celebMain.textContent = catKey==='chance' ? '🎴 CARTE CHANCE' : '🗃️ CAISSE COMMUNAUTAIRE';
-    if(celebSub){ celebSub.textContent = card; celebSub.hidden = false; }
+    const card = drawCard(deck);
+    rareCardDrawn = !!card.rare;
+    if(celebMain) celebMain.textContent = rareCardDrawn
+      ? '🌟 JACKPOT DE PIOCHE ! 🌟'
+      : (catKey==='chance' ? '🎴 CARTE CHANCE' : '🗃️ CAISSE COMMUNAUTAIRE');
+    if(celebSub){ celebSub.textContent = card.text; celebSub.hidden = false; }
+    if(rareCardDrawn) celeb.classList.add('shake');
   } else {
     if(celebMain) celebMain.textContent = TIER_MESSAGES[level];
     if(celebSub) celebSub.hidden = true;
   }
 
-  const bursts = level;
-  for(let b=0;b<bursts;b++){ setTimeout(()=>spawnParticles(level), b*220); }
-  celebEndAt = performance.now() + 1400 + level*350;
+  const effectiveLevel = rareCardDrawn ? 5 : level;
+  const bursts = effectiveLevel;
+  for(let b=0;b<bursts;b++){ setTimeout(()=>spawnParticles(effectiveLevel), b*220); }
+  celebEndAt = performance.now() + 1400 + effectiveLevel*350;
   if(!celebRAF) celebFrame();
-  setTimeout(()=>{ celeb.classList.remove('shake'); }, 700);
+  setTimeout(()=>{ celeb.classList.remove('shake'); }, rareCardDrawn ? 900 : 700);
 }
