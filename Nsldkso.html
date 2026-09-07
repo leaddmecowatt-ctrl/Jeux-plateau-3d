@@ -325,13 +325,15 @@ html.display-mode .display-badge{ display:block; }
 .celeb-text{
   position:relative;z-index:1;font-size:clamp(20px,6vw,40px);font-weight:900;text-align:center;
   color:var(--gold-bright);text-shadow:0 0 18px rgba(255,226,122,.9),0 2px 4px rgba(0,0,0,.8);
-  background:rgba(10,8,2,.55);border:2px solid var(--gold);border-radius:16px;padding:14px 26px;
+  background:rgba(10,8,2,.55);border:2px solid var(--gold);border-radius:16px;padding:12px 18px;
   animation:celebPop .4s cubic-bezier(.2,1.6,.4,1);
-  display:flex;flex-direction:column;align-items:center;gap:14px;max-width:min(90vw,420px);
-  max-height:92vh;overflow-y:auto;
+  display:flex;flex-direction:column;align-items:center;gap:10px;max-width:min(96vw,540px);
+  max-height:96vh;overflow-y:auto;
 }
+/* Le lot doit être bien visible même filmé en portrait sur téléphone :
+   l'illustration domine tout l'écran plutôt qu'une vignette discrète. */
 .celeb-photo{
-  width:min(52vw,240px);height:auto;max-height:38vh;border-radius:8px;object-fit:contain;
+  width:min(88vw,480px);height:auto;max-height:74vh;border-radius:10px;object-fit:contain;
   border:3px solid var(--gold-bright);display:block;
   box-shadow:0 12px 28px rgba(0,0,0,.6),0 0 26px rgba(255,226,122,.55);
 }

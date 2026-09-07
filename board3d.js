@@ -1346,6 +1346,12 @@ function updateWinButton(){
   if(onPrize && !autoResolved){
     winBtn.textContent = cat==='prison' ? '💀 FIN DE PARTIE' : '🎉 LOT REMPORTÉ';
     winBtn.dataset.tier = cat;
+    // Dès l'arrivée sur la case, on montre le lot en grand au milieu
+    // du plateau (avant même de décider de le garder), pour qu'il
+    // soit lisible en filmant. Il ne disparaît que si l'animateur
+    // relance un tirage (il continue), et reste affiché si le lot
+    // est validé, jusqu'au prochain "RECOMMENCER".
+    if(cat!=='prison') showLotPreview(cat);
   }
 }
 
@@ -1482,6 +1488,9 @@ async function drawAndMove(){
   // partie complète = une mise, créditée automatiquement à la
   // cagnotte interne, sans aucune saisie manuelle.
   if(currentIndex===-1){ bankroll += AVG_MISE; saveBankroll(); }
+  // On continue plutôt que de garder le lot affiché : l'aperçu (ou le
+  // lot validé) de la case précédente s'efface avant le nouveau tirage.
+  clearCelebration();
   validate.disabled = true;
   const draw = computeCardDraw();
   broadcastSync({type:'draw', draw});
@@ -1496,7 +1505,7 @@ if(startBtn) startBtn.addEventListener('click', startGame);
 if(winBtn) winBtn.addEventListener('click', ()=>{
   if(currentIndex<0) return;
   const cat = fundedCategory(tiles[currentIndex].catKey);
-  celebrate(cat);
+  celebrate(cat, null, {locked:true});
   broadcastSync({type:'celebrate', catKey:cat});
 });
 
@@ -1569,7 +1578,7 @@ function pushResult(catKey){
   });
 }
 let celebCtx = celebCanvas ? celebCanvas.getContext('2d') : null;
-let celebParticles = [], celebRAF = null, celebEndAt = 0;
+let celebParticles = [], celebRAF = null, celebEndAt = 0, celebLocked = false;
 
 function resizeCelebCanvas(){
   if(!celebCanvas) return;
@@ -1612,14 +1621,38 @@ function celebFrame(){
   if(performance.now() < celebEndAt || celebParticles.length){
     celebRAF = requestAnimationFrame(celebFrame);
   } else {
-    celeb.classList.remove('show');
+    celebRAF = null;
+    // Un lot validé ("LOT REMPORTÉ") reste affiché à l'écran tant que
+    // l'animateur n'a pas cliqué sur "RECOMMENCER" — seuls les
+    // confettis (animés ci-dessus) s'arrêtent une fois retombés.
+    if(!celebLocked) celeb.classList.remove('show');
   }
 }
 
 function clearCelebration(){
   if(celebRAF) cancelAnimationFrame(celebRAF);
+  celebRAF = null;
   celebParticles = [];
+  celebLocked = false;
   if(celeb) celeb.classList.remove('show','shake');
+}
+
+/* Aperçu du lot dès l'arrivée sur la case, avant toute décision de le
+   garder ou de continuer : juste la photo, en grand, sans confettis
+   ni minuterie — il reste jusqu'à ce qu'un nouveau tirage l'efface
+   (le joueur continue) ou qu'il soit validé (voir celebrate, qui le
+   verrouille alors à l'écran). */
+function showLotPreview(catKey){
+  if(!celeb || !celebCanvas) return;
+  const url = LOT_IMAGE_URLS[catKey];
+  if(!url) return;
+  celebLocked = false;
+  celeb.dataset.level = '';
+  celeb.classList.remove('shake');
+  if(celebMain) celebMain.hidden = true;
+  if(celebSub) celebSub.hidden = true;
+  if(celebPhoto){ celebPhoto.src = url; celebPhoto.hidden = false; }
+  celeb.classList.add('show');
 }
 
 /* Annonce propre à chaque catégorie de lot (plutôt qu'un message
@@ -1634,11 +1667,13 @@ const CATEGORY_MESSAGES = {
   jackpot300:  '👑 GRAND JACKPOT ! 👑',
 };
 
-function celebrate(catKey, forcedCard){
+function celebrate(catKey, forcedCard, opts){
+  celebLocked = !!(opts && opts.locked);
   const level = TIER_LEVEL[catKey] ?? 1;
   if(level===0){
+    celebLocked = false;
     if(celebPhoto) celebPhoto.hidden = true;
-    if(celebMain) celebMain.textContent = '💀 Fin de partie...';
+    if(celebMain){ celebMain.hidden = false; celebMain.textContent = '💀 Fin de partie...'; }
     if(celebSub) celebSub.hidden = true;
     if(celeb){ celeb.classList.add('show'); celeb.dataset.level='0'; }
     setTimeout(clearCelebration, 1800);
@@ -1646,6 +1681,7 @@ function celebrate(catKey, forcedCard){
   }
   if(!celeb || !celebCanvas) return;
   resizeCelebCanvas();
+  if(celebMain) celebMain.hidden = false;
   celeb.dataset.level = String(level);
   celeb.classList.add('show');
   if(level>=4) celeb.classList.add('shake');
