@@ -800,7 +800,6 @@ scene.add(player.root);
 
 /* ---------- État de jeu ---------- */
 let currentIndex = -1; // -1 = au départ, pas encore sur le plateau
-let selected = 1;
 let moving = false;
 let generation = 0;
 let finished = false;
@@ -1003,16 +1002,16 @@ resize();
 /* ==========================================================================
    Interface Animateur
    ========================================================================== */
-const minus = document.getElementById('minus');
-const plus = document.getElementById('plus');
 const validate = document.getElementById('validate');
 const resetBtn = document.getElementById('reset');
 const winBtn = document.getElementById('winBtn');
 const startBtn = document.getElementById('startBtn');
-const sel = document.getElementById('sel');
 const topNum = document.getElementById('topNum');
 const statusEl = document.getElementById('status');
 const placeBanner = document.getElementById('placeBanner');
+const cardDrawOverlay = document.getElementById('cardDrawOverlay');
+const cardGrid = document.getElementById('cardGrid');
+const cardDrawTotal = document.getElementById('cardDrawTotal');
 
 function shortPlaceName(idx){ return idx<0 ? 'Départ' : POKEMON_PLACES[idx]; }
 function updatePlaceBanner(idx, traveling){
@@ -1024,12 +1023,60 @@ function updatePlaceBanner(idx, traveling){
   placeBanner.classList.add('enter');
 }
 
-const SEL_MAX = 36; // total max plausible en un tour (double+double+non-double)
-function setSelected(v){
-  selected = v<1?SEL_MAX:(v>SEL_MAX?1:v);
-  sel.textContent = selected;
-  topNum.textContent = selected;
-  broadcastSync({type:'select', value:selected});
+/* ---------- Tirage de 2 cartes qui remplace les 2 dés ----------
+   Même distribution exacte que 2 dés (1-6 chacune, indépendantes) :
+   un double déclenche un nouveau tirage de 2 cartes, jusqu'à 3
+   tirages enchaînés maximum — identique à la mécanique physique. */
+function shuffledSlots(){
+  const a = [...Array(12).keys()];
+  for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+function computeCardDraw(){
+  const pairs = [];
+  let total = 0;
+  for(let chain=0; chain<3; chain++){
+    const a = 1+Math.floor(Math.random()*6);
+    const b = 1+Math.floor(Math.random()*6);
+    pairs.push({a,b});
+    total += a+b;
+    if(a!==b) break;
+  }
+  return { pairs, total, slotOrder: shuffledSlots() };
+}
+async function playCardDrawAnimation(draw){
+  if(!cardDrawOverlay || !cardGrid) return;
+  cardGrid.innerHTML = '';
+  const cardEls = [];
+  for(let i=0;i<12;i++){
+    const c = document.createElement('div');
+    c.className = 'mini-card';
+    c.innerHTML = '<div class="face back"></div><div class="face front"></div>';
+    cardGrid.appendChild(c);
+    cardEls.push(c);
+  }
+  cardDrawOverlay.classList.add('show');
+  if(cardDrawTotal) cardDrawTotal.textContent = '';
+  await wait(400);
+
+  let running = 0;
+  for(let i=0;i<draw.pairs.length;i++){
+    const {a,b} = draw.pairs[i];
+    const s1 = draw.slotOrder[(2*i)%12], s2 = draw.slotOrder[(2*i+1)%12];
+    const f1 = cardEls[s1].querySelector('.front'), f2 = cardEls[s2].querySelector('.front');
+    if(f1) f1.textContent = a;
+    if(f2) f2.textContent = b;
+    cardEls[s1].classList.add('flipped');
+    cardEls[s2].classList.add('flipped');
+    await wait(700);
+    running += a+b;
+    if(cardDrawTotal){
+      cardDrawTotal.textContent = 'Total : '+running + (a===b ? '  —  DOUBLE ! Nouveau tirage…' : '');
+    }
+    await wait(750);
+  }
+  await wait(500);
+  cardDrawOverlay.classList.remove('show');
 }
 
 function placeLabel(idx){
@@ -1058,9 +1105,9 @@ async function move(forcedCount, forcedCard){
   if(moving || finished) return;
   moving = true;
   const myGen = ++generation;
-  validate.disabled = minus.disabled = plus.disabled = true;
+  validate.disabled = true;
   if(winBtn) winBtn.hidden = true;
-  const count = forcedCount!=null ? forcedCount : selected;
+  const count = forcedCount!=null ? forcedCount : 1;
   const destIdx = Math.min(39, (currentIndex===-1?0:currentIndex) + count);
   const destCat = tiles[destIdx].catKey;
   // Si la case d'arrivée est Chance/Caisse, on tire la carte TOUT DE
@@ -1104,7 +1151,7 @@ async function move(forcedCount, forcedCard){
   }
 
   moving = false;
-  validate.disabled = minus.disabled = plus.disabled = finished;
+  validate.disabled = finished;
   updateWinButton();
 }
 
@@ -1160,7 +1207,8 @@ function restart(){
   setActive(-1);
   statusEl.textContent = 'Le joueur est prêt sur Départ.';
   updatePlaceBanner(-1, false);
-  validate.disabled = minus.disabled = plus.disabled = false;
+  topNum.textContent = '—';
+  validate.disabled = false;
   if(winBtn) winBtn.hidden = true;
   clearCelebration();
   gameStarted = false;
@@ -1177,9 +1225,17 @@ function startGame(){
   broadcastSync({type:'start'});
 }
 
-minus.addEventListener('click', ()=>setSelected(selected-1));
-plus.addEventListener('click', ()=>setSelected(selected+1));
-validate.addEventListener('click', ()=>move());
+async function drawAndMove(){
+  if(moving || finished) return;
+  validate.disabled = true;
+  const draw = computeCardDraw();
+  broadcastSync({type:'draw', draw});
+  topNum.textContent = draw.total;
+  await playCardDrawAnimation(draw);
+  await move(draw.total);
+}
+
+validate.addEventListener('click', drawAndMove);
 resetBtn.addEventListener('click', restart);
 if(startBtn) startBtn.addEventListener('click', startGame);
 if(winBtn) winBtn.addEventListener('click', ()=>{
@@ -1192,11 +1248,11 @@ if(winBtn) winBtn.addEventListener('click', ()=>{
 if(syncChannel && isDisplay){
   syncChannel.onmessage = (e)=>{
     const m = e.data || {};
-    if(m.type==='move') move(m.count, m.card);
+    if(m.type==='draw'){ topNum.textContent = m.draw.total; playCardDrawAnimation(m.draw); }
+    else if(m.type==='move') move(m.count, m.card);
     else if(m.type==='celebrate') celebrate(m.catKey);
     else if(m.type==='restart') restart();
     else if(m.type==='start') startGame();
-    else if(m.type==='select') setSelected(m.value);
   };
 }
 
@@ -1208,12 +1264,10 @@ if(openDisplayBtn){
     window.open(url.toString(), 'pikajackpot_display', 'width=1280,height=820');
   });
 }
-[minus,plus,validate,resetBtn,winBtn,startBtn].forEach(btn=>{
+[validate,resetBtn,winBtn,startBtn].forEach(btn=>{
   if(!btn) return;
   btn.addEventListener('touchend', e=>{ e.preventDefault(); btn.click(); }, {passive:false});
 });
-
-setSelected(1);
 updatePlaceBanner(-1, false);
 
 /* ==========================================================================
