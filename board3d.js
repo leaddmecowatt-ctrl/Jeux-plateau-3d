@@ -1466,6 +1466,8 @@ if(openDisplayBtn){
   const url = new URL(location.href);
   url.searchParams.set('view','display');
   openDisplayBtn.href = url.toString();
+  const fallbackInput = document.getElementById('openDisplayUrl');
+  if(fallbackInput) fallbackInput.value = url.toString();
 }
 [validate,resetBtn,winBtn,startBtn].forEach(btn=>{
   if(!btn) return;

@@ -276,6 +276,18 @@ button:active:not(:disabled){transform:translateY(1px)}
   background:linear-gradient(180deg,#2f6fdc,#1a4aa0);color:#fff;
   box-shadow:0 0 12px rgba(47,111,220,.5);
 }
+/* Secours si le navigateur/la page bloque l'ouverture d'un nouvel
+   onglet (fréquent quand l'artifact est affiché dans un cadre
+   restreint) : un lien copiable en clair. */
+.opendisplay-fallback{
+  font-size:10.5px;color:#c9bd97;line-height:1.5;padding:2px 2px 0;
+}
+.opendisplay-fallback b{ color:var(--gold-bright) }
+.opendisplay-fallback input{
+  display:block;width:100%;margin-top:4px;padding:7px 8px;border-radius:7px;
+  border:1px solid var(--gold);background:#1a1406;color:var(--gold-bright);
+  font-size:11px;font-family:inherit;
+}
 
 /* ---------- Écran public (?view=display) : masque toute l'interface
    de contrôle, ne laisse que le plateau, l'annonce et le statut. ---------- */
@@ -543,6 +555,10 @@ if(new URLSearchParams(location.search).get('view')==='display'){
 
       <div class="side-panel">
         <a class="opendisplay" id="openDisplayBtn" href="?view=display" target="_blank" rel="noopener">🖥️ Ouvrir l'écran plateau</a>
+        <div class="opendisplay-fallback" id="openDisplayFallback">
+          Le bouton n'ouvre rien ? Copie ce lien dans un <b>nouvel onglet</b> :
+          <input type="text" id="openDisplayUrl" readonly onclick="this.select()">
+        </div>
         <button class="startbtn" id="startBtn" type="button">▶ DÉMARRER LA PARTIE</button>
         <div class="controls-panel">
           <div class="control-copy">
