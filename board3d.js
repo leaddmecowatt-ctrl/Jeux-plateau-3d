@@ -1557,8 +1557,9 @@ if(winBtn) winBtn.addEventListener('click', ()=>{
 
 /* Raccourcis clavier pour piloter le jeu sans viser précisément les
    boutons à l'écran (pratique en filmant en direct) : A = démarrer,
-   B = tirer les cartes, C = recommencer, D = valider le lot remporté.
-   Ignorés si on est en train de taper dans un champ de texte. */
+   B = tirer les cartes, C = recommencer la partie, D = valider le lot
+   remporté, E = nouveau live (remet la cagnotte à 0€). Ignorés si on
+   est en train de taper dans un champ de texte. */
 window.addEventListener('keydown', (e)=>{
   const tag = (document.activeElement && document.activeElement.tagName) || '';
   if(tag==='INPUT' || tag==='TEXTAREA') return;
@@ -1567,6 +1568,7 @@ window.addEventListener('keydown', (e)=>{
   else if(k==='b'){ if(!validate.disabled) validate.click(); }
   else if(k==='c'){ resetBtn.click(); }
   else if(k==='d'){ if(winBtn && !winBtn.hidden) winBtn.click(); }
+  else if(k==='e'){ if(resetBankBtn && !resetBankBtn.hidden) resetBankBtn.click(); }
 });
 
 if(syncChannel && isDisplay){
