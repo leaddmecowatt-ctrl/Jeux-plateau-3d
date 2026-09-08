@@ -58,7 +58,7 @@ body{overflow:hidden;color:#fff}
 }
 .board-row{
   flex:1 1 auto;min-height:0;position:relative;z-index:1;
-  display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:8px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
 }
 
 /* ---------- décor d'arène (bâtiment, montagnes, projecteurs), tout
@@ -145,7 +145,7 @@ body{overflow:hidden;color:#fff}
 
 .board-col{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;flex:1 1 auto;min-height:0}
 .board-wrap{
-  width:min(96vw,86vh,720px);
+  width:min(97vw,88vh,900px);
   aspect-ratio:1/1;
   position:relative;z-index:1;
   filter:drop-shadow(0 22px 26px rgba(0,0,0,.55));
@@ -170,15 +170,12 @@ body{overflow:hidden;color:#fff}
   transition:opacity .6s ease;z-index:2;
 }
 
-/* panneau latéral : Interface Animateur + légende */
-.side-panel{
-  /* z-index au-dessus de .celebration (50) : le lot affiché en grand
-     ne doit jamais rendre "TIRER LES CARTES" / "LOT REMPORTÉ"
-     inaccessibles — les deux choix restent visibles et cliquables
-     par-dessus la photo. */
-  position:relative;z-index:52;width:100%;max-width:560px;
-  display:flex;flex-direction:column;gap:8px;
-}
+/* panneau latéral : Interface Animateur + légende — masqué : tout se
+   pilote désormais au clavier (A/B/C/D/E), le plateau prend toute la
+   place. Les boutons restent dans la page (juste invisibles) car le
+   jeu s'appuie dessus en interne — les raccourcis clavier cliquent
+   dessus par le code, pas besoin qu'ils soient affichés. */
+.side-panel{ display:none; }
 .controls-panel{
   display:grid;grid-template-columns:1fr auto;gap:8px;
   background:linear-gradient(180deg,#1e1706,#0e0a02);
@@ -263,13 +260,10 @@ button:active:not(:disabled){transform:translateY(1px)}
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:48px;
 }
 
-.statusbar{
-  flex:0 0 auto;margin:4px 10px 10px;min-height:42px;border:2px solid var(--gold);border-radius:10px;
-  background:linear-gradient(180deg,#221a06,#0e0a02);
-  box-shadow:0 0 10px rgba(233,195,74,.35);
-  display:flex;align-items:center;justify-content:center;position:relative;
-  font-size:12px;font-weight:800;padding:7px 78px 7px 42px
-}
+/* Masquée pour laisser toute la place au plateau (pilotage 100% au
+   clavier) — reste dans la page, juste invisible : "recommencer" (C)
+   passe par ce bouton en interne. */
+.statusbar{ display:none; }
 .ball{
   position:absolute;left:10px;top:5px;width:30px;height:30px;border-radius:50%;
   background:linear-gradient(#f64249 0 43%,#153657 44% 56%,#f4f9ff 57%);border:3px solid #153657
@@ -421,7 +415,11 @@ html.display-mode .display-badge{ display:block; }
      au lieu de laisser deux grandes bandes vides au-dessus/dessous.
      max-height garde toujours les boutons de jeu atteignables sans
      avoir à faire défiler la page. */
-  .board-wrap{width:min(98vw,520px);aspect-ratio:3/4;max-height:58vh}
+  /* les commandes sont masquées (pilotage 100% au clavier) : le
+     plateau peut désormais utiliser presque toute la hauteur de
+     l'écran au lieu de s'arrêter à 58vh pour leur laisser de la
+     place. */
+  .board-wrap{width:min(98vw,540px);aspect-ratio:2/3;max-height:88vh}
   .startbtn{padding:8px;font-size:12px}
   .controls-panel{padding:6px}
   .validate{font-size:12px;padding:8px}
