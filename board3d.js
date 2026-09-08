@@ -801,35 +801,42 @@ const START_NODE = tiles[0];
    "attachés" à l'arène et suivre naturellement sa rotation. Sprites
    simples (toujours face caméra) pour rester lisibles à tout angle,
    sans le coût/la complexité d'un vrai relief 3D. */
+/* Même silhouette de nuage (bosses bien découpées, façon nuage de
+   bande dessinée) que celle utilisée pour les nuages d'arrière-plan
+   CSS de la page — pour que les nuages 3D du plateau et ceux du
+   décor se ressemblent vraiment, au lieu d'inventer une deuxième
+   forme (galets flous) qui ne correspond à rien. */
+const CLOUD_SVG_PATH = 'M20,70 Q5,70 5,55 Q5,40 22,40 Q24,20 46,20 Q64,20 70,36 Q90,32 96,50 Q112,48 112,64 Q112,76 98,76 L28,76 Q20,76 20,70 Z M96,56 Q140,52 160,58 Q150,64 130,62 Q108,64 96,60 Z';
 function makeCloudTexture(){
-  // Masse nuageuse volumineuse (façon cumulus stylisé), pas de petits
-  // pompons discrets : beaucoup de bosses qui se chevauchent, un cœur
-  // bien blanc et opaque, pour un rendu proche d'une vraie référence
-  // de nuage "fantasy" plutôt qu'un nuage CSS plat.
-  const w=420,h=240;
+  const w=460,h=260;
   const cvs = document.createElement('canvas'); cvs.width=w; cvs.height=h;
   const ctx = cvs.getContext('2d');
-  const puffs = [
-    {x:.22,y:.62,r:.24},{x:.35,y:.42,r:.32},{x:.52,y:.34,r:.36},
-    {x:.68,y:.40,r:.30},{x:.82,y:.55,r:.24},{x:.30,y:.70,r:.26},
-    {x:.48,y:.66,r:.30},{x:.65,y:.68,r:.27},{x:.14,y:.72,r:.16},
-    {x:.88,y:.68,r:.15},{x:.58,y:.52,r:.22},{x:.40,y:.55,r:.2}
+  const path = new Path2D(CLOUD_SVG_PATH); // dessiné dans un repère 0..200 x 0..100
+  const instances = [
+    {x:60,  y:70,  s:1.55, r:0},
+    {x:250, y:150, s:1.75, r:0.03},
+    {x:330, y:70,  s:1.15, r:-0.04},
   ];
-  puffs.forEach(p=>{
-    const cx=p.x*w, cy=p.y*h, r=p.r*w;
-    const g = ctx.createRadialGradient(cx,cy,0,cx,cy,r);
-    g.addColorStop(0,'rgba(255,255,255,.98)');
-    g.addColorStop(.55,'rgba(255,255,255,.85)');
-    g.addColorStop(.85,'rgba(255,255,255,.4)');
-    g.addColorStop(1,'rgba(255,255,255,0)');
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
-  });
-  // légère ombre bleutée sous la masse, pour donner du volume
+  function drawCloud(blurPx){
+    instances.forEach(inst=>{
+      ctx.save();
+      ctx.translate(inst.x, inst.y);
+      ctx.rotate(inst.r);
+      ctx.scale(inst.s, inst.s);
+      ctx.translate(-100,-50);
+      if(blurPx) ctx.filter = 'blur('+blurPx+'px)';
+      ctx.fillStyle = '#ffffff';
+      ctx.fill(path);
+      ctx.restore();
+    });
+  }
+  drawCloud(7);   // halo doux flouté (aspect duveteux)
+  drawCloud(0);   // cœur net et bien blanc par-dessus
+  // ombre très légère sous la masse, juste pour un peu de volume
   ctx.globalCompositeOperation = 'source-atop';
-  const shade = ctx.createLinearGradient(0,h*0.3,0,h*0.95);
-  shade.addColorStop(0,'rgba(255,255,255,0)');
-  shade.addColorStop(1,'rgba(170,195,225,.35)');
+  const shade = ctx.createLinearGradient(0,h*0.55,0,h*0.98);
+  shade.addColorStop(0,'rgba(210,222,238,0)');
+  shade.addColorStop(1,'rgba(196,212,232,.22)');
   ctx.fillStyle = shade;
   ctx.fillRect(0,0,w,h);
   ctx.globalCompositeOperation = 'source-over';
@@ -846,13 +853,13 @@ let outerPerimeterPosAt;
   // s'arrête vers ~1.2) et ~3.6 (avant le bord de la plaque à 4.5,
   // donc jamais sur les cases à ~5) ; "breathe" (va-et-vient radial)
   // volontairement petit pour ne jamais ramener un nuage vers le texte.
-  const CLOUD_ASPECT = 240/420;
+  const CLOUD_ASPECT = 260/460;
   const defs = [
-    {r:3.0, ang:0.4,  y:0.55, scale:1.1,  speed:.05,  spin:.05,  breathe:.1, opacity:.5},
-    {r:3.4, ang:2.3,  y:0.62, scale:0.9,  speed:-.04, spin:-.04, breathe:.09, opacity:.42},
-    {r:2.9, ang:4.1,  y:0.5,  scale:0.75, speed:.06,  spin:.07,  breathe:.1, opacity:.46},
-    {r:3.7, ang:5.4,  y:0.68, scale:1.25, speed:-.035,spin:-.03, breathe:.08,opacity:.4},
-    {r:3.2, ang:1.5,  y:0.58, scale:0.65, speed:.07,  spin:.08,  breathe:.11,opacity:.5},
+    {r:3.0, ang:0.4,  y:0.55, scale:1.1,  speed:.05,  spin:.05,  breathe:.1, opacity:.85},
+    {r:3.4, ang:2.3,  y:0.62, scale:0.9,  speed:-.04, spin:-.04, breathe:.09, opacity:.72},
+    {r:2.9, ang:4.1,  y:0.5,  scale:0.75, speed:.06,  spin:.07,  breathe:.1, opacity:.78},
+    {r:3.7, ang:5.4,  y:0.68, scale:1.25, speed:-.035,spin:-.03, breathe:.08,opacity:.68},
+    {r:3.2, ang:1.5,  y:0.58, scale:0.65, speed:.07,  spin:.08,  breathe:.11,opacity:.85},
   ];
   defs.forEach(d=>{
     const mat = new THREE.SpriteMaterial({map:cloudTex, transparent:true, depthWrite:false, opacity:d.opacity});
@@ -884,12 +891,12 @@ let outerPerimeterPosAt;
   };
 
   const edgeCloudDefs = [
-    {u0:0.03, y:0.5,  speed:1/95,   opacity:.6, scale:1.6},
-    {u0:0.14, y:0.62, speed:1/95,   opacity:.5, scale:1.15},
-    {u0:0.5,  y:0.55, speed:-1/110, opacity:.6, scale:1.6},
-    {u0:0.61, y:0.44, speed:-1/110, opacity:.48,scale:1.2},
-    {u0:0.32, y:0.5,  speed:1/130,  opacity:.28, scale:0.5},
-    {u0:0.82, y:0.5,  speed:-1/130, opacity:.28, scale:0.5},
+    {u0:0.03, y:0.5,  speed:1/95,   opacity:.92, scale:1.6},
+    {u0:0.14, y:0.62, speed:1/95,   opacity:.82, scale:1.15},
+    {u0:0.5,  y:0.55, speed:-1/110, opacity:.92, scale:1.6},
+    {u0:0.61, y:0.44, speed:-1/110, opacity:.8, scale:1.2},
+    {u0:0.32, y:0.5,  speed:1/130,  opacity:.55, scale:0.5},
+    {u0:0.82, y:0.5,  speed:-1/130, opacity:.55, scale:0.5},
   ];
   edgeCloudDefs.forEach(d=>{
     const mat = new THREE.SpriteMaterial({map:cloudTex, transparent:true, depthWrite:false, opacity:d.opacity});
