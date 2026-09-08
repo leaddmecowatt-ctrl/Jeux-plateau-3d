@@ -1718,11 +1718,20 @@ function celebrate(catKey, forcedCard, opts){
   const level = TIER_LEVEL[catKey] ?? 1;
   if(level===0){
     celebLocked = false;
-    if(celebPhoto) celebPhoto.hidden = true;
-    if(celebMain){ celebMain.hidden = false; celebMain.textContent = '💀 Fin de partie...'; }
+    // La case Prison arrête la partie, mais ne repart jamais totalement
+    // les mains vides : une carte commune de consolation est offerte
+    // (même logique de plafond de reversement que les autres lots).
+    const payoutCat = fundedCategory('commune');
+    if(celebPhoto){
+      const url = LOT_IMAGE_URLS[payoutCat];
+      if(url){ celebPhoto.src = url; celebPhoto.hidden = false; }
+      else celebPhoto.hidden = true;
+    }
+    if(celebMain){ celebMain.hidden = false; celebMain.textContent = '💀 Fin de partie... mais une carte quand même !'; }
     if(celebSub) celebSub.hidden = true;
     if(celeb){ celeb.classList.add('show'); celeb.dataset.level='0'; }
-    setTimeout(clearCelebration, 1800);
+    pushResult(payoutCat);
+    setTimeout(clearCelebration, 2600);
     return;
   }
   if(!celeb || !celebCanvas) return;
