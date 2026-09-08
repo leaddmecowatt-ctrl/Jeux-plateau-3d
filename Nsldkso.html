@@ -100,26 +100,6 @@ body{overflow:hidden;color:#fff}
   box-shadow:0 0 46px 16px rgba(180,225,255,.35);
 }
 
-/* Dragon décoratif original (silhouette inspirée de l'ambiance
-   Pokémon "serpent des cieux", pas une reprise de l'illustration
-   d'une carte) qui survole lentement l'arrière-plan, derrière le
-   plateau (z-index sous .board-row) — jamais devant les cases. */
-.rayquaza-wrap{
-  position:absolute;left:-10%;top:6%;width:62%;max-width:440px;
-  opacity:.5;pointer-events:none;will-change:transform;
-  animation:dragonFly 62s ease-in-out infinite;
-}
-@keyframes dragonFly{
-  0%,100%{ transform:translate(0,10%) rotate(-4deg); }
-  22%{ transform:translate(60%,-6%) rotate(3deg); }
-  45%{ transform:translate(95%,26%) rotate(-3deg); }
-  68%{ transform:translate(58%,52%) rotate(4deg); }
-  86%{ transform:translate(14%,30%) rotate(-2deg); }
-}
-.rayquaza{ width:100%;height:auto;display:block;animation:dragonBob 4.6s ease-in-out infinite; }
-@keyframes dragonBob{ 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-4%); } }
-@media (prefers-reduced-motion: reduce){ .rayquaza-wrap,.rayquaza{ animation:none; } }
-
 /* Pokéballs et cartes mystères qui tombent en continu dans les
    marges de gauche/droite (jamais au-dessus du plateau, qui a un
    z-index supérieur) — clin d'œil au visuel du teaser TikTok. */
@@ -497,24 +477,6 @@ if(new URLSearchParams(location.search).get('view')==='display'){
       <div class="stad-mountain m2"></div>
       <div class="stad-light left"><span class="beam"></span><span class="glow"></span></div>
       <div class="stad-light right"><span class="beam"></span><span class="glow"></span></div>
-      <div class="rayquaza-wrap">
-        <svg class="rayquaza" viewBox="0 0 360 140" xmlns="http://www.w3.org/2000/svg">
-          <path d="M15,95 C 55,35 85,125 130,80 C 165,45 190,110 225,75 C 250,50 265,68 285,55"
-                fill="none" stroke="#2fae74" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M15,95 C 55,35 85,125 130,80 C 165,45 190,110 225,75 C 250,50 265,68 285,55"
-                fill="none" stroke="#1c7d4f" stroke-width="17" stroke-linecap="round" stroke-dasharray="1 22"/>
-          <polygon points="60,63 46,44 52,70" fill="#e85fa0" opacity=".85"/>
-          <polygon points="140,96 128,118 152,110" fill="#e85fa0" opacity=".85"/>
-          <polygon points="203,58 196,36 214,50" fill="#e85fa0" opacity=".85"/>
-          <ellipse cx="97" cy="76" rx="6" ry="12" fill="#f6d8e6" opacity=".8" transform="rotate(-35 97 76)"/>
-          <ellipse cx="176" cy="71" rx="6" ry="12" fill="#f6d8e6" opacity=".8" transform="rotate(20 176 71)"/>
-          <polygon points="285,55 316,40 306,52 318,48 300,66" fill="#2fae74"/>
-          <line x1="292" y1="48" x2="300" y2="34" stroke="#1c7d4f" stroke-width="4" stroke-linecap="round"/>
-          <line x1="298" y1="52" x2="310" y2="40" stroke="#1c7d4f" stroke-width="4" stroke-linecap="round"/>
-          <circle cx="303" cy="53" r="3.4" fill="#fff"/>
-          <circle cx="304" cy="53" r="1.6" fill="#0a0a0a"/>
-        </svg>
-      </div>
     </div>
 
     <!-- Pokéballs et cartes mystères qui tombent doucement dans les

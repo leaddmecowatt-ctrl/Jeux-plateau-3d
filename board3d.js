@@ -823,6 +823,8 @@ function makeCloudTexture(){
   return tex;
 }
 const arenaClouds = [];
+const edgeClouds = [];
+let outerPerimeterPosAt;
 {
   const cloudTex = makeCloudTexture();
   // rayon tenu entre ~2.5 (largement hors du texte central, qui
@@ -844,7 +846,106 @@ const arenaClouds = [];
     boardGroup.add(spr);
     arenaClouds.push({spr, r0:d.r, ang0:d.ang, y0:d.y, speed:d.speed, spin:d.spin, breathe:d.breathe, phase:Math.random()*Math.PI*2});
   });
+
+  /* Contour élargi, juste au-delà des cases (piste lumineuse à 5.85
+     de rayon) : sert de piste à Rayquaza et à quelques nuages qui
+     longent le bord du plateau plutôt que de rester loin derrière —
+     "au niveau du plateau", comme demandé. */
+  const outerPerimeterPts = [];
+  {
+    const half = 6.3, perEdge = 13;
+    for(let i=0;i<perEdge;i++){ outerPerimeterPts.push([-half+(i/(perEdge-1))*half*2,-half]); }
+    for(let i=1;i<perEdge;i++){ outerPerimeterPts.push([half,-half+(i/(perEdge-1))*half*2]); }
+    for(let i=1;i<perEdge;i++){ outerPerimeterPts.push([half-(i/(perEdge-1))*half*2,half]); }
+    for(let i=1;i<perEdge-1;i++){ outerPerimeterPts.push([-half,half-(i/(perEdge-1))*half*2]); }
+  }
+  outerPerimeterPosAt = function(u){
+    const n = outerPerimeterPts.length;
+    const f = ((u%1)+1)%1*n;
+    const i0 = Math.floor(f), i1=(i0+1)%n, lp=f-i0;
+    const [x0,z0]=outerPerimeterPts[i0], [x1,z1]=outerPerimeterPts[i1];
+    return [x0+(x1-x0)*lp, z0+(z1-z0)*lp];
+  };
+
+  const edgeCloudDefs = [
+    {u0:0.05,  y:0.45, speed:1/95,  opacity:.24, scale:0.75},
+    {u0:0.55,  y:0.5,  speed:-1/110,opacity:.22, scale:0.6},
+  ];
+  edgeCloudDefs.forEach(d=>{
+    const mat = new THREE.SpriteMaterial({map:cloudTex, transparent:true, depthWrite:false, opacity:d.opacity});
+    const spr = new THREE.Sprite(mat);
+    spr.scale.set(d.scale*1.8, d.scale*1.8*(150/256), 1);
+    const [ex,ez] = outerPerimeterPosAt(d.u0);
+    spr.position.set(ex, d.y, ez);
+    boardGroup.add(spr);
+    edgeClouds.push({spr, u0:d.u0, y:d.y, speed:d.speed});
+  });
 }
+
+/* ---------- Rayquaza décoratif : silhouette originale inspirée de
+   l'ambiance Rayquaza (pas une reprise de l'illustration protégée
+   d'une carte), qui longe lentement le contour du plateau juste
+   au-delà des cases — attaché à boardGroup comme les nuages, donc
+   "au niveau du plateau" plutôt que loin en arrière-plan. ---------- */
+function makeRayquazaTexture(){
+  const w=640,h=220;
+  const cvs = document.createElement('canvas'); cvs.width=w; cvs.height=h;
+  const ctx = cvs.getContext('2d');
+  ctx.lineCap='round'; ctx.lineJoin='round';
+  function pathThrough(pts){
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0],pts[0][1]);
+    for(let i=1;i<pts.length-1;i++){
+      const mx=(pts[i][0]+pts[i+1][0])/2, my=(pts[i][1]+pts[i+1][1])/2;
+      ctx.quadraticCurveTo(pts[i][0],pts[i][1],mx,my);
+    }
+    ctx.lineTo(pts[pts.length-1][0],pts[pts.length-1][1]);
+  }
+  const spine=[[20,150],[90,70],[160,170],[240,90],[320,155],[400,95],[470,130],[520,105]];
+  pathThrough(spine); ctx.strokeStyle='#2fae74'; ctx.lineWidth=36; ctx.stroke();
+  pathThrough(spine); ctx.strokeStyle='#57cf95'; ctx.lineWidth=12; ctx.stroke();
+  const ringPts=[[55,108],[130,118],[200,130],[280,120],[360,120],[440,112]];
+  ringPts.forEach(([x,y],i)=>{
+    ctx.save(); ctx.translate(x,y); ctx.rotate(-0.45+(i%2?0.15:-0.15));
+    ctx.fillStyle='#0c1a12'; ctx.beginPath(); ctx.ellipse(0,0,7,20,0,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  });
+  function fin(x,y,ang,len,color){
+    ctx.save(); ctx.translate(x,y); ctx.rotate(ang);
+    ctx.fillStyle=color;
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(len,-len*0.4); ctx.lineTo(len*0.72,len*0.3); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  fin(90,70,-2.05,38,'#ffd35c'); fin(240,90,-2.3,34,'#ffd35c'); fin(400,95,-2.1,36,'#ffd35c');
+  fin(160,170,2.05,30,'#e85fa0'); fin(320,155,1.85,30,'#e85fa0');
+  ctx.save();
+  ctx.translate(520,105);
+  ctx.fillStyle = '#2fae74';
+  ctx.beginPath();
+  ctx.moveTo(-24,-16); ctx.lineTo(30,-8); ctx.lineTo(46,4); ctx.lineTo(26,16); ctx.lineTo(-20,18); ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#ffd35c';
+  ctx.beginPath(); ctx.moveTo(-6,-15); ctx.lineTo(4,-44); ctx.lineTo(13,-13); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(11,-11); ctx.lineTo(27,-34); ctx.lineTo(24,-6); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#0c1a12'; ctx.lineWidth = 2.4;
+  ctx.beginPath(); ctx.moveTo(20,8); ctx.lineTo(40,6); ctx.stroke();
+  ctx.fillStyle = '#ff5b3d';
+  ctx.beginPath(); ctx.ellipse(22,-1,4.6,3.2,0.3,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+  const tex = new THREE.CanvasTexture(cvs);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+const rayquaza = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: makeRayquazaTexture(), transparent:true, depthWrite:false, opacity:.62
+}));
+rayquaza.scale.set(4.8, 4.8*(220/640), 1);
+{
+  const [rx,rz] = outerPerimeterPosAt(0);
+  rayquaza.position.set(rx, 0.5, rz);
+}
+boardGroup.add(rayquaza);
+const RAYQUAZA_SPEED = 1/70; // un tour complet du contour en ~70s
 
 /* ---------- Pion articulé (façon dresseur, sac à dos inclus) ---------- */
 function buildToken(){
@@ -1074,6 +1175,18 @@ function animate(){
       cl.spr.position.set(Math.cos(ang)*r, cl.y0 + Math.sin(t*0.5+cl.phase)*0.06, Math.sin(ang)*r);
       cl.spr.material.rotation += dt*cl.spin;
     });
+    edgeClouds.forEach(cl=>{
+      const u = cl.u0 + t*cl.speed;
+      const [x,z] = outerPerimeterPosAt(u);
+      cl.spr.position.set(x, cl.y + Math.sin(t*0.4+cl.u0*10)*0.05, z);
+    });
+    {
+      const u = t*RAYQUAZA_SPEED;
+      const [x,z] = outerPerimeterPosAt(u);
+      const [x2,z2] = outerPerimeterPosAt(u+0.003);
+      rayquaza.position.set(x, 0.5 + Math.sin(t*0.6)*0.1, z);
+      rayquaza.material.rotation = Math.atan2(z2-z, x2-x);
+    }
   }
 
   // respiration + icônes/lots dynamiques
