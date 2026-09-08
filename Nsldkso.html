@@ -39,29 +39,9 @@ body{overflow:hidden;color:#fff}
 /* HUD haut */
 .top-hud{
   flex:0 0 auto;
-  display:flex;align-items:center;justify-content:space-between;gap:10px;
-  padding:max(10px,env(safe-area-inset-top)) 12px 6px;
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  padding:max(22px,calc(env(safe-area-inset-top) + 14px)) 12px 6px;
   position:relative;z-index:5;
-}
-.player-card,.next-card{
-  border:2px solid var(--gold);
-  background:linear-gradient(180deg,#2a2005,#141002);
-  box-shadow:0 0 10px rgba(233,195,74,.5);
-  border-radius:12px;
-}
-.player-card{
-  width:132px;height:52px;display:grid;grid-template-columns:43px 1fr;align-items:center;
-  padding:4px 7px 4px 3px;
-}
-.avatar-mini{width:39px;height:39px;border-radius:7px;background:#dcefff;overflow:hidden;border:1px solid #7fe5ff}
-.player-card b{display:block;font-size:12px}.coins{font-size:12px;color:#ffd84a;font-weight:900}
-.next-card{
-  width:160px;height:58px;text-align:center;padding-top:5px;
-}
-.next-card small{font-weight:800}
-.next-num{
-  margin:4px auto 0;width:48px;height:29px;line-height:25px;border-radius:6px;
-  background:#241a06;border:2px solid var(--gold-bright);font-size:22px;font-weight:900;color:var(--gold-bright)
 }
 .brand{
   position:absolute;left:50%;top:2px;transform:translateX(-50%);
@@ -363,7 +343,7 @@ html.display-mode .display-badge{ display:block; }
 }
 
 @media(max-height:760px){
-  .top-hud{padding-top:6px}.player-card{height:46px}.next-card{height:50px}.next-num{height:24px;line-height:20px;font-size:18px}
+  .top-hud{padding-top:max(18px,calc(env(safe-area-inset-top) + 10px))}
   .main-row{padding-top:0}.board-wrap{width:min(92vw,84vh,640px)}
   .statusbar{margin-top:4px;min-height:38px}
 }
@@ -425,20 +405,8 @@ if(new URLSearchParams(location.search).get('view')==='display'){
 <div id="app">
   <div class="top-hud">
     <div class="brand">★ PIKAJACKPOT ★</div>
-    <div class="player-card">
-      <div class="avatar-mini">
-        <svg viewBox="0 0 70 70" width="100%" height="100%">
-          <rect width="70" height="70" fill="#8fd9ff"/>
-          <circle cx="35" cy="29" r="14" fill="#efb887"/>
-          <path d="M19 29Q22 13 40 14Q51 15 53 29Q35 22 19 29Z" fill="#df303b"/>
-          <path d="M17 27Q32 22 50 25L58 30Q36 31 18 31Z" fill="#f04249"/>
-          <path d="M24 46Q35 39 47 46L53 70H15Z" fill="#1674cf"/>
-          <circle cx="30" cy="29" r="2" fill="#183452"/><circle cx="41" cy="29" r="2" fill="#183452"/>
-        </svg>
-      </div>
-      <div><b>Joueur 1</b><span class="coins">● 1000</span></div>
-    </div>
-    <div class="next-card"><small>Dernier tirage :</small><div class="next-num" id="topNum">—</div></div>
+    <div class="place-banner-wrap"><div class="place-banner" id="placeBanner">Départ</div></div>
+    <span id="topNum" hidden></span>
   </div>
 
   <div class="main-row">
@@ -489,8 +457,6 @@ if(new URLSearchParams(location.search).get('view')==='display'){
       </div>
     </div>
   </div>
-
-  <div class="place-banner-wrap"><div class="place-banner" id="placeBanner">Départ</div></div>
 
   <div class="statusbar">
     <span class="ball"></span>
