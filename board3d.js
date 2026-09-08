@@ -73,21 +73,21 @@ const CATS = {
    (4%) de tomber dessus, pour rester rarissime et ne pas casser la
    rentabilité (le q nécessaire remonte légèrement, 80,1% au lieu de
    79,6%, mais la marge reste pile à 50%, vérifié). */
-const RARE_GRADEE_CARD = { text: '★ CARTE GRADÉE OFFERTE (20-80€) — TRÈS RARE ★', weight: 1, rare: true, effect:{type:'prize'} };
+const RARE_GRADEE_CARD = { text: '★ CARTE GRADÉE OFFERTE (20-80€) — TRÈS RARE ★', weight: 1, rare: true, effect:{type:'prize', cat:'gradee'} };
 const CHANCE_DECK = [
   { text: 'Avancez de 3 cases', weight: 4, effect:{type:'move', delta:3} },
   { text: 'Reculez de 2 cases', weight: 4, effect:{type:'move', delta:-2} },
   { text: 'Rejouez gratuitement (relance bonus sans risque)', weight: 4, effect:{type:'replay'} },
-  { text: 'Carte commune offerte (~0,68€)', weight: 4, effect:{type:'prize'} },
+  { text: 'Carte commune offerte (~0,68€)', weight: 4, effect:{type:'prize', cat:'commune'} },
   { text: "Prochain «je continue» : risque réduit de moitié", weight: 4, effect:{type:'riskHalved'} },
-  { text: 'Carte alternative offerte (~7,20€ en moyenne)', weight: 4, effect:{type:'prize'} },
+  { text: 'Carte alternative offerte (~7,20€ en moyenne)', weight: 4, effect:{type:'prize', cat:'alternative'} },
   RARE_GRADEE_CARD,
 ];
 const CHEST_DECK = [
-  { text: 'Carte commune offerte (~0,68€)', weight: 4, effect:{type:'prize'} },
+  { text: 'Carte commune offerte (~0,68€)', weight: 4, effect:{type:'prize', cat:'commune'} },
   { text: 'Rejouez gratuitement', weight: 4, effect:{type:'replay'} },
   { text: 'Avancez de 2 cases', weight: 4, effect:{type:'move', delta:2} },
-  { text: 'Booster à 8€ offert', weight: 4, effect:{type:'prize'} },
+  { text: 'Booster à 8€ offert', weight: 4, effect:{type:'prize', cat:'booster8'} },
   { text: 'Reculez de 1 case', weight: 4, effect:{type:'move', delta:-1} },
   { text: 'Rien de spécial', weight: 4, effect:{type:'none'} },
   RARE_GRADEE_CARD,
@@ -932,23 +932,47 @@ const clock = new THREE.Clock();
    pas de retour à la case 1, la partie s'arrête là. */
 let walk = null;
 
+/* Calcule la case d'arrivée d'un déplacement de `count` cases depuis
+   `fromIdx`, avec REBOND sur la case 40 : dépasser la case finale ne
+   fait pas gagner le jackpot "par dépassement", le surplus repart en
+   arrière d'autant (comme un pion qui rebondit en bout de plateau) —
+   sans ça, un joueur qui recalcule toujours la meilleure option finit
+   presque systématiquement par atteindre la case 40 quel que soit le
+   tirage, ce qui casse complètement l'équilibre du jeu. Un recul qui
+   dépasserait la case 1 s'arrête simplement là (pas de rebond vers
+   l'avant, ce n'est pas exploitable de la même façon). */
+function landingIndex(fromIdx, count){
+  let idx = fromIdx === -1 ? 0 : fromIdx;
+  let dir = count >= 0 ? 1 : -1;
+  const n = Math.abs(count);
+  for(let i=0;i<n;i++){
+    let next = idx + dir;
+    if(dir>0 && next>39){ dir=-1; next=idx-1; }
+    else if(dir<0 && next<0){ break; }
+    idx = next;
+  }
+  return idx;
+}
+
 function startWalk(fromIdx, count, stepDuration){
   // Le pion démarre visuellement SUR la case 1 (pas sur une case
   // "0" séparée) : un lancer de N doit donc avancer de N cases
   // PLEINES depuis la case 1, comme depuis n'importe quelle autre
   // case déjà atteinte. `count` peut être négatif (cartes "Reculez
-  // de N cases") : le pion recule alors case par case, sans jamais
-  // dépasser la case 1.
+  // de N cases") : le pion recule alors case par case. Un dépassement
+  // de la case 40 fait rebondir le pion en arrière du surplus (voir
+  // landingIndex) au lieu de s'arrêter net dessus.
   const startPos = fromIdx === -1 ? 0 : fromIdx;
-  const dir = count >= 0 ? 1 : -1;
+  let dir = count >= 0 ? 1 : -1;
   const n = Math.abs(count);
   const path = [ tiles[startPos] ];
   const indices = [ fromIdx ];
   let idx = startPos;
   let steps = 0;
   for(let i=0;i<n;i++){
-    const next = idx + dir;
-    if(next < 0 || next > 39) break;
+    let next = idx + dir;
+    if(dir>0 && next>39){ dir=-1; next=idx-1; }
+    else if(dir<0 && next<0){ break; }
     idx = next;
     path.push(tiles[idx]);
     indices.push(idx);
@@ -1120,51 +1144,66 @@ const cardGrid = document.getElementById('cardGrid');
 const cardDrawTotal = document.getElementById('cardDrawTotal');
 const impactFlash = document.getElementById('impactFlash');
 
-/* ---------- Cagnotte (entièrement automatique, invisible) : les gros
-   lots (palier "float" — gradée, gros booster, ETB, jackpot final) ne
-   sont payés que si l'argent des mises déjà encaissées les couvre.
-   Sinon, le tirage reste honnête mais le lot réellement remis
-   redescend d'un cran (jamais un lot à 0€, toujours quelque chose de
-   valorisant), pour ne jamais mettre l'animateur en perte tout en
-   gardant l'ambiance intacte — sans aucune saisie manuelle : chaque
-   nouvelle partie (un tour complet = une mise) crédite automatiquement
-   la mise moyenne. La cagnotte persiste entre les parties et les
-   rechargements de page (localStorage), sans jamais s'afficher. */
-const BANK_KEY = 'pika_bankroll';
+/* ---------- Rendement cible (entièrement automatique, invisible) :
+   comme le taux de reversement affiché sur une vraie machine à sous,
+   le jeu vise ~50% de tout ce qui a été misé, reversé en lots, quelle
+   que soit la façon dont les parties se jouent (peu de tirages ou
+   beaucoup, joueur prudent ou qui pousse toujours vers le gros lot).
+   À chaque lot à distribuer, si l'annoncer ferait dépasser le plafond
+   cible cumulé, il redescend d'un cran vers un lot moins cher — le
+   tirage reste honnête (la case/carte tirée est réellement aléatoire),
+   seul le montant réellement valorisé est plafonné. Une carte commune
+   reste toujours distribuée au minimum (jamais 0€ pour ne pas casser
+   l'ambiance). Suivi et persistant (localStorage), sans jamais
+   s'afficher. */
+const TOTAL_MISE_KEY = 'pika_total_mise';
+const TOTAL_PAID_KEY = 'pika_total_paid';
 const AVG_MISE = 9;
-let bankroll = parseFloat(localStorage.getItem(BANK_KEY)) || 0;
-function saveBankroll(){
-  try{ localStorage.setItem(BANK_KEY, String(bankroll)); }catch(e){}
+const CEILING_RATIO = 0.50;  // plafond de reversement cible (~50%, vérifié par simulation)
+let totalMise = parseFloat(localStorage.getItem(TOTAL_MISE_KEY)) || 0;
+let totalPaid = parseFloat(localStorage.getItem(TOTAL_PAID_KEY)) || 0;
+function saveTotals(){
+  try{
+    localStorage.setItem(TOTAL_MISE_KEY, String(totalMise));
+    localStorage.setItem(TOTAL_PAID_KEY, String(totalPaid));
+  }catch(e){}
 }
 
-/* Bouton "Nouveau live" : remet la cagnotte à 0€ pour repartir d'un
-   direct vierge, puis disparaît pour ne pas être recliqué par erreur
-   en cours de stream. Réapparaît au prochain chargement de page. */
+/* Bouton "Nouveau live" : repart d'un compteur vierge pour un nouveau
+   direct, puis disparaît pour ne pas être recliqué par erreur en
+   cours de stream. Réapparaît au prochain chargement de page. */
 const resetBankBtn = document.getElementById('resetBankBtn');
 if(resetBankBtn) resetBankBtn.addEventListener('click', ()=>{
-  bankroll = 0;
-  saveBankroll();
+  totalMise = 0;
+  totalPaid = 0;
+  saveTotals();
   resetBankBtn.hidden = true;
 });
 
-/* Paliers du plus cher au moins cher : un lot "float" non couvert par
-   la cagnotte redescend au premier palier que la cagnotte peut payer. */
+/* Paliers du plus cher au moins cher : un lot qui ferait dépasser le
+   plafond de reversement cumulé redescend au premier palier qui
+   passe encore sous ce plafond. */
 const PAYOUT_LADDER = [
   { cat:'jackpot300', cost:300 },
   { cat:'etb',         cost:150 },
   { cat:'booster50',   cost:50  },
-  { cat:'gradee',      cost:50  },
+  { cat:'gradee',      cost:26  },
+  { cat:'booster8',    cost:8   },
   { cat:'alternative', cost:7.2 },
   { cat:'commune',     cost:0.68 },
 ];
+const LADDER_IDX = {};
+PAYOUT_LADDER.forEach((t,i)=>{ LADDER_IDX[t.cat] = i; });
+
 function fundedCategory(catKey){
-  const startIdx = PAYOUT_LADDER.findIndex(t=>t.cat===catKey);
-  if(startIdx===-1) return catKey;
+  const startIdx = LADDER_IDX[catKey];
+  if(startIdx===undefined) return catKey;
   for(let i=startIdx;i<PAYOUT_LADDER.length;i++){
     const tier = PAYOUT_LADDER[i];
-    if(bankroll >= tier.cost || i===PAYOUT_LADDER.length-1){
-      bankroll = Math.max(0, bankroll - tier.cost);
-      saveBankroll();
+    const projected = totalMise>0 ? (totalPaid+tier.cost)/totalMise : 0;
+    if(projected <= CEILING_RATIO || i===PAYOUT_LADDER.length-1){
+      totalPaid += tier.cost;
+      saveTotals();
       return tier.cat;
     }
   }
@@ -1365,7 +1404,7 @@ async function move(forcedCount, forcedCard){
   validate.disabled = true;
   if(winBtn) winBtn.hidden = true;
   const count = forcedCount!=null ? forcedCount : 1;
-  const destIdx = Math.min(39, (currentIndex===-1?0:currentIndex) + count);
+  const destIdx = landingIndex(currentIndex, count);
   const destCat = tiles[destIdx].catKey;
   // Si la case d'arrivée est Chance/Caisse, on tire la carte TOUT DE
   // SUITE (avant l'animation) pour pouvoir l'envoyer d'un coup à
@@ -1432,7 +1471,7 @@ async function resolveChanceChest(myGen, forcedCard){
     const w = startWalk(idx, card.effect.delta, HOP_DURATION);
     await wait(w.totalTime*1000 + 30);
     if(myGen!==generation) return;
-    const expectedIdx = Math.max(0, Math.min(39, idx + card.effect.delta));
+    const expectedIdx = landingIndex(idx, card.effect.delta);
     if(currentIndex !== expectedIdx){
       currentIndex = expectedIdx;
       walk = null;
@@ -1487,7 +1526,7 @@ async function drawAndMove(){
   // Premier lancer d'une partie (le pion est encore sur Départ) : une
   // partie complète = une mise, créditée automatiquement à la
   // cagnotte interne, sans aucune saisie manuelle.
-  if(currentIndex===-1){ bankroll += AVG_MISE; saveBankroll(); }
+  if(currentIndex===-1){ totalMise += AVG_MISE; saveTotals(); }
   // On continue plutôt que de garder le lot affiché : l'aperçu (ou le
   // lot validé) de la case précédente s'efface avant le nouveau tirage.
   clearCelebration();
@@ -1703,14 +1742,13 @@ function celebrate(catKey, forcedCard, opts){
       : (catKey==='chance' ? '🎴 CARTE CHANCE' : '🗃️ CAISSE COMMUNAUTAIRE');
     if(celebSub){ celebSub.textContent = card.text; celebSub.hidden = false; }
     if(rareCardDrawn) celeb.classList.add('shake');
-    // même sur une carte Chance/Caisse, si c'est la rare carte gradée
-    // qui sort, on montre une vraie photo — sinon pas de lot fixe à
-    // afficher (avancer/reculer/rejouer n'ont pas de photo). Comme
-    // pour les autres lots "float", la cagnotte peut faire redescendre
-    // ce lot d'un cran si elle ne couvre pas encore la carte gradée.
-    if(rareCardDrawn){
-      const payoutCat = fundedCategory('gradee');
-      if(payoutCat !== 'gradee' && celebMain) celebMain.textContent = CATEGORY_MESSAGES[payoutCat] || celebMain.textContent;
+    // Toute carte Chance/Caisse qui offre un lot en argent (rare ou
+    // non) passe par le même plafond de reversement que les cases du
+    // plateau — sinon ces petits lots automatiques échapperaient au
+    // calcul du rendement cible.
+    if(card.effect && card.effect.type==='prize' && card.effect.cat){
+      const payoutCat = fundedCategory(card.effect.cat);
+      if(payoutCat !== card.effect.cat && celebMain) celebMain.textContent = CATEGORY_MESSAGES[payoutCat] || celebMain.textContent;
       if(celebPhoto){
         const url = LOT_IMAGE_URLS[payoutCat];
         if(url){ celebPhoto.src = url; celebPhoto.hidden = false; }
