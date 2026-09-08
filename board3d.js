@@ -802,22 +802,37 @@ const START_NODE = tiles[0];
    simples (toujours face caméra) pour rester lisibles à tout angle,
    sans le coût/la complexité d'un vrai relief 3D. */
 function makeCloudTexture(){
-  const w=256,h=150;
+  // Masse nuageuse volumineuse (façon cumulus stylisé), pas de petits
+  // pompons discrets : beaucoup de bosses qui se chevauchent, un cœur
+  // bien blanc et opaque, pour un rendu proche d'une vraie référence
+  // de nuage "fantasy" plutôt qu'un nuage CSS plat.
+  const w=420,h=240;
   const cvs = document.createElement('canvas'); cvs.width=w; cvs.height=h;
   const ctx = cvs.getContext('2d');
   const puffs = [
-    {x:.30,y:.60,r:.30},{x:.50,y:.40,r:.37},{x:.70,y:.58,r:.29},
-    {x:.42,y:.68,r:.27},{x:.60,y:.70,r:.25},{x:.20,y:.72,r:.20},{x:.80,y:.72,r:.18}
+    {x:.22,y:.62,r:.24},{x:.35,y:.42,r:.32},{x:.52,y:.34,r:.36},
+    {x:.68,y:.40,r:.30},{x:.82,y:.55,r:.24},{x:.30,y:.70,r:.26},
+    {x:.48,y:.66,r:.30},{x:.65,y:.68,r:.27},{x:.14,y:.72,r:.16},
+    {x:.88,y:.68,r:.15},{x:.58,y:.52,r:.22},{x:.40,y:.55,r:.2}
   ];
   puffs.forEach(p=>{
     const cx=p.x*w, cy=p.y*h, r=p.r*w;
     const g = ctx.createRadialGradient(cx,cy,0,cx,cy,r);
-    g.addColorStop(0,'rgba(255,255,255,.6)');
-    g.addColorStop(.7,'rgba(255,255,255,.3)');
+    g.addColorStop(0,'rgba(255,255,255,.98)');
+    g.addColorStop(.55,'rgba(255,255,255,.85)');
+    g.addColorStop(.85,'rgba(255,255,255,.4)');
     g.addColorStop(1,'rgba(255,255,255,0)');
     ctx.fillStyle = g;
     ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
   });
+  // légère ombre bleutée sous la masse, pour donner du volume
+  ctx.globalCompositeOperation = 'source-atop';
+  const shade = ctx.createLinearGradient(0,h*0.3,0,h*0.95);
+  shade.addColorStop(0,'rgba(255,255,255,0)');
+  shade.addColorStop(1,'rgba(170,195,225,.35)');
+  ctx.fillStyle = shade;
+  ctx.fillRect(0,0,w,h);
+  ctx.globalCompositeOperation = 'source-over';
   const tex = new THREE.CanvasTexture(cvs);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -831,17 +846,18 @@ let outerPerimeterPosAt;
   // s'arrête vers ~1.2) et ~3.6 (avant le bord de la plaque à 4.5,
   // donc jamais sur les cases à ~5) ; "breathe" (va-et-vient radial)
   // volontairement petit pour ne jamais ramener un nuage vers le texte.
+  const CLOUD_ASPECT = 240/420;
   const defs = [
-    {r:3.0, ang:0.4,  y:0.55, scale:0.7,  speed:.05,  spin:.05,  breathe:.1, opacity:.26},
-    {r:3.4, ang:2.3,  y:0.62, scale:0.55, speed:-.04, spin:-.04, breathe:.09, opacity:.22},
-    {r:2.9, ang:4.1,  y:0.5,  scale:0.45, speed:.06,  spin:.07,  breathe:.1, opacity:.24},
-    {r:3.7, ang:5.4,  y:0.68, scale:0.8,  speed:-.035,spin:-.03, breathe:.08,opacity:.2},
-    {r:3.2, ang:1.5,  y:0.58, scale:0.4,  speed:.07,  spin:.08,  breathe:.11,opacity:.26},
+    {r:3.0, ang:0.4,  y:0.55, scale:1.1,  speed:.05,  spin:.05,  breathe:.1, opacity:.5},
+    {r:3.4, ang:2.3,  y:0.62, scale:0.9,  speed:-.04, spin:-.04, breathe:.09, opacity:.42},
+    {r:2.9, ang:4.1,  y:0.5,  scale:0.75, speed:.06,  spin:.07,  breathe:.1, opacity:.46},
+    {r:3.7, ang:5.4,  y:0.68, scale:1.25, speed:-.035,spin:-.03, breathe:.08,opacity:.4},
+    {r:3.2, ang:1.5,  y:0.58, scale:0.65, speed:.07,  spin:.08,  breathe:.11,opacity:.5},
   ];
   defs.forEach(d=>{
     const mat = new THREE.SpriteMaterial({map:cloudTex, transparent:true, depthWrite:false, opacity:d.opacity});
     const spr = new THREE.Sprite(mat);
-    spr.scale.set(d.scale*1.8, d.scale*1.8*(150/256), 1);
+    spr.scale.set(d.scale*1.8, d.scale*1.8*CLOUD_ASPECT, 1);
     spr.position.set(Math.cos(d.ang)*d.r, d.y, Math.sin(d.ang)*d.r);
     boardGroup.add(spr);
     arenaClouds.push({spr, r0:d.r, ang0:d.ang, y0:d.y, speed:d.speed, spin:d.spin, breathe:d.breathe, phase:Math.random()*Math.PI*2});
@@ -868,13 +884,17 @@ let outerPerimeterPosAt;
   };
 
   const edgeCloudDefs = [
-    {u0:0.05,  y:0.45, speed:1/95,  opacity:.24, scale:0.75},
-    {u0:0.55,  y:0.5,  speed:-1/110,opacity:.22, scale:0.6},
+    {u0:0.03, y:0.5,  speed:1/95,   opacity:.6, scale:1.6},
+    {u0:0.14, y:0.62, speed:1/95,   opacity:.5, scale:1.15},
+    {u0:0.5,  y:0.55, speed:-1/110, opacity:.6, scale:1.6},
+    {u0:0.61, y:0.44, speed:-1/110, opacity:.48,scale:1.2},
+    {u0:0.32, y:0.5,  speed:1/130,  opacity:.28, scale:0.5},
+    {u0:0.82, y:0.5,  speed:-1/130, opacity:.28, scale:0.5},
   ];
   edgeCloudDefs.forEach(d=>{
     const mat = new THREE.SpriteMaterial({map:cloudTex, transparent:true, depthWrite:false, opacity:d.opacity});
     const spr = new THREE.Sprite(mat);
-    spr.scale.set(d.scale*1.8, d.scale*1.8*(150/256), 1);
+    spr.scale.set(d.scale*1.8, d.scale*1.8*CLOUD_ASPECT, 1);
     const [ex,ez] = outerPerimeterPosAt(d.u0);
     spr.position.set(ex, d.y, ez);
     boardGroup.add(spr);
