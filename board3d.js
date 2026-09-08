@@ -142,9 +142,19 @@ function loadImage(url){
 const LOT_IMAGES = {};
 await Promise.all(Object.entries(LOT_IMAGE_URLS).map(async ([k,url])=>{ LOT_IMAGES[k] = await loadImage(url); }));
 
-/* ---------- Palette noir & or, avec accents Pokémon bleu/blanc/rouge ---------- */
+/* ---------- Palette noir & or, avec accents Pokémon bleu/blanc/rouge ----------
+   GOLD reste réservé aux moments "récompense" (cadre carte gradée/jackpot
+   façon slab, glows de gain) : un accent doré ponctuel qui ressort
+   davantage depuis que l'identité générale de l'arène est passée au
+   vert/blanc/rose (voir ARENA ci-dessous), plutôt qu'une suppression
+   totale de l'or qui aurait aussi effacé ce signal "objet précieux". */
 const GOLD = '#e9c34a';
 const GOLD_BRIGHT = '#ffe27a';
+/* ---------- Identité de l'arène : vert Rayquaza / blanc nuage / rose,
+   utilisée pour tout ce qui est ambiant et toujours visible (cadre des
+   40 cases, plaque centrale) plutôt que pour les moments de gain. ---------- */
+const ARENA = '#2fae74';
+const ARENA_BRIGHT = '#8ff3c4';
 const SWATCH_COLORS = {
   bronze:'#a9793a', blue:'#2f6fdc', red:'#e0323f', purple:'#9a5fe0',
   green:'#33b46a', gold:'#e9c34a', danger:'#d62b2b',
@@ -194,7 +204,7 @@ function getFlatPhotoFace(catKey, caseNum, accentColor, badge){
   ctx.restore();
 
   roundRectPath(ctx,9,9,size-18,size-18,r);
-  ctx.lineWidth = 10; ctx.strokeStyle = GOLD; ctx.stroke();
+  ctx.lineWidth = 10; ctx.strokeStyle = ARENA; ctx.stroke();
   roundRectPath(ctx,15,15,size-30,size-30,r*0.85);
   ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.stroke();
 
@@ -605,13 +615,13 @@ function makeCenterPlateTexture(){
   const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
   const ctx = cvs.getContext('2d');
   const grad = ctx.createRadialGradient(size*0.5,size*0.4,size*0.05,size*0.5,size*0.5,size*0.66);
-  grad.addColorStop(0,'#241a06'); grad.addColorStop(0.55,'#120d02'); grad.addColorStop(1,'#000000');
+  grad.addColorStop(0,'#0e2019'); grad.addColorStop(0.55,'#08120d'); grad.addColorStop(1,'#000000');
   ctx.fillStyle = grad; ctx.fillRect(0,0,size,size);
 
-  // anneaux dorés concentriques façon roue
+  // anneaux verts concentriques façon roue (identité Rayquaza)
   for(let i=0;i<3;i++){
     ctx.beginPath(); ctx.arc(size/2,size/2,size*(0.46-i*0.07),0,Math.PI*2);
-    ctx.lineWidth = size*0.012; ctx.strokeStyle = i===1?GOLD_BRIGHT:GOLD; ctx.globalAlpha=0.85-i*0.15;
+    ctx.lineWidth = size*0.012; ctx.strokeStyle = i===1?ARENA_BRIGHT:ARENA; ctx.globalAlpha=0.85-i*0.15;
     ctx.stroke();
   }
   ctx.globalAlpha=1;
@@ -628,8 +638,8 @@ function makeCenterPlateTexture(){
   // texte PIKAJACKPOT
   ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.font='900 '+(size*0.108)+'px Arial,Helvetica,sans-serif';
-  ctx.fillStyle = GOLD_BRIGHT;
-  ctx.shadowColor = 'rgba(255,210,110,.9)'; ctx.shadowBlur = size*0.02;
+  ctx.fillStyle = ARENA_BRIGHT;
+  ctx.shadowColor = 'rgba(143,243,196,.9)'; ctx.shadowBlur = size*0.02;
   ctx.save();
   ctx.translate(size/2, size*0.53);
   ctx.fillText('PIKA', -size*0.001, -size*0.06);
@@ -780,9 +790,60 @@ for(let i=0;i<40;i++){
    sol pour marquer visuellement ce point de départ. */
 const START_NODE = tiles[0];
 {
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.56,0.03,8,28), new THREE.MeshBasicMaterial({color:0xffe27a}));
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.56,0.03,8,28), new THREE.MeshBasicMaterial({color:0x8ff3c4}));
   ring.rotation.x = Math.PI/2; ring.position.copy(START_NODE.world); ring.position.y = 0.03;
   boardGroup.add(ring);
+}
+
+/* ---------- Nuages du plateau : quelques petits nuages blancs qui
+   dérivent au-dessus de la plaque centrale (jamais sur les cases, ni
+   sur le texte PIKA JACKPOT). Ajoutés dans boardGroup pour rester
+   "attachés" à l'arène et suivre naturellement sa rotation. Sprites
+   simples (toujours face caméra) pour rester lisibles à tout angle,
+   sans le coût/la complexité d'un vrai relief 3D. */
+function makeCloudTexture(){
+  const w=256,h=150;
+  const cvs = document.createElement('canvas'); cvs.width=w; cvs.height=h;
+  const ctx = cvs.getContext('2d');
+  const puffs = [
+    {x:.30,y:.60,r:.30},{x:.50,y:.40,r:.37},{x:.70,y:.58,r:.29},
+    {x:.42,y:.68,r:.27},{x:.60,y:.70,r:.25},{x:.20,y:.72,r:.20},{x:.80,y:.72,r:.18}
+  ];
+  puffs.forEach(p=>{
+    const cx=p.x*w, cy=p.y*h, r=p.r*w;
+    const g = ctx.createRadialGradient(cx,cy,0,cx,cy,r);
+    g.addColorStop(0,'rgba(255,255,255,.6)');
+    g.addColorStop(.7,'rgba(255,255,255,.3)');
+    g.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
+  });
+  const tex = new THREE.CanvasTexture(cvs);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+const arenaClouds = [];
+{
+  const cloudTex = makeCloudTexture();
+  // rayon tenu entre ~2.5 (largement hors du texte central, qui
+  // s'arrête vers ~1.2) et ~3.6 (avant le bord de la plaque à 4.5,
+  // donc jamais sur les cases à ~5) ; "breathe" (va-et-vient radial)
+  // volontairement petit pour ne jamais ramener un nuage vers le texte.
+  const defs = [
+    {r:3.0, ang:0.4,  y:0.55, scale:0.7,  speed:.05,  spin:.05,  breathe:.1, opacity:.26},
+    {r:3.4, ang:2.3,  y:0.62, scale:0.55, speed:-.04, spin:-.04, breathe:.09, opacity:.22},
+    {r:2.9, ang:4.1,  y:0.5,  scale:0.45, speed:.06,  spin:.07,  breathe:.1, opacity:.24},
+    {r:3.7, ang:5.4,  y:0.68, scale:0.8,  speed:-.035,spin:-.03, breathe:.08,opacity:.2},
+    {r:3.2, ang:1.5,  y:0.58, scale:0.4,  speed:.07,  spin:.08,  breathe:.11,opacity:.26},
+  ];
+  defs.forEach(d=>{
+    const mat = new THREE.SpriteMaterial({map:cloudTex, transparent:true, depthWrite:false, opacity:d.opacity});
+    const spr = new THREE.Sprite(mat);
+    spr.scale.set(d.scale*1.8, d.scale*1.8*(150/256), 1);
+    spr.position.set(Math.cos(d.ang)*d.r, d.y, Math.sin(d.ang)*d.r);
+    boardGroup.add(spr);
+    arenaClouds.push({spr, r0:d.r, ang0:d.ang, y0:d.y, speed:d.speed, spin:d.spin, breathe:d.breathe, phase:Math.random()*Math.PI*2});
+  });
 }
 
 /* ---------- Pion articulé (façon dresseur, sac à dos inclus) ---------- */
@@ -1006,6 +1067,12 @@ function animate(){
       const [x,z] = perimeterPosAt(u);
       ol.spr.position.set(x,0.05,z);
       ol.spr.material.opacity = 0.85 + Math.sin(t*6)*0.15;
+    });
+    arenaClouds.forEach(cl=>{
+      const ang = cl.ang0 + t*cl.speed;
+      const r = cl.r0 + Math.sin(t*0.15 + cl.phase)*cl.breathe;
+      cl.spr.position.set(Math.cos(ang)*r, cl.y0 + Math.sin(t*0.5+cl.phase)*0.06, Math.sin(ang)*r);
+      cl.spr.material.rotation += dt*cl.spin;
     });
   }
 

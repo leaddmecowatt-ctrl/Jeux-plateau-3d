@@ -11,6 +11,11 @@
 :root{
   --gold:#e9c34a; --gold-bright:#ffe27a; --black:#0a0a0a; --black2:#161208;
   --blue:#1a56db; --red:#e0323f; --white:#f7fbff; --ink:#1a1204;
+  /* Identité de l'arène (vert Rayquaza / blanc nuage) : utilisée pour
+     tout ce qui est ambiant et toujours visible (titre, nom du lieu,
+     fond de la page). --gold reste pour les moments "récompense"
+     (gain, carte gradée) — voir la même logique dans board3d.js. */
+  --arena:#2fae74; --arena-bright:#7ce8b3;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;width:100%;height:100%;background:#000;font-family:Arial,Helvetica,sans-serif}
@@ -19,9 +24,9 @@ body{overflow:hidden;color:#fff}
   width:100vw;height:100dvh;overflow:hidden;
   display:flex;flex-direction:column;
   background-image:
-    radial-gradient(circle at 50% 38%,rgba(233,195,74,.16),transparent 34%),
-    linear-gradient(#120d02 0 16%,#1c1608 44%,#000000 100%),
-    url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNjAiIGhlaWdodD0iMTYwIj4KICA8ZyBmaWxsPSJub25lIiBzdHJva2U9InJnYmEoMjMzLDE5NSw3NCwwLjE2KSIgc3Ryb2tlLXdpZHRoPSIyLjIiPgogICAgPGNpcmNsZSBjeD0iMzQiIGN5PSIzNCIgcj0iMTUiLz4KICAgIDxsaW5lIHgxPSIxOSIgeTE9IjM0IiB4Mj0iNDkiIHkyPSIzNCIvPgogICAgPGNpcmNsZSBjeD0iMzQiIGN5PSIzNCIgcj0iNC41Ii8+CiAgPC9nPgogIDxwYXRoIGQ9Ik0xMTggMTggTDEwOCA0MCBMMTIwIDQwIEwxMDYgNjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyMzMsMTk1LDc0LDAuMTUpIiBzdHJva2Utd2lkdGg9IjIuNCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHRleHQgeD0iMjAiIHk9IjEyMCIgZm9udC1mYW1pbHk9Ikdlb3JnaWEsc2VyaWYiIGZvbnQtc2l6ZT0iMTMiIGZvbnQtd2VpZ2h0PSI5MDAiIGxldHRlci1zcGFjaW5nPSIxIiBmaWxsPSJyZ2JhKDIzMywxOTUsNzQsMC4xMikiPlBJS0FKQUNLUE9UPC90ZXh0Pgo8L3N2Zz4=");
+    radial-gradient(circle at 50% 38%,rgba(47,174,116,.14),transparent 34%),
+    linear-gradient(#04120c 0 16%,#081a12 44%,#000000 100%),
+    url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNjAiIGhlaWdodD0iMTYwIj4KICA8ZyBmaWxsPSJub25lIiBzdHJva2U9InJnYmEoNzksMjE0LDE1MCwwLjE2KSIgc3Ryb2tlLXdpZHRoPSIyLjIiPgogICAgPGNpcmNsZSBjeD0iMzQiIGN5PSIzNCIgcj0iMTUiLz4KICAgIDxsaW5lIHgxPSIxOSIgeTE9IjM0IiB4Mj0iNDkiIHkyPSIzNCIvPgogICAgPGNpcmNsZSBjeD0iMzQiIGN5PSIzNCIgcj0iNC41Ii8+CiAgPC9nPgogIDxwYXRoIGQ9Ik0xMTggMTggTDEwOCA0MCBMMTIwIDQwIEwxMDYgNjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSg3OSwyMTQsMTUwLDAuMTUpIiBzdHJva2Utd2lkdGg9IjIuNCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHRleHQgeD0iMjAiIHk9IjEyMCIgZm9udC1mYW1pbHk9Ikdlb3JnaWEsc2VyaWYiIGZvbnQtc2l6ZT0iMTMiIGZvbnQtd2VpZ2h0PSI5MDAiIGxldHRlci1zcGFjaW5nPSIxIiBmaWxsPSJyZ2JhKDc5LDIxNCwxNTAsMC4xMikiPlBJS0FKQUNLUE9UPC90ZXh0Pgo8L3N2Zz4=");
   background-repeat:no-repeat,no-repeat,repeat;
   background-size:auto,auto,160px 160px;
   animation:bgDrift 90s linear infinite;
@@ -45,8 +50,8 @@ body{overflow:hidden;color:#fff}
 }
 .brand{
   position:absolute;left:50%;top:2px;transform:translateX(-50%);
-  font-size:11px;font-weight:900;letter-spacing:.14em;color:var(--gold-bright);
-  text-shadow:0 0 8px rgba(255,226,122,.6);pointer-events:none;
+  font-size:11px;font-weight:900;letter-spacing:.14em;color:var(--arena-bright);
+  text-shadow:0 0 8px rgba(124,232,179,.6);pointer-events:none;
 }
 
 /* zone principale = décor de stade + plateau 3D + panneau latéral */
@@ -94,6 +99,26 @@ body{overflow:hidden;color:#fff}
   background:radial-gradient(circle,rgba(255,255,255,.95),rgba(190,225,255,.5) 45%,transparent 75%);
   box-shadow:0 0 46px 16px rgba(180,225,255,.35);
 }
+
+/* Dragon décoratif original (silhouette inspirée de l'ambiance
+   Pokémon "serpent des cieux", pas une reprise de l'illustration
+   d'une carte) qui survole lentement l'arrière-plan, derrière le
+   plateau (z-index sous .board-row) — jamais devant les cases. */
+.rayquaza-wrap{
+  position:absolute;left:-10%;top:6%;width:62%;max-width:440px;
+  opacity:.5;pointer-events:none;will-change:transform;
+  animation:dragonFly 62s ease-in-out infinite;
+}
+@keyframes dragonFly{
+  0%,100%{ transform:translate(0,10%) rotate(-4deg); }
+  22%{ transform:translate(60%,-6%) rotate(3deg); }
+  45%{ transform:translate(95%,26%) rotate(-3deg); }
+  68%{ transform:translate(58%,52%) rotate(4deg); }
+  86%{ transform:translate(14%,30%) rotate(-2deg); }
+}
+.rayquaza{ width:100%;height:auto;display:block;animation:dragonBob 4.6s ease-in-out infinite; }
+@keyframes dragonBob{ 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-4%); } }
+@media (prefers-reduced-motion: reduce){ .rayquaza-wrap,.rayquaza{ animation:none; } }
 
 /* Pokéballs et cartes mystères qui tombent en continu dans les
    marges de gauche/droite (jamais au-dessus du plateau, qui a un
@@ -229,9 +254,9 @@ button:active:not(:disabled){transform:translateY(1px)}
   font-family:'Cinzel',Georgia,'Times New Roman',serif;font-weight:900;
   font-size:clamp(15px,4.2vw,24px);letter-spacing:.06em;text-transform:uppercase;
   text-align:center;white-space:nowrap;
-  background:linear-gradient(180deg,#fff6d8 10%,var(--gold-bright) 55%,var(--gold) 100%);
-  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:var(--gold-bright);
-  filter:drop-shadow(0 0 10px rgba(255,226,122,.55)) drop-shadow(0 2px 2px rgba(0,0,0,.7));
+  background:linear-gradient(180deg,#eafff2 10%,var(--arena-bright) 55%,var(--arena) 100%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:var(--arena-bright);
+  filter:drop-shadow(0 0 10px rgba(124,232,179,.55)) drop-shadow(0 2px 2px rgba(0,0,0,.7));
   opacity:0;transform:translateY(10px) scale(.94);
   transition:opacity .45s cubic-bezier(.22,.9,.32,1), transform .45s cubic-bezier(.22,.9,.32,1);
 }
@@ -472,6 +497,24 @@ if(new URLSearchParams(location.search).get('view')==='display'){
       <div class="stad-mountain m2"></div>
       <div class="stad-light left"><span class="beam"></span><span class="glow"></span></div>
       <div class="stad-light right"><span class="beam"></span><span class="glow"></span></div>
+      <div class="rayquaza-wrap">
+        <svg class="rayquaza" viewBox="0 0 360 140" xmlns="http://www.w3.org/2000/svg">
+          <path d="M15,95 C 55,35 85,125 130,80 C 165,45 190,110 225,75 C 250,50 265,68 285,55"
+                fill="none" stroke="#2fae74" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M15,95 C 55,35 85,125 130,80 C 165,45 190,110 225,75 C 250,50 265,68 285,55"
+                fill="none" stroke="#1c7d4f" stroke-width="17" stroke-linecap="round" stroke-dasharray="1 22"/>
+          <polygon points="60,63 46,44 52,70" fill="#e85fa0" opacity=".85"/>
+          <polygon points="140,96 128,118 152,110" fill="#e85fa0" opacity=".85"/>
+          <polygon points="203,58 196,36 214,50" fill="#e85fa0" opacity=".85"/>
+          <ellipse cx="97" cy="76" rx="6" ry="12" fill="#f6d8e6" opacity=".8" transform="rotate(-35 97 76)"/>
+          <ellipse cx="176" cy="71" rx="6" ry="12" fill="#f6d8e6" opacity=".8" transform="rotate(20 176 71)"/>
+          <polygon points="285,55 316,40 306,52 318,48 300,66" fill="#2fae74"/>
+          <line x1="292" y1="48" x2="300" y2="34" stroke="#1c7d4f" stroke-width="4" stroke-linecap="round"/>
+          <line x1="298" y1="52" x2="310" y2="40" stroke="#1c7d4f" stroke-width="4" stroke-linecap="round"/>
+          <circle cx="303" cy="53" r="3.4" fill="#fff"/>
+          <circle cx="304" cy="53" r="1.6" fill="#0a0a0a"/>
+        </svg>
+      </div>
     </div>
 
     <!-- Pokéballs et cartes mystères qui tombent doucement dans les
