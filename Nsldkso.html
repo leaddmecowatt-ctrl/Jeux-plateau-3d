@@ -95,6 +95,38 @@ body{overflow:hidden;color:#fff}
   box-shadow:0 0 46px 16px rgba(180,225,255,.35);
 }
 
+/* Pokéballs et cartes mystères qui tombent en continu dans les
+   marges de gauche/droite (jamais au-dessus du plateau, qui a un
+   z-index supérieur) — clin d'œil au visuel du teaser TikTok. */
+.bg-fall{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+.fall-ball,.fall-card{
+  position:absolute;top:-12%;opacity:0;filter:blur(1px);
+  animation-name:fallDrift;animation-timing-function:linear;animation-iteration-count:infinite;
+}
+@keyframes fallDrift{
+  0%{transform:translateY(0) rotate(0deg);opacity:0}
+  8%{opacity:.4}
+  92%{opacity:.4}
+  100%{transform:translateY(115vh) rotate(320deg);opacity:0}
+}
+.fall-ball{
+  width:34px;height:34px;border-radius:50%;
+  background:linear-gradient(180deg,#f04249 0 46%,#1a1204 46% 54%,#fff 54%);
+  border:3px solid #1a1204;box-shadow:0 0 10px rgba(0,0,0,.4);
+}
+.fall-ball::after{
+  content:"";position:absolute;left:50%;top:50%;width:32%;height:32%;border-radius:50%;
+  background:#fff;border:2px solid #1a1204;transform:translate(-50%,-50%);
+}
+.fall-card{
+  width:30px;height:42px;border-radius:5px;
+  background:linear-gradient(160deg,#2a2005,#0c0a02);border:2px solid var(--gold);
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Cinzel',Georgia,serif;font-weight:900;color:var(--gold-bright);font-size:17px;
+  box-shadow:0 0 10px rgba(0,0,0,.4);
+}
+@media (prefers-reduced-motion: reduce){ .fall-ball,.fall-card{ display:none; } }
+
 .board-col{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;flex:1 1 auto;min-height:0}
 .board-wrap{
   width:min(96vw,86vh,720px);
@@ -417,6 +449,21 @@ if(new URLSearchParams(location.search).get('view')==='display'){
       <div class="stad-mountain m2"></div>
       <div class="stad-light left"><span class="beam"></span><span class="glow"></span></div>
       <div class="stad-light right"><span class="beam"></span><span class="glow"></span></div>
+    </div>
+
+    <!-- Pokéballs et cartes mystères qui tombent doucement dans les
+         marges de gauche/droite, façon teaser TikTok — jamais devant
+         le plateau (z-index sous .board-row, et confinées aux bords
+         pour ne jamais passer devant lui). -->
+    <div class="bg-fall" aria-hidden="true">
+      <div class="fall-ball" style="left:4%;width:38px;height:38px;animation-duration:14s;animation-delay:-2s"></div>
+      <div class="fall-card" style="left:9%;animation-duration:17s;animation-delay:-8s">?</div>
+      <div class="fall-ball" style="left:3%;width:28px;height:28px;animation-duration:11s;animation-delay:-5s"></div>
+      <div class="fall-card" style="left:6%;animation-duration:19s;animation-delay:-1s">?</div>
+      <div class="fall-ball" style="right:5%;width:44px;height:44px;animation-duration:16s;animation-delay:-9s"></div>
+      <div class="fall-card" style="right:10%;animation-duration:13s;animation-delay:-4s">?</div>
+      <div class="fall-ball" style="right:9%;width:26px;height:26px;animation-duration:20s;animation-delay:-12s"></div>
+      <div class="fall-card" style="right:3%;animation-duration:15s;animation-delay:-6s">?</div>
     </div>
 
     <div class="board-row">
