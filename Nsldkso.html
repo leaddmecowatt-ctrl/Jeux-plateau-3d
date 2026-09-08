@@ -127,6 +127,22 @@ body{overflow:hidden;color:#fff}
 }
 @media (prefers-reduced-motion: reduce){ .fall-ball,.fall-card{ display:none; } }
 
+/* Nuages blancs qui dérivent lentement en arrière-plan, façon nuage
+   volant façon Nimbus — décor seulement, jamais devant le plateau. */
+.bg-clouds{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+.cloud{
+  position:absolute;width:180px;opacity:.32;filter:blur(.3px);
+  animation-name:cloudDrift;animation-timing-function:linear;animation-iteration-count:infinite;
+}
+.cloud.c1{ top:8%;  width:210px; animation-duration:46s; animation-delay:-4s; }
+.cloud.c2{ top:24%; width:140px; opacity:.24; animation-duration:60s; animation-delay:-24s; }
+.cloud.c3{ top:4%;  width:160px; opacity:.28; animation-duration:53s; animation-delay:-38s; }
+@keyframes cloudDrift{
+  0%{ transform:translateX(-30vw); }
+  100%{ transform:translateX(130vw); }
+}
+@media (prefers-reduced-motion: reduce){ .cloud{ display:none; } }
+
 .board-col{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;flex:1 1 auto;min-height:0}
 .board-wrap{
   width:min(96vw,86vh,720px);
@@ -305,6 +321,22 @@ html.display-mode .display-badge{ display:block; }
   transition:opacity .08s ease-out;
 }
 .impact-flash.hit{ opacity:.55; transition:opacity .04s ease-out; }
+
+/* Éclair qui zèbre l'écran sur les gros lots, en plus des confettis. */
+.lightning-bolt{
+  position:fixed;top:6%;left:50%;width:min(38vw,180px);z-index:91;
+  transform:translateX(-50%) scale(.7);opacity:0;pointer-events:none;
+  filter:drop-shadow(0 0 18px rgba(255,226,122,.9));
+}
+.lightning-bolt.strike{ animation:boltStrike .8s ease-out; }
+@keyframes boltStrike{
+  0%{ opacity:0; transform:translateX(-50%) scale(.6); }
+  15%{ opacity:1; transform:translateX(-50%) scale(1.05); }
+  30%{ opacity:.25; }
+  40%{ opacity:1; }
+  65%{ opacity:1; transform:translateX(-50%) scale(1.1); }
+  100%{ opacity:0; transform:translateX(-50%) scale(1.2); }
+}
 .mini-card .face{
   position:absolute;inset:0;border-radius:8px;backface-visibility:hidden;
   display:flex;align-items:center;justify-content:center;
@@ -464,6 +496,25 @@ if(new URLSearchParams(location.search).get('view')==='display'){
       <div class="fall-card" style="right:3%;animation-duration:15s;animation-delay:-6s">?</div>
     </div>
 
+    <!-- Nuages blancs façon "nuage volant" qui traversent lentement
+         l'arrière-plan, toujours derrière le plateau. -->
+    <div class="bg-clouds" aria-hidden="true">
+      <svg class="cloud c1" viewBox="0 0 200 100"><use href="#cloudShape"/></svg>
+      <svg class="cloud c2" viewBox="0 0 200 100"><use href="#cloudShape"/></svg>
+      <svg class="cloud c3" viewBox="0 0 200 100"><use href="#cloudShape"/></svg>
+      <svg width="0" height="0" style="position:absolute">
+        <defs>
+          <g id="cloudShape">
+            <path d="M20,70 Q5,70 5,55 Q5,40 22,40 Q24,20 46,20 Q64,20 70,36
+                     Q90,32 96,50 Q112,48 112,64 Q112,76 98,76 L28,76
+                     Q20,76 20,70 Z
+                     M96,56 Q140,52 160,58 Q150,64 130,62 Q108,64 96,60 Z"
+                  fill="#ffffff"/>
+          </g>
+        </defs>
+      </svg>
+    </div>
+
     <div class="board-row">
       <div class="board-col">
         <div class="board-wrap" id="boardWrap">
@@ -511,6 +562,18 @@ if(new URLSearchParams(location.search).get('view')==='display'){
 
   <div class="display-badge">🖥️ Écran public — lecture seule</div>
   <div class="impact-flash" id="impactFlash" aria-hidden="true"></div>
+  <div class="lightning-bolt" id="lightningBolt" aria-hidden="true">
+    <svg viewBox="0 0 100 160" preserveAspectRatio="xMidYMid meet">
+      <polygon points="58,0 18,90 46,90 32,160 88,60 56,60" fill="url(#boltGrad)"/>
+      <defs>
+        <linearGradient id="boltGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#fff6d8"/>
+          <stop offset=".5" stop-color="#ffe27a"/>
+          <stop offset="1" stop-color="#e9c34a"/>
+        </linearGradient>
+      </defs>
+    </svg>
+  </div>
 
   <div class="card-draw-overlay" id="cardDrawOverlay" aria-hidden="true">
     <div class="card-draw-title">Tirage en cours…</div>

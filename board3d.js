@@ -1143,6 +1143,13 @@ const cardDrawOverlay = document.getElementById('cardDrawOverlay');
 const cardGrid = document.getElementById('cardGrid');
 const cardDrawTotal = document.getElementById('cardDrawTotal');
 const impactFlash = document.getElementById('impactFlash');
+const lightningBolt = document.getElementById('lightningBolt');
+function triggerLightning(){
+  if(!lightningBolt || reduceMotion) return;
+  lightningBolt.classList.remove('strike'); void lightningBolt.offsetWidth;
+  lightningBolt.classList.add('strike');
+  setTimeout(()=>lightningBolt.classList.remove('strike'), 850);
+}
 
 /* ---------- Rendement cible (entièrement automatique, invisible) :
    comme le taux de reversement affiché sur une vraie machine à sous,
@@ -1548,6 +1555,20 @@ if(winBtn) winBtn.addEventListener('click', ()=>{
   broadcastSync({type:'celebrate', catKey:cat});
 });
 
+/* Raccourcis clavier pour piloter le jeu sans viser précisément les
+   boutons à l'écran (pratique en filmant en direct) : A = démarrer,
+   B = tirer les cartes, C = recommencer, D = valider le lot remporté.
+   Ignorés si on est en train de taper dans un champ de texte. */
+window.addEventListener('keydown', (e)=>{
+  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  if(tag==='INPUT' || tag==='TEXTAREA') return;
+  const k = e.key.toLowerCase();
+  if(k==='a'){ if(startBtn && !startBtn.hidden) startBtn.click(); }
+  else if(k==='b'){ if(!validate.disabled) validate.click(); }
+  else if(k==='c'){ resetBtn.click(); }
+  else if(k==='d'){ if(winBtn && !winBtn.hidden) winBtn.click(); }
+});
+
 if(syncChannel && isDisplay){
   syncChannel.onmessage = (e)=>{
     const m = e.data || {};
@@ -1630,14 +1651,19 @@ function spawnParticles(level){
   const W = celebCanvas.width, H = celebCanvas.height;
   const count = [0,24,40,60,90,140][level];
   const colors = level>=4 ? ['#ffe27a','#fff2c2','#ffffff','#ffd200'] : ['#ffe27a','#e0323f','#1a56db','#ffffff'];
+  // À partir du niveau 3, une partie des particules laisse une traînée
+  // façon étincelle de feu d'artifice plutôt qu'un simple confetti.
+  const sparkShare = level>=4 ? 0.55 : (level>=3 ? 0.35 : 0);
   for(let i=0;i<count;i++){
     const ang = Math.random()*Math.PI*2;
     const spd = (2+Math.random()*5) * (1+level*0.25);
+    const isSpark = Math.random() < sparkShare;
     celebParticles.push({
-      x:W/2, y:H*0.4, vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd - 2,
-      g: 0.12+Math.random()*0.06, size: 3+Math.random()*5,
+      x:W/2, y:H*0.4, px:W/2, py:H*0.4, vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd - 2,
+      g: 0.12+Math.random()*0.06, size: isSpark ? 2+Math.random()*2 : 3+Math.random()*5,
       color: colors[(Math.random()*colors.length)|0], life:1, decay: 0.006+Math.random()*0.006,
-      shape: Math.random()<0.5?'rect':'circle', rot:Math.random()*Math.PI, vr:(Math.random()-0.5)*0.3
+      shape: Math.random()<0.5?'rect':'circle', rot:Math.random()*Math.PI, vr:(Math.random()-0.5)*0.3,
+      spark:isSpark
     });
   }
 }
@@ -1647,13 +1673,19 @@ function celebFrame(){
   const W = celebCanvas.width, H = celebCanvas.height;
   celebCtx.clearRect(0,0,W,H);
   celebParticles.forEach(p=>{
+    p.px = p.x; p.py = p.y;
     p.x += p.vx; p.y += p.vy; p.vy += p.g; p.life -= p.decay; p.rot += p.vr;
     celebCtx.save();
     celebCtx.globalAlpha = Math.max(0,p.life);
-    celebCtx.translate(p.x,p.y); celebCtx.rotate(p.rot);
-    celebCtx.fillStyle = p.color;
-    if(p.shape==='rect') celebCtx.fillRect(-p.size/2,-p.size/2,p.size,p.size*0.6);
-    else { celebCtx.beginPath(); celebCtx.arc(0,0,p.size/2,0,Math.PI*2); celebCtx.fill(); }
+    if(p.spark){
+      celebCtx.strokeStyle = p.color; celebCtx.lineWidth = p.size;
+      celebCtx.beginPath(); celebCtx.moveTo(p.px,p.py); celebCtx.lineTo(p.x,p.y); celebCtx.stroke();
+    } else {
+      celebCtx.translate(p.x,p.y); celebCtx.rotate(p.rot);
+      celebCtx.fillStyle = p.color;
+      if(p.shape==='rect') celebCtx.fillRect(-p.size/2,-p.size/2,p.size,p.size*0.6);
+      else { celebCtx.beginPath(); celebCtx.arc(0,0,p.size/2,0,Math.PI*2); celebCtx.fill(); }
+    }
     celebCtx.restore();
   });
   celebParticles = celebParticles.filter(p=>p.life>0 && p.y<H+50);
@@ -1783,6 +1815,7 @@ function celebrate(catKey, forcedCard, opts){
   const effectiveLevel = rareCardDrawn ? 5 : level;
   const bursts = effectiveLevel;
   for(let b=0;b<bursts;b++){ setTimeout(()=>spawnParticles(effectiveLevel), b*220); }
+  if(effectiveLevel>=3){ triggerLightning(); if(effectiveLevel>=4) setTimeout(triggerLightning, 380); }
   celebEndAt = performance.now() + 1400 + effectiveLevel*350;
   if(!celebRAF) celebFrame();
   setTimeout(()=>{ celeb.classList.remove('shake'); }, rareCardDrawn ? 900 : 700);
