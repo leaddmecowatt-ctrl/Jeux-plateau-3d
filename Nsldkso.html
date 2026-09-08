@@ -410,14 +410,11 @@ html.display-mode .display-badge{ display:block; }
    commandes restent compactes pour lui laisser toute la place. ---------- */
 @media(max-width:480px){
   .main-row{padding:2px 6px 4px;overflow-y:auto;-webkit-overflow-scrolling:touch}
-  /* les commandes sont masquées (pilotage 100% au clavier) : plus
-     besoin de garder les boutons atteignables. Un cadre nettement
-     plus haut que large ne grossit pas le plateau à l'écran (la
-     caméra recule pour tout garder visible et ça ne fait que révéler
-     plus de décor vide en haut/bas) — pour qu'il occupe vraiment le
-     plus de place possible, on le garde proche du carré et on pousse
-     la largeur/hauteur au maximum. */
-  .board-wrap{width:min(99vw,94vh,760px);aspect-ratio:1/1}
+  /* les commandes sont masquées (pilotage 100% au clavier) : le
+     cadre peut être plus haut que large — board3d.js ne recule plus
+     la caméra à fond pour ce ratio, donc le plateau grandit vraiment
+     au lieu de laisser du vide en haut/bas. */
+  .board-wrap{width:min(99vw,94vh,760px);aspect-ratio:2/3}
   .startbtn{padding:8px;font-size:12px}
   .controls-panel{padding:6px}
   .validate{font-size:12px;padding:8px}

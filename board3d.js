@@ -438,18 +438,17 @@ controls.enablePan = false;
 controls.autoRotate = !reduceMotion;
 controls.autoRotateSpeed = 0.55;
 
-/* Sur un écran portrait étroit (téléphone), le plateau carré ne
-   remplit qu'une petite bande au centre si on garde le cadrage
-   large par défaut (la caméra a un champ de vision vertical fixe,
-   donc un cadre plus haut que large réduit surtout le champ
-   horizontal et rogne les bords). On recule la caméra pour garder
-   tout le plateau visible en largeur — l'effet bonus est que ça
-   révèle plus de décor en haut/bas et que le plateau occupe
-   presque tout l'écran au lieu de laisser de grandes bandes vides. */
+/* Sur un écran portrait étroit (téléphone), le cadre est plus haut
+   que large. Reculer la caméra pile assez pour ne jamais rogner un
+   bord (facteur = 1/aspect) garde tout visible mais rapetisse le
+   plateau et laisse de grandes bandes vides en haut/bas. On ne
+   recule que partiellement (racine carrée, plafonnée) : le plateau
+   reste bien plus grand à l'écran, quitte à rogner très légèrement
+   les coins les plus excentrés sur les cadres très hauts. */
 {
   const aspect0 = wrap.clientWidth / wrap.clientHeight;
   if(aspect0 > 0 && aspect0 < 1){
-    const factor = Math.min(1/aspect0, 2.2);
+    const factor = Math.min(Math.pow(1/aspect0, 0.5), 1.6);
     const dir = camera.position.clone().sub(controls.target).normalize();
     const dist = camera.position.distanceTo(controls.target) * factor;
     camera.position.copy(controls.target).add(dir.multiplyScalar(dist));
