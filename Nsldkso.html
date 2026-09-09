@@ -22,6 +22,14 @@ body{overflow:hidden;color:#fff}
   background-repeat:no-repeat;
   background-size:cover;
   background-position:99% top;
+  animation:bgDrift 42s ease-in-out infinite alternate;
+}
+@keyframes bgDrift{
+  0%{ background-position:78% top; }
+  100%{ background-position:100% top; }
+}
+@media (prefers-reduced-motion: reduce){
+  #app{ animation:none; }
 }
 
 /* HUD haut */
