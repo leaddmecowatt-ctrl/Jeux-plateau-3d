@@ -1014,6 +1014,7 @@ let currentIndex = -1; // -1 = au départ, pas encore sur le plateau
 let moving = false;
 let generation = 0;
 let finished = false;
+let overshotBust = false; // dépassé la case 40 sans tomber pile dessus : aucun lot
 
 function tileAt(idx){ return idx===-1 ? START_NODE : tiles[idx]; }
 
@@ -1037,26 +1038,21 @@ const clock = new THREE.Clock();
    pas de retour à la case 1, la partie s'arrête là. */
 let walk = null;
 
-/* Calcule la case d'arrivée d'un déplacement de `count` cases depuis
-   `fromIdx`, avec REBOND sur la case 40 : dépasser la case finale ne
-   fait pas gagner le jackpot "par dépassement", le surplus repart en
-   arrière d'autant (comme un pion qui rebondit en bout de plateau) —
-   sans ça, un joueur qui recalcule toujours la meilleure option finit
-   presque systématiquement par atteindre la case 40 quel que soit le
-   tirage, ce qui casse complètement l'équilibre du jeu. Un recul qui
-   dépasserait la case 1 s'arrête simplement là (pas de rebond vers
-   l'avant, ce n'est pas exploitable de la même façon). */
+/* Un dépassement de la case 40 (tirage qui va plus loin que la case
+   finale) ne fait pas rebondir le pion en arrière : il n'y a alors
+   aucun lot cette manche-là, comme un pion qui tombe hors du plateau
+   — seul un tirage qui atterrit exactement dessus remporte le
+   jackpot final. `isOvershoot` détecte ce cas avant de déplacer le
+   pion ; `landingIndex` se contente ensuite de plafonner la case
+   d'arrivée aux bords du plateau (0 à 39). */
+function isOvershoot(fromIdx, count){
+  if(count<=0) return false;
+  const start = fromIdx === -1 ? 0 : fromIdx;
+  return start+count > 39;
+}
 function landingIndex(fromIdx, count){
-  let idx = fromIdx === -1 ? 0 : fromIdx;
-  let dir = count >= 0 ? 1 : -1;
-  const n = Math.abs(count);
-  for(let i=0;i<n;i++){
-    let next = idx + dir;
-    if(dir>0 && next>39){ dir=-1; next=idx-1; }
-    else if(dir<0 && next<0){ break; }
-    idx = next;
-  }
-  return idx;
+  const start = fromIdx === -1 ? 0 : fromIdx;
+  return count>=0 ? Math.min(39, start+count) : Math.max(0, start+count);
 }
 
 function startWalk(fromIdx, count, stepDuration){
@@ -1064,21 +1060,18 @@ function startWalk(fromIdx, count, stepDuration){
   // "0" séparée) : un lancer de N doit donc avancer de N cases
   // PLEINES depuis la case 1, comme depuis n'importe quelle autre
   // case déjà atteinte. `count` peut être négatif (cartes "Reculez
-  // de N cases") : le pion recule alors case par case. Un dépassement
-  // de la case 40 fait rebondir le pion en arrière du surplus (voir
-  // landingIndex) au lieu de s'arrêter net dessus.
+  // de N cases"). Un dépassement de la case 40 (ou un recul avant la
+  // case 1) plafonne simplement la marche à la case limite.
   const startPos = fromIdx === -1 ? 0 : fromIdx;
-  let dir = count >= 0 ? 1 : -1;
-  const n = Math.abs(count);
+  const dir = count >= 0 ? 1 : -1;
+  const maxSteps = dir>0 ? (39-startPos) : startPos;
+  const n = Math.min(Math.abs(count), maxSteps);
   const path = [ tiles[startPos] ];
   const indices = [ fromIdx ];
   let idx = startPos;
   let steps = 0;
   for(let i=0;i<n;i++){
-    let next = idx + dir;
-    if(dir>0 && next>39){ dir=-1; next=idx-1; }
-    else if(dir<0 && next<0){ break; }
-    idx = next;
+    idx += dir;
     path.push(tiles[idx]);
     indices.push(idx);
     steps++;
@@ -1516,7 +1509,7 @@ function placeLabel(idx){
 
 function updateWinButton(){
   if(!winBtn) return;
-  const onPrize = currentIndex>=0 && !moving;
+  const onPrize = currentIndex>=0 && !moving && !overshotBust;
   const cat = onPrize ? tiles[currentIndex].catKey : null;
   // Chance / Caisse Communautaire se révèlent tout seuls (pas de
   // bouton à cliquer, la partie continue automatiquement après).
@@ -1544,6 +1537,7 @@ async function move(forcedCount, forcedCard){
   validate.disabled = true;
   if(winBtn) winBtn.hidden = true;
   const count = forcedCount!=null ? forcedCount : 1;
+  const overshot = isOvershoot(currentIndex, count);
   const destIdx = landingIndex(currentIndex, count);
   const destCat = tiles[destIdx].catKey;
   // Si la case d'arrivée est Chance/Caisse, on tire la carte TOUT DE
@@ -1572,7 +1566,12 @@ async function move(forcedCount, forcedCard){
     placeTokenInstant(destIdx);
     setActive(destIdx);
   }
-  if(currentIndex===39){
+  overshotBust = overshot;
+  if(overshot){
+    statusEl.textContent = '💨 Dépassé la case 40 — aucun lot cette manche !';
+    finished = true;
+    if(winBtn) winBtn.hidden = true;
+  } else if(currentIndex===39){
     statusEl.textContent = '🏆 Arrivé à '+placeLabel(39)+' — JACKPOT FINAL !';
     finished = true;
   } else {
@@ -1607,6 +1606,7 @@ async function resolveChanceChest(myGen, forcedCard){
 
   if(card.effect && card.effect.type==='move' && card.effect.delta){
     const goingForward = card.effect.delta>0;
+    const overshot = isOvershoot(idx, card.effect.delta);
     statusEl.textContent = 'La carte le fait '+(goingForward?'avancer':'reculer')+' automatiquement de '+Math.abs(card.effect.delta)+' case'+(Math.abs(card.effect.delta)>1?'s':'')+'…';
     const w = startWalk(idx, card.effect.delta, HOP_DURATION);
     await wait(w.totalTime*1000 + 30);
@@ -1618,7 +1618,12 @@ async function resolveChanceChest(myGen, forcedCard){
       placeTokenInstant(expectedIdx);
       setActive(expectedIdx);
     }
-    if(currentIndex===39){
+    overshotBust = overshot;
+    if(overshot){
+      statusEl.textContent = '💨 Dépassé la case 40 — aucun lot cette manche !';
+      finished = true;
+      if(winBtn) winBtn.hidden = true;
+    } else if(currentIndex===39){
       statusEl.textContent = '🏆 Arrivé à '+placeLabel(39)+' — JACKPOT FINAL !';
       finished = true;
     } else {
@@ -1633,6 +1638,7 @@ function restart(){
   generation++;
   moving = false;
   finished = false;
+  overshotBust = false;
   walk = null;
   currentIndex = -1;
   player.root.scale.set(1,1,1);
