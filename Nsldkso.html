@@ -18,18 +18,27 @@ body{overflow:hidden;color:#fff}
 #app{
   width:100vw;height:100dvh;overflow:hidden;
   display:flex;flex-direction:column;
+  position:relative;
+}
+#app::before{
+  content:"";
+  position:absolute;
+  inset:-9%;
   background-image:url("./assets/bg/dragon_sky.jpg");
   background-repeat:no-repeat;
   background-size:cover;
   background-position:99% top;
-  animation:bgDrift 42s ease-in-out infinite alternate;
+  z-index:0;
+  pointer-events:none;
+  animation:bgDrift 30s ease-in-out infinite alternate;
 }
 @keyframes bgDrift{
-  0%{ background-position:78% top; }
-  100%{ background-position:100% top; }
+  0%{ transform:translate(-2.5%,-1.5%) scale(1.02); }
+  50%{ transform:translate(2.5%,1.5%) scale(1.04); }
+  100%{ transform:translate(-2.5%,-1.5%) scale(1.02); }
 }
 @media (prefers-reduced-motion: reduce){
-  #app{ animation:none; }
+  #app::before{ animation:none; }
 }
 
 /* HUD haut */
