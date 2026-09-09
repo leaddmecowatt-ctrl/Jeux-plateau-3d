@@ -151,6 +151,43 @@ function roundRectPath(ctx,x,y,w,h,r){
   ctx.roundRect(x,y,w,h,r);
 }
 
+/* Affiche le nom d'un lot dans le bandeau en bas de case, en
+   réduisant la taille de police jusqu'à ce qu'il tienne sur une
+   ligne, ou en le répartissant sur deux lignes si même la taille
+   minimale ne suffit pas (noms plus longs que les prix qu'ils
+   remplacent, ex. "Butin de la Ligue Pokémon"). Suppose
+   ctx.textAlign='center' et ctx.textBaseline='middle' déjà réglés. */
+function drawFittedBandLabel(ctx, text, cx, cy, maxWidth, maxFont, minFont){
+  const family = 'Arial,Helvetica,sans-serif';
+  let fontSize = maxFont;
+  ctx.font = '900 '+fontSize+'px '+family;
+  while(fontSize > minFont && ctx.measureText(text).width > maxWidth){
+    fontSize -= 2;
+    ctx.font = '900 '+fontSize+'px '+family;
+  }
+  if(ctx.measureText(text).width <= maxWidth){
+    ctx.fillText(text, cx, cy);
+    return;
+  }
+  // ne tient toujours pas : coupe en 2 lignes au meilleur espace
+  const words = text.split(' ');
+  let bestSplit = Math.max(1, Math.ceil(words.length/2)), bestDiff = Infinity;
+  for(let i=1;i<words.length;i++){
+    const diff = Math.abs(words.slice(0,i).join(' ').length - words.slice(i).join(' ').length);
+    if(diff < bestDiff){ bestDiff = diff; bestSplit = i; }
+  }
+  const line1 = words.slice(0,bestSplit).join(' '), line2 = words.slice(bestSplit).join(' ');
+  fontSize = minFont;
+  ctx.font = '900 '+fontSize+'px '+family;
+  while(fontSize > minFont*0.7 && (ctx.measureText(line1).width>maxWidth || ctx.measureText(line2).width>maxWidth)){
+    fontSize -= 1.5;
+    ctx.font = '900 '+fontSize+'px '+family;
+  }
+  const lineGap = fontSize*1.08;
+  ctx.fillText(line1, cx, cy - lineGap/2);
+  ctx.fillText(line2, cx, cy + lineGap/2);
+}
+
 /* Texture "carte plate" : la vraie photo du lot, encadrée noir & or,
    utilisée directement sur la face de la case (cartes communes,
    boosters 8€, alternatives) pour ne pas surcharger le plateau. */
@@ -203,15 +240,15 @@ function getFlatPhotoFace(catKey, accentColor, badge){
   roundRectPath(ctx,15,15,size-30,size-30,r*0.85);
   ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.stroke();
 
-  // bandeau valeur en bas
+  // bandeau nom du lot en bas (jamais le prix)
   const bandH = size*0.22;
   ctx.fillStyle = accentColor;
   roundRectPath(ctx,9,size-9-bandH,size-18,bandH,r*0.7); ctx.fill();
   ctx.fillStyle = '#0c0c0c'; ctx.globalAlpha=.28;
   roundRectPath(ctx,9,size-9-bandH,size-18,bandH,r*0.7); ctx.fill(); ctx.globalAlpha=1;
-  ctx.fillStyle = '#fff9e6'; ctx.font='900 '+(size*0.1)+'px Arial,Helvetica,sans-serif';
+  ctx.fillStyle = '#fff9e6';
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText(CATS[catKey].value, size/2, size-9-bandH/2+2);
+  drawFittedBandLabel(ctx, CATS[catKey].label, size/2, size-9-bandH/2+2, size-18-size*0.06, size*0.088, size*0.045);
 
   if(badge){
     ctx.font=(size*0.15)+'px "Segoe UI Emoji","Apple Color Emoji",Arial,sans-serif';
