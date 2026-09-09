@@ -1234,7 +1234,7 @@ function saveTotals(){
   }catch(e){}
 }
 
-/* Bouton "Nouveau live" : repart d'un compteur vierge pour un nouveau
+/* Bouton "Démarrage cagnotte" : repart d'un compteur vierge pour un nouveau
    direct, puis disparaît pour ne pas être recliqué par erreur en
    cours de stream. Réapparaît au prochain chargement de page. */
 const resetBankBtn = document.getElementById('resetBankBtn');
@@ -1616,7 +1616,7 @@ if(winBtn) winBtn.addEventListener('click', ()=>{
 /* Raccourcis clavier pour piloter le jeu sans viser précisément les
    boutons à l'écran (pratique en filmant en direct) : A = démarrer,
    B = tirer les cartes, C = recommencer la partie, D = valider le lot
-   remporté, E = nouveau live (remet la cagnotte à 0€). Ignorés si on
+   remporté, E = démarrage cagnotte (remet la cagnotte à 0€). Ignorés si on
    est en train de taper dans un champ de texte. */
 window.addEventListener('keydown', (e)=>{
   const tag = (document.activeElement && document.activeElement.tagName) || '';
