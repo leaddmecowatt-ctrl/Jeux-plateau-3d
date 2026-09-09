@@ -49,13 +49,13 @@ function outwardYaw(r,c){
    40 cases, catégories confirmées avec l'utilisateur.
    ========================================================================= */
 const CATS = {
-  commune:     { label:'Carte commune / holo rare', value:'~0,68€',  tier:'flat',  swatch:'bronze' },
-  booster8:    { label:'Booster Pokémon',            value:'8€',      tier:'flat',  swatch:'blue'   },
-  alternative: { label:'Carte alternative',          value:'~7,20€',  tier:'flat',  swatch:'red'    },
-  gradee:      { label:'★ Carte gradée aléatoire',   value:'20-80€',  tier:'float', swatch:'gold'   },
-  booster50:   { label:'GROS BOOSTER',               value:'50€',     tier:'float', swatch:'gold'   },
-  etb:         { label:'JACKPOT — ETB',               value:'150€',    tier:'float', swatch:'gold'   },
-  jackpot300:  { label:'JACKPOT FINAL — carte',        value:'300€',    tier:'float', swatch:'gold'   },
+  commune:     { label:'Lot classique',    value:'~0,68€',  tier:'flat',  swatch:'bronze' },
+  booster8:    { label:'Booster',          value:'8€',      tier:'flat',  swatch:'blue'   },
+  alternative: { label:'Lot alternatif',   value:'~7,20€',  tier:'flat',  swatch:'red'    },
+  gradee:      { label:'Carte gradée',     value:'20-80€',  tier:'float', swatch:'gold'   },
+  booster50:   { label:'Gros booster',     value:'50€',     tier:'float', swatch:'gold'   },
+  etb:         { label:'ETB',              value:'150€',    tier:'float', swatch:'gold'   },
+  jackpot300:  { label:'Carte Darkrai',    value:'300€',    tier:'float', swatch:'gold'   },
   chance:      { label:'Chance',                     value:'tirage',  tier:'glyph', swatch:'purple' },
   chest:       { label:'Caisse Communautaire',       value:'tirage',  tier:'glyph', swatch:'green'  },
   prison:      { label:'ALLEZ EN PRISON',            value:'0€',      tier:'glyph', swatch:'danger' },
@@ -1794,15 +1794,16 @@ function showLotPreview(catKey){
 }
 
 /* Annonce propre à chaque catégorie de lot (plutôt qu'un message
-   générique par palier) : le nom du lot réellement gagné s'affiche. */
+   générique par palier) : le nom du lot réellement gagné s'affiche,
+   sans jamais mentionner de prix. */
 const CATEGORY_MESSAGES = {
-  commune:     '🃏 UNE CARTE DANS LA POCHE !',
-  booster8:    '🎁 BOOSTER POKÉMON GAGNÉ !',
-  alternative: '✨ CARTE ALTERNATIVE GAGNÉE ! ✨',
-  gradee:      '⭐ CARTE GRADÉE DÉCROCHÉE ! ⭐',
-  booster50:   '🎰 MINI JACKPOT ! 🎰',
-  etb:         '🎰 MAJOR JACKPOT ! 🎰',
-  jackpot300:  '👑 GRAND JACKPOT ! 👑',
+  commune:     '🃏 LOT CLASSIQUE GAGNÉ !',
+  booster8:    '🎁 BOOSTER GAGNÉ !',
+  alternative: '✨ LOT ALTERNATIF GAGNÉ ! ✨',
+  gradee:      '⭐ CARTE GRADÉE GAGNÉE ! ⭐',
+  booster50:   '🎁 GROS BOOSTER GAGNÉ ! 🎁',
+  etb:         '🎁 ETB GAGNÉ ! 🎁',
+  jackpot300:  '👑 CARTE DARKRAI GAGNÉE ! 👑',
 };
 
 function celebrate(catKey, forcedCard, opts){
