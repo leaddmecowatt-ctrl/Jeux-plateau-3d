@@ -52,7 +52,7 @@ body{overflow:hidden;color:#fff}
 /* ---------- décor d'arène (bâtiment, montagnes, projecteurs), tout
    dessiné en CSS pure — un décor original, pas une image reprise
    ailleurs, et sans logo ou signe de marque. ---------- */
-.stadium{position:absolute;inset:-4% -6% -2%;overflow:hidden;pointer-events:none;z-index:0}
+.stadium{display:none}
 .stad-haze{
   position:absolute;left:0;right:0;top:8%;height:30%;
   background:linear-gradient(180deg,rgba(140,190,255,.16),rgba(140,190,255,0));
@@ -86,7 +86,7 @@ body{overflow:hidden;color:#fff}
 /* Pokéballs et cartes mystères qui tombent en continu dans les
    marges de gauche/droite (jamais au-dessus du plateau, qui a un
    z-index supérieur) — clin d'œil au visuel du teaser TikTok. */
-.bg-fall{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+.bg-fall{display:none}
 .fall-ball,.fall-card{
   position:absolute;top:-12%;opacity:0;filter:blur(1px);
   animation-name:fallDrift;animation-timing-function:linear;animation-iteration-count:infinite;
@@ -117,7 +117,7 @@ body{overflow:hidden;color:#fff}
 
 /* Nuages blancs qui dérivent lentement en arrière-plan, façon nuage
    volant façon Nimbus — décor seulement, jamais devant le plateau. */
-.bg-clouds{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+.bg-clouds{display:none}
 .cloud{
   position:absolute;width:180px;opacity:.5;
   filter:drop-shadow(0 0 7px rgba(255,226,122,.5));
