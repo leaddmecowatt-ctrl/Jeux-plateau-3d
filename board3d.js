@@ -219,6 +219,21 @@ function getFlatPhotoFace(catKey, accentColor, badge){
   if(img){
     const pad = size*0.028;
     const bw = size-2*pad, bh = size-2*pad-size*0.19;
+
+    // Fond flouté "cover" : la même image, agrandie et floutée pour
+    // remplir tout l'espace, sert de fond derrière la version nette —
+    // ça évite les bandes noires sur les côtés (carte plus étroite que
+    // la case) sans jamais rogner la carte elle-même au premier plan
+    // (technique classique type Spotify/Apple Music).
+    const coverScale = Math.max(bw/img.width, bh/img.height) * 1.15;
+    const cw = img.width*coverScale, ch = img.height*coverScale;
+    ctx.save();
+    roundRectPath(ctx, pad, pad, bw, bh, r*0.7); ctx.clip();
+    ctx.filter = 'blur(26px) saturate(1.25) brightness(0.55)';
+    ctx.drawImage(img, pad+(bw-cw)/2, pad+(bh-ch)/2, cw, ch);
+    ctx.filter = 'none';
+    ctx.restore();
+
     // "contain" fit (jamais "cover") : on voit toujours la carte/l'objet
     // en entier, jamais coupé en haut ou en bas, tout en remplissant
     // au maximum la case (zoom optimal sans rognage).
