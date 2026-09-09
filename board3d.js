@@ -757,6 +757,30 @@ boardGroup.add(tileRivetInst);
 const _instDummy = new THREE.Object3D();
 const _yAxis = new THREE.Vector3(0,1,0);
 
+/* ---------- Garde-fou "coins toujours visibles" ----------
+   Les 4 coins réels du plateau (centre de la case de coin + débord du
+   collier doré) sont mesurés à chaque image, projetés dans l'écran :
+   si un coin s'approche du bord du cadre (auto-rotation ou glissé
+   utilisateur à un angle prononcé, voire secousse du séisme Darkrai),
+   la caméra recule juste assez pour le ramener dans une petite marge
+   de sécurité — jamais plus, jamais moins, et jamais quand ce n'est
+   pas nécessaire. On ne touche ni au FOV (déjà utilisé par le
+   punch-zoom des tirages) ni à l'état interne d'OrbitControls : on se
+   contente de repousser la position caméra à chaque image, après que
+   tout le reste (auto-rotation, séisme...) a fixé sa position pour
+   cette image. */
+const SAFE_CORNER_OVERHANG = (TILE+0.09)/2; // demi-largeur du collier doré au-delà du centre de case
+const SAFE_ZONE_LOCAL_POINTS = [];
+[[11,11],[11,1],[1,1],[1,11]].forEach(([r,c])=>{
+  const w = toWorld(r,c);
+  const ox = w.x + Math.sign(w.x)*SAFE_CORNER_OVERHANG;
+  const oz = w.z + Math.sign(w.z)*SAFE_CORNER_OVERHANG;
+  SAFE_ZONE_LOCAL_POINTS.push(new THREE.Vector3(ox, 0, oz), new THREE.Vector3(ox, 0.55, oz));
+});
+const SAFE_ZONE_MARGIN = 0.93; // marge de sécurité en coordonnées écran normalisées (-1..1)
+let safeZoomK = 1;
+const _safeZonePoint = new THREE.Vector3();
+
 for(let i=0;i<40;i++){
   const {r,c} = ringPos(i);
   const world = toWorld(r,c);
@@ -1290,6 +1314,29 @@ function animate(){
     boardGroup.position.set(0,0,0); boardGroup.rotation.z = 0;
     boardShards.visible = false;
     shakeUntil = 0; shatterUntil = 0; shatterActive = false;
+  }
+
+  // Garde-fou "coins toujours visibles" : mesure réelle après que tout
+  // le reste (auto-rotation, séisme...) a fixé la position de cette
+  // image, puis recul minimal de la caméra si un coin s'approche du
+  // bord de l'écran (cf. déclaration de SAFE_ZONE_LOCAL_POINTS plus haut).
+  boardGroup.updateMatrixWorld(true);
+  camera.updateMatrixWorld(true);
+  let safeMaxAbs = 0;
+  for(const p of SAFE_ZONE_LOCAL_POINTS){
+    _safeZonePoint.copy(p).applyMatrix4(boardGroup.matrixWorld).project(camera);
+    safeMaxAbs = Math.max(safeMaxAbs, Math.abs(_safeZonePoint.x), Math.abs(_safeZonePoint.y));
+  }
+  const neededSafeK = Number.isFinite(safeMaxAbs) ? Math.max(1, safeMaxAbs/SAFE_ZONE_MARGIN) : 1;
+  // Recul immédiat dès qu'un coin approche du bord (aucun retard toléré
+  // sur cette garantie) ; retour à la normale en douceur une fois le
+  // danger passé (là, un léger lissage évite un "saut" visible).
+  if(neededSafeK > safeZoomK) safeZoomK = neededSafeK;
+  else safeZoomK += (neededSafeK - safeZoomK) * Math.min(1, dt*8);
+  if(safeZoomK > 1.0005){
+    const toCam = camera.position.clone().sub(controls.target);
+    camera.position.copy(controls.target).addScaledVector(toCam, safeZoomK);
+    camera.updateMatrixWorld(true);
   }
 
   renderer.render(scene, camera);
