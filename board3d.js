@@ -852,51 +852,6 @@ tileCollarInst.instanceMatrix.needsUpdate = true;
 tileBezelInst.instanceMatrix.needsUpdate = true;
 tileRivetInst.instanceMatrix.needsUpdate = true;
 
-/* ---------- Effet spécial "Carte Darkrai" (jackpot final) : le
-   plateau tremble comme un petit séisme puis vole en éclats, avant
-   de se reformer pile au moment où la carte apparaît avec les
-   feux d'artifice de la célébration. Les éclats sont un seul
-   InstancedMesh (léger), la physique est juste une chute + une
-   vitesse radiale, pas une vraie fracture du maillage. ---------- */
-const SHAKE_MS = 850, SHATTER_MS = 1000;
-const SHARD_ROWS = 12, SHARD_COUNT = SHARD_ROWS*SHARD_ROWS;
-const shardMat = new THREE.MeshStandardMaterial({
-  color:0x171208, roughness:.55, metalness:.35,
-  emissive:new THREE.Color(GOLD), emissiveIntensity:.15,
-  transparent:true
-});
-const boardShards = new THREE.InstancedMesh(new THREE.BoxGeometry(0.82,0.14,0.82), shardMat, SHARD_COUNT);
-boardShards.visible = false;
-boardShards.frustumCulled = false;
-scene.add(boardShards);
-const shardState = [];
-{
-  const span = 11*CELL, cell = span/SHARD_ROWS, half = (SHARD_ROWS-1)/2;
-  for(let row=0; row<SHARD_ROWS; row++){
-    for(let col=0; col<SHARD_ROWS; col++){
-      shardState.push({ x0:(col-half)*cell, z0:(row-half)*cell });
-    }
-  }
-}
-let shakeUntil = 0, shatterUntil = 0, shatterActive = false;
-const _shardDummy = new THREE.Object3D();
-function startBoardShatter(){
-  const now = clock.getElapsedTime();
-  shakeUntil = now + SHAKE_MS/1000;
-  shatterUntil = shakeUntil + SHATTER_MS/1000;
-  shatterActive = false;
-  shardMat.opacity = 1;
-  shardState.forEach(s=>{
-    s.x = s.x0; s.y = 0.1; s.z = s.z0;
-    s.rx = 0; s.ry = Math.random()*Math.PI; s.rz = 0;
-    const ang = Math.atan2(s.z0, s.x0) + (Math.random()-0.5)*0.6;
-    const spd = 3 + Math.random()*3.5;
-    s.vx = Math.cos(ang)*spd; s.vz = Math.sin(ang)*spd;
-    s.vy = 4 + Math.random()*3;
-    s.vrx = (Math.random()-0.5)*6; s.vry = (Math.random()-0.5)*6; s.vrz = (Math.random()-0.5)*6;
-  });
-}
-
 /* Le "Départ" n'est pas une case à part hors plateau : le joueur
    démarre directement sur la case 1 elle-même (pas de lot réclamé
    tant qu'aucun lancer n'a eu lieu), avec juste un anneau doré au
@@ -1216,36 +1171,6 @@ function animate(){
     player.torso.position.y += (0.3 - player.torso.position.y)*0.2;
     player.root.rotation.x *= 0.8;
     player.torso.rotation.z *= 0.8;
-  }
-
-  // Séisme puis éclatement du plateau (effet "Carte Darkrai")
-  if(shakeUntil>0 && t<shakeUntil){
-    const mag = Math.min(1, (shakeUntil-t)/(SHAKE_MS/1000)) * 0.12;
-    boardGroup.position.set((Math.random()-0.5)*mag, 0, (Math.random()-0.5)*mag);
-    boardGroup.rotation.z = (Math.random()-0.5)*mag*0.15;
-  } else if(shatterUntil>0 && t<shatterUntil){
-    if(!shatterActive){
-      shatterActive = true;
-      boardGroup.position.set(0,0,0); boardGroup.rotation.z = 0;
-      boardGroup.visible = false;
-      boardShards.visible = true;
-    }
-    const remain = shatterUntil - t, fadeStart = 0.35;
-    shardMat.opacity = remain < fadeStart ? Math.max(0, remain/fadeStart) : 1;
-    shardState.forEach((s,i)=>{
-      s.x += s.vx*dt; s.z += s.vz*dt; s.y += s.vy*dt; s.vy -= 9*dt;
-      s.rx += s.vrx*dt; s.ry += s.vry*dt; s.rz += s.vrz*dt;
-      _shardDummy.position.set(s.x, s.y, s.z);
-      _shardDummy.rotation.set(s.rx, s.ry, s.rz);
-      _shardDummy.updateMatrix();
-      boardShards.setMatrixAt(i, _shardDummy.matrix);
-    });
-    boardShards.instanceMatrix.needsUpdate = true;
-  } else if(shatterUntil>0){
-    boardGroup.visible = true;
-    boardGroup.position.set(0,0,0); boardGroup.rotation.z = 0;
-    boardShards.visible = false;
-    shakeUntil = 0; shatterUntil = 0; shatterActive = false;
   }
 
   renderer.render(scene, camera);
@@ -1906,20 +1831,6 @@ function celebrate(catKey, forcedCard, opts){
     return;
   }
   if(!celeb || !celebCanvas) return;
-
-  // Carte Darkrai (jackpot final) : le plateau tremble puis vole en
-  // éclats avant que la carte n'apparaisse — la suite de la
-  // célébration (photo, feux d'artifice) démarre une fois le
-  // plateau reformé, pile au bon moment.
-  if(catKey==='jackpot300'){
-    startBoardShatter();
-    setTimeout(()=>revealCelebration(catKey, forcedCard, level), SHAKE_MS+SHATTER_MS+120);
-    return;
-  }
-  revealCelebration(catKey, forcedCard, level);
-}
-
-function revealCelebration(catKey, forcedCard, level){
   resizeCelebCanvas();
   if(celebMain) celebMain.hidden = false;
   celeb.dataset.level = String(level);
