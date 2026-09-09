@@ -11,11 +11,6 @@
 :root{
   --gold:#e9c34a; --gold-bright:#ffe27a; --black:#0a0a0a; --black2:#161208;
   --blue:#1a56db; --red:#e0323f; --white:#f7fbff; --ink:#1a1204;
-  /* Identité de l'arène (vert Rayquaza / blanc nuage) : utilisée pour
-     tout ce qui est ambiant et toujours visible (titre, nom du lieu,
-     fond de la page). --gold reste pour les moments "récompense"
-     (gain, carte gradée) — voir la même logique dans board3d.js. */
-  --arena:#2fae74; --arena-bright:#7ce8b3;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;width:100%;height:100%;background:#000;font-family:Arial,Helvetica,sans-serif}
@@ -24,9 +19,9 @@ body{overflow:hidden;color:#fff}
   width:100vw;height:100dvh;overflow:hidden;
   display:flex;flex-direction:column;
   background-image:
-    radial-gradient(circle at 50% 38%,rgba(47,174,116,.14),transparent 34%),
-    linear-gradient(#04120c 0 16%,#081a12 44%,#000000 100%),
-    url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNjAiIGhlaWdodD0iMTYwIj4KICA8ZyBmaWxsPSJub25lIiBzdHJva2U9InJnYmEoNzksMjE0LDE1MCwwLjE2KSIgc3Ryb2tlLXdpZHRoPSIyLjIiPgogICAgPGNpcmNsZSBjeD0iMzQiIGN5PSIzNCIgcj0iMTUiLz4KICAgIDxsaW5lIHgxPSIxOSIgeTE9IjM0IiB4Mj0iNDkiIHkyPSIzNCIvPgogICAgPGNpcmNsZSBjeD0iMzQiIGN5PSIzNCIgcj0iNC41Ii8+CiAgPC9nPgogIDxwYXRoIGQ9Ik0xMTggMTggTDEwOCA0MCBMMTIwIDQwIEwxMDYgNjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSg3OSwyMTQsMTUwLDAuMTUpIiBzdHJva2Utd2lkdGg9IjIuNCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHRleHQgeD0iMjAiIHk9IjEyMCIgZm9udC1mYW1pbHk9Ikdlb3JnaWEsc2VyaWYiIGZvbnQtc2l6ZT0iMTMiIGZvbnQtd2VpZ2h0PSI5MDAiIGxldHRlci1zcGFjaW5nPSIxIiBmaWxsPSJyZ2JhKDc5LDIxNCwxNTAsMC4xMikiPlBJS0FKQUNLUE9UPC90ZXh0Pgo8L3N2Zz4=");
+    radial-gradient(circle at 50% 38%,rgba(233,195,74,.16),transparent 34%),
+    linear-gradient(#120d02 0 16%,#1c1608 44%,#000000 100%),
+    url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNjAiIGhlaWdodD0iMTYwIj4KICA8ZyBmaWxsPSJub25lIiBzdHJva2U9InJnYmEoMjMzLDE5NSw3NCwwLjE2KSIgc3Ryb2tlLXdpZHRoPSIyLjIiPgogICAgPGNpcmNsZSBjeD0iMzQiIGN5PSIzNCIgcj0iMTUiLz4KICAgIDxsaW5lIHgxPSIxOSIgeTE9IjM0IiB4Mj0iNDkiIHkyPSIzNCIvPgogICAgPGNpcmNsZSBjeD0iMzQiIGN5PSIzNCIgcj0iNC41Ii8+CiAgPC9nPgogIDxwYXRoIGQ9Ik0xMTggMTggTDEwOCA0MCBMMTIwIDQwIEwxMDYgNjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyMzMsMTk1LDc0LDAuMTUpIiBzdHJva2Utd2lkdGg9IjIuNCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHRleHQgeD0iMjAiIHk9IjEyMCIgZm9udC1mYW1pbHk9Ikdlb3JnaWEsc2VyaWYiIGZvbnQtc2l6ZT0iMTMiIGZvbnQtd2VpZ2h0PSI5MDAiIGxldHRlci1zcGFjaW5nPSIxIiBmaWxsPSJyZ2JhKDIzMywxOTUsNzQsMC4xMikiPlBJS0FKQUNLUE9UPC90ZXh0Pgo8L3N2Zz4=");
   background-repeat:no-repeat,no-repeat,repeat;
   background-size:auto,auto,160px 160px;
   animation:bgDrift 90s linear infinite;
@@ -50,8 +45,8 @@ body{overflow:hidden;color:#fff}
 }
 .brand{
   position:absolute;left:50%;top:2px;transform:translateX(-50%);
-  font-size:11px;font-weight:900;letter-spacing:.14em;color:var(--arena-bright);
-  text-shadow:0 0 8px rgba(124,232,179,.6);pointer-events:none;
+  font-size:11px;font-weight:900;letter-spacing:.14em;color:var(--gold-bright);
+  text-shadow:0 0 8px rgba(255,226,122,.6);pointer-events:none;
 }
 
 /* zone principale = décor de stade + plateau 3D + panneau latéral */
@@ -234,9 +229,9 @@ button:active:not(:disabled){transform:translateY(1px)}
   font-family:'Cinzel',Georgia,'Times New Roman',serif;font-weight:900;
   font-size:clamp(15px,4.2vw,24px);letter-spacing:.06em;text-transform:uppercase;
   text-align:center;white-space:nowrap;
-  background:linear-gradient(180deg,#eafff2 10%,var(--arena-bright) 55%,var(--arena) 100%);
-  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:var(--arena-bright);
-  filter:drop-shadow(0 0 10px rgba(124,232,179,.55)) drop-shadow(0 2px 2px rgba(0,0,0,.7));
+  background:linear-gradient(180deg,#fff6d8 10%,var(--gold-bright) 55%,var(--gold) 100%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:var(--gold-bright);
+  filter:drop-shadow(0 0 10px rgba(255,226,122,.55)) drop-shadow(0 2px 2px rgba(0,0,0,.7));
   opacity:0;transform:translateY(10px) scale(.94);
   transition:opacity .45s cubic-bezier(.22,.9,.32,1), transform .45s cubic-bezier(.22,.9,.32,1);
 }

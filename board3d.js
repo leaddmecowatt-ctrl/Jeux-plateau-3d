@@ -142,19 +142,9 @@ function loadImage(url){
 const LOT_IMAGES = {};
 await Promise.all(Object.entries(LOT_IMAGE_URLS).map(async ([k,url])=>{ LOT_IMAGES[k] = await loadImage(url); }));
 
-/* ---------- Palette noir & or, avec accents Pokémon bleu/blanc/rouge ----------
-   GOLD reste réservé aux moments "récompense" (cadre carte gradée/jackpot
-   façon slab, glows de gain) : un accent doré ponctuel qui ressort
-   davantage depuis que l'identité générale de l'arène est passée au
-   vert/blanc/rose (voir ARENA ci-dessous), plutôt qu'une suppression
-   totale de l'or qui aurait aussi effacé ce signal "objet précieux". */
+/* ---------- Palette noir & or, avec accents Pokémon bleu/blanc/rouge ---------- */
 const GOLD = '#e9c34a';
 const GOLD_BRIGHT = '#ffe27a';
-/* ---------- Identité de l'arène : vert Rayquaza / blanc nuage / rose,
-   utilisée pour tout ce qui est ambiant et toujours visible (cadre des
-   40 cases, plaque centrale) plutôt que pour les moments de gain. ---------- */
-const ARENA = '#2fae74';
-const ARENA_BRIGHT = '#8ff3c4';
 const SWATCH_COLORS = {
   bronze:'#a9793a', blue:'#2f6fdc', red:'#e0323f', purple:'#9a5fe0',
   green:'#33b46a', gold:'#e9c34a', danger:'#d62b2b',
@@ -204,7 +194,7 @@ function getFlatPhotoFace(catKey, caseNum, accentColor, badge){
   ctx.restore();
 
   roundRectPath(ctx,9,9,size-18,size-18,r);
-  ctx.lineWidth = 10; ctx.strokeStyle = ARENA; ctx.stroke();
+  ctx.lineWidth = 10; ctx.strokeStyle = GOLD; ctx.stroke();
   roundRectPath(ctx,15,15,size-30,size-30,r*0.85);
   ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.stroke();
 
@@ -615,13 +605,13 @@ function makeCenterPlateTexture(){
   const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
   const ctx = cvs.getContext('2d');
   const grad = ctx.createRadialGradient(size*0.5,size*0.4,size*0.05,size*0.5,size*0.5,size*0.66);
-  grad.addColorStop(0,'#0e2019'); grad.addColorStop(0.55,'#08120d'); grad.addColorStop(1,'#000000');
+  grad.addColorStop(0,'#241a06'); grad.addColorStop(0.55,'#120d02'); grad.addColorStop(1,'#000000');
   ctx.fillStyle = grad; ctx.fillRect(0,0,size,size);
 
-  // anneaux verts concentriques façon roue (identité Rayquaza)
+  // anneaux dorés concentriques façon roue
   for(let i=0;i<3;i++){
     ctx.beginPath(); ctx.arc(size/2,size/2,size*(0.46-i*0.07),0,Math.PI*2);
-    ctx.lineWidth = size*0.012; ctx.strokeStyle = i===1?ARENA_BRIGHT:ARENA; ctx.globalAlpha=0.85-i*0.15;
+    ctx.lineWidth = size*0.012; ctx.strokeStyle = i===1?GOLD_BRIGHT:GOLD; ctx.globalAlpha=0.85-i*0.15;
     ctx.stroke();
   }
   ctx.globalAlpha=1;
@@ -638,8 +628,8 @@ function makeCenterPlateTexture(){
   // texte PIKAJACKPOT
   ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.font='900 '+(size*0.108)+'px Arial,Helvetica,sans-serif';
-  ctx.fillStyle = ARENA_BRIGHT;
-  ctx.shadowColor = 'rgba(143,243,196,.9)'; ctx.shadowBlur = size*0.02;
+  ctx.fillStyle = GOLD_BRIGHT;
+  ctx.shadowColor = 'rgba(255,210,110,.9)'; ctx.shadowBlur = size*0.02;
   ctx.save();
   ctx.translate(size/2, size*0.53);
   ctx.fillText('PIKA', -size*0.001, -size*0.06);
@@ -790,189 +780,10 @@ for(let i=0;i<40;i++){
    sol pour marquer visuellement ce point de départ. */
 const START_NODE = tiles[0];
 {
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.56,0.03,8,28), new THREE.MeshBasicMaterial({color:0x8ff3c4}));
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.56,0.03,8,28), new THREE.MeshBasicMaterial({color:0xffe27a}));
   ring.rotation.x = Math.PI/2; ring.position.copy(START_NODE.world); ring.position.y = 0.03;
   boardGroup.add(ring);
 }
-
-/* ---------- Nuages du plateau : quelques petits nuages blancs qui
-   dérivent au-dessus de la plaque centrale (jamais sur les cases, ni
-   sur le texte PIKA JACKPOT). Ajoutés dans boardGroup pour rester
-   "attachés" à l'arène et suivre naturellement sa rotation. Sprites
-   simples (toujours face caméra) pour rester lisibles à tout angle,
-   sans le coût/la complexité d'un vrai relief 3D. */
-/* Même silhouette de nuage (bosses bien découpées, façon nuage de
-   bande dessinée) que celle utilisée pour les nuages d'arrière-plan
-   CSS de la page — pour que les nuages 3D du plateau et ceux du
-   décor se ressemblent vraiment, au lieu d'inventer une deuxième
-   forme (galets flous) qui ne correspond à rien. */
-const CLOUD_SVG_PATH = 'M20,70 Q5,70 5,55 Q5,40 22,40 Q24,20 46,20 Q64,20 70,36 Q90,32 96,50 Q112,48 112,64 Q112,76 98,76 L28,76 Q20,76 20,70 Z M96,56 Q140,52 160,58 Q150,64 130,62 Q108,64 96,60 Z';
-function makeCloudTexture(){
-  const w=460,h=260;
-  const cvs = document.createElement('canvas'); cvs.width=w; cvs.height=h;
-  const ctx = cvs.getContext('2d');
-  const path = new Path2D(CLOUD_SVG_PATH); // dessiné dans un repère 0..200 x 0..100
-  const instances = [
-    {x:60,  y:70,  s:1.55, r:0},
-    {x:250, y:150, s:1.75, r:0.03},
-    {x:330, y:70,  s:1.15, r:-0.04},
-  ];
-  function drawCloud(blurPx){
-    instances.forEach(inst=>{
-      ctx.save();
-      ctx.translate(inst.x, inst.y);
-      ctx.rotate(inst.r);
-      ctx.scale(inst.s, inst.s);
-      ctx.translate(-100,-50);
-      if(blurPx) ctx.filter = 'blur('+blurPx+'px)';
-      ctx.fillStyle = '#ffffff';
-      ctx.fill(path);
-      ctx.restore();
-    });
-  }
-  drawCloud(7);   // halo doux flouté (aspect duveteux)
-  drawCloud(0);   // cœur net et bien blanc par-dessus
-  // ombre très légère sous la masse, juste pour un peu de volume
-  ctx.globalCompositeOperation = 'source-atop';
-  const shade = ctx.createLinearGradient(0,h*0.55,0,h*0.98);
-  shade.addColorStop(0,'rgba(210,222,238,0)');
-  shade.addColorStop(1,'rgba(196,212,232,.22)');
-  ctx.fillStyle = shade;
-  ctx.fillRect(0,0,w,h);
-  ctx.globalCompositeOperation = 'source-over';
-  const tex = new THREE.CanvasTexture(cvs);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-const arenaClouds = [];
-const edgeClouds = [];
-let outerPerimeterPosAt;
-{
-  const cloudTex = makeCloudTexture();
-  // rayon tenu entre ~2.5 (largement hors du texte central, qui
-  // s'arrête vers ~1.2) et ~3.6 (avant le bord de la plaque à 4.5,
-  // donc jamais sur les cases à ~5) ; "breathe" (va-et-vient radial)
-  // volontairement petit pour ne jamais ramener un nuage vers le texte.
-  const CLOUD_ASPECT = 260/460;
-  const defs = [
-    {r:3.0, ang:0.4,  y:0.55, scale:1.1,  speed:.05,  spin:.05,  breathe:.1, opacity:.85},
-    {r:3.4, ang:2.3,  y:0.62, scale:0.9,  speed:-.04, spin:-.04, breathe:.09, opacity:.72},
-    {r:2.9, ang:4.1,  y:0.5,  scale:0.75, speed:.06,  spin:.07,  breathe:.1, opacity:.78},
-    {r:3.7, ang:5.4,  y:0.68, scale:1.25, speed:-.035,spin:-.03, breathe:.08,opacity:.68},
-    {r:3.2, ang:1.5,  y:0.58, scale:0.65, speed:.07,  spin:.08,  breathe:.11,opacity:.85},
-  ];
-  defs.forEach(d=>{
-    const mat = new THREE.SpriteMaterial({map:cloudTex, transparent:true, depthWrite:false, opacity:d.opacity});
-    const spr = new THREE.Sprite(mat);
-    spr.scale.set(d.scale*1.8, d.scale*1.8*CLOUD_ASPECT, 1);
-    spr.position.set(Math.cos(d.ang)*d.r, d.y, Math.sin(d.ang)*d.r);
-    boardGroup.add(spr);
-    arenaClouds.push({spr, r0:d.r, ang0:d.ang, y0:d.y, speed:d.speed, spin:d.spin, breathe:d.breathe, phase:Math.random()*Math.PI*2});
-  });
-
-  /* Contour élargi, juste au-delà des cases (piste lumineuse à 5.85
-     de rayon) : sert de piste à Rayquaza et à quelques nuages qui
-     longent le bord du plateau plutôt que de rester loin derrière —
-     "au niveau du plateau", comme demandé. */
-  const outerPerimeterPts = [];
-  {
-    const half = 6.3, perEdge = 13;
-    for(let i=0;i<perEdge;i++){ outerPerimeterPts.push([-half+(i/(perEdge-1))*half*2,-half]); }
-    for(let i=1;i<perEdge;i++){ outerPerimeterPts.push([half,-half+(i/(perEdge-1))*half*2]); }
-    for(let i=1;i<perEdge;i++){ outerPerimeterPts.push([half-(i/(perEdge-1))*half*2,half]); }
-    for(let i=1;i<perEdge-1;i++){ outerPerimeterPts.push([-half,half-(i/(perEdge-1))*half*2]); }
-  }
-  outerPerimeterPosAt = function(u){
-    const n = outerPerimeterPts.length;
-    const f = ((u%1)+1)%1*n;
-    const i0 = Math.floor(f), i1=(i0+1)%n, lp=f-i0;
-    const [x0,z0]=outerPerimeterPts[i0], [x1,z1]=outerPerimeterPts[i1];
-    return [x0+(x1-x0)*lp, z0+(z1-z0)*lp];
-  };
-
-  const edgeCloudDefs = [
-    {u0:0.03, y:0.5,  speed:1/95,   opacity:.92, scale:1.6},
-    {u0:0.14, y:0.62, speed:1/95,   opacity:.82, scale:1.15},
-    {u0:0.5,  y:0.55, speed:-1/110, opacity:.92, scale:1.6},
-    {u0:0.61, y:0.44, speed:-1/110, opacity:.8, scale:1.2},
-    {u0:0.32, y:0.5,  speed:1/130,  opacity:.55, scale:0.5},
-    {u0:0.82, y:0.5,  speed:-1/130, opacity:.55, scale:0.5},
-  ];
-  edgeCloudDefs.forEach(d=>{
-    const mat = new THREE.SpriteMaterial({map:cloudTex, transparent:true, depthWrite:false, opacity:d.opacity});
-    const spr = new THREE.Sprite(mat);
-    spr.scale.set(d.scale*1.8, d.scale*1.8*CLOUD_ASPECT, 1);
-    const [ex,ez] = outerPerimeterPosAt(d.u0);
-    spr.position.set(ex, d.y, ez);
-    boardGroup.add(spr);
-    edgeClouds.push({spr, u0:d.u0, y:d.y, speed:d.speed});
-  });
-}
-
-/* ---------- Rayquaza décoratif : silhouette originale inspirée de
-   l'ambiance Rayquaza (pas une reprise de l'illustration protégée
-   d'une carte), qui longe lentement le contour du plateau juste
-   au-delà des cases — attaché à boardGroup comme les nuages, donc
-   "au niveau du plateau" plutôt que loin en arrière-plan. ---------- */
-function makeRayquazaTexture(){
-  const w=640,h=220;
-  const cvs = document.createElement('canvas'); cvs.width=w; cvs.height=h;
-  const ctx = cvs.getContext('2d');
-  ctx.lineCap='round'; ctx.lineJoin='round';
-  function pathThrough(pts){
-    ctx.beginPath();
-    ctx.moveTo(pts[0][0],pts[0][1]);
-    for(let i=1;i<pts.length-1;i++){
-      const mx=(pts[i][0]+pts[i+1][0])/2, my=(pts[i][1]+pts[i+1][1])/2;
-      ctx.quadraticCurveTo(pts[i][0],pts[i][1],mx,my);
-    }
-    ctx.lineTo(pts[pts.length-1][0],pts[pts.length-1][1]);
-  }
-  const spine=[[20,150],[90,70],[160,170],[240,90],[320,155],[400,95],[470,130],[520,105]];
-  pathThrough(spine); ctx.strokeStyle='#2fae74'; ctx.lineWidth=36; ctx.stroke();
-  pathThrough(spine); ctx.strokeStyle='#57cf95'; ctx.lineWidth=12; ctx.stroke();
-  const ringPts=[[55,108],[130,118],[200,130],[280,120],[360,120],[440,112]];
-  ringPts.forEach(([x,y],i)=>{
-    ctx.save(); ctx.translate(x,y); ctx.rotate(-0.45+(i%2?0.15:-0.15));
-    ctx.fillStyle='#0c1a12'; ctx.beginPath(); ctx.ellipse(0,0,7,20,0,0,Math.PI*2); ctx.fill();
-    ctx.restore();
-  });
-  function fin(x,y,ang,len,color){
-    ctx.save(); ctx.translate(x,y); ctx.rotate(ang);
-    ctx.fillStyle=color;
-    ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(len,-len*0.4); ctx.lineTo(len*0.72,len*0.3); ctx.closePath(); ctx.fill();
-    ctx.restore();
-  }
-  fin(90,70,-2.05,38,'#ffd35c'); fin(240,90,-2.3,34,'#ffd35c'); fin(400,95,-2.1,36,'#ffd35c');
-  fin(160,170,2.05,30,'#e85fa0'); fin(320,155,1.85,30,'#e85fa0');
-  ctx.save();
-  ctx.translate(520,105);
-  ctx.fillStyle = '#2fae74';
-  ctx.beginPath();
-  ctx.moveTo(-24,-16); ctx.lineTo(30,-8); ctx.lineTo(46,4); ctx.lineTo(26,16); ctx.lineTo(-20,18); ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = '#ffd35c';
-  ctx.beginPath(); ctx.moveTo(-6,-15); ctx.lineTo(4,-44); ctx.lineTo(13,-13); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(11,-11); ctx.lineTo(27,-34); ctx.lineTo(24,-6); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = '#0c1a12'; ctx.lineWidth = 2.4;
-  ctx.beginPath(); ctx.moveTo(20,8); ctx.lineTo(40,6); ctx.stroke();
-  ctx.fillStyle = '#ff5b3d';
-  ctx.beginPath(); ctx.ellipse(22,-1,4.6,3.2,0.3,0,Math.PI*2); ctx.fill();
-  ctx.restore();
-  const tex = new THREE.CanvasTexture(cvs);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-const rayquaza = new THREE.Sprite(new THREE.SpriteMaterial({
-  map: makeRayquazaTexture(), transparent:true, depthWrite:false, opacity:.62
-}));
-rayquaza.scale.set(4.8, 4.8*(220/640), 1);
-{
-  const [rx,rz] = outerPerimeterPosAt(0);
-  rayquaza.position.set(rx, 0.5, rz);
-}
-boardGroup.add(rayquaza);
-const RAYQUAZA_SPEED = 1/70; // un tour complet du contour en ~70s
 
 /* ---------- Pion articulé (façon dresseur, sac à dos inclus) ---------- */
 function buildToken(){
@@ -1196,24 +1007,6 @@ function animate(){
       ol.spr.position.set(x,0.05,z);
       ol.spr.material.opacity = 0.85 + Math.sin(t*6)*0.15;
     });
-    arenaClouds.forEach(cl=>{
-      const ang = cl.ang0 + t*cl.speed;
-      const r = cl.r0 + Math.sin(t*0.15 + cl.phase)*cl.breathe;
-      cl.spr.position.set(Math.cos(ang)*r, cl.y0 + Math.sin(t*0.5+cl.phase)*0.06, Math.sin(ang)*r);
-      cl.spr.material.rotation += dt*cl.spin;
-    });
-    edgeClouds.forEach(cl=>{
-      const u = cl.u0 + t*cl.speed;
-      const [x,z] = outerPerimeterPosAt(u);
-      cl.spr.position.set(x, cl.y + Math.sin(t*0.4+cl.u0*10)*0.05, z);
-    });
-    {
-      const u = t*RAYQUAZA_SPEED;
-      const [x,z] = outerPerimeterPosAt(u);
-      const [x2,z2] = outerPerimeterPosAt(u+0.003);
-      rayquaza.position.set(x, 0.5 + Math.sin(t*0.6)*0.1, z);
-      rayquaza.material.rotation = Math.atan2(z2-z, x2-x);
-    }
   }
 
   // respiration + icônes/lots dynamiques
