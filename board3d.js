@@ -49,13 +49,13 @@ function outwardYaw(r,c){
    40 cases, catégories confirmées avec l'utilisateur.
    ========================================================================= */
 const CATS = {
-  commune:     { label:'Lot classique',    value:'~0,68€',  tier:'flat',  swatch:'bronze' },
-  booster8:    { label:'Booster',          value:'8€',      tier:'flat',  swatch:'blue'   },
-  alternative: { label:'Lot alternatif',   value:'~7,20€',  tier:'flat',  swatch:'red'    },
-  gradee:      { label:'Carte gradée',     value:'20-80€',  tier:'float', swatch:'gold'   },
-  booster50:   { label:'Gros booster',     value:'50€',     tier:'float', swatch:'gold'   },
-  etb:         { label:'ETB',              value:'150€',    tier:'float', swatch:'gold'   },
-  jackpot300:  { label:'Carte Darkrai',    value:'300€',    tier:'float', swatch:'gold'   },
+  commune:     { label:'Pioche du Prof. Chen',        value:'~0,68€',  tier:'flat',  swatch:'bronze' },
+  booster8:    { label:'Booster du Marchand',         value:'8€',      tier:'flat',  swatch:'blue'   },
+  alternative: { label:'Zone Safari',                 value:'~7,20€',  tier:'flat',  swatch:'red'    },
+  gradee:      { label:'Musée Pokémon',               value:'20-80€',  tier:'float', swatch:'gold'   },
+  booster50:   { label:'Butin de la Ligue Pokémon',   value:'50€',     tier:'float', swatch:'gold'   },
+  etb:         { label:'Coffre du Conseil des 4',     value:'150€',    tier:'float', swatch:'gold'   },
+  jackpot300:  { label:'Carte Darkrai',               value:'300€',    tier:'float', swatch:'gold'   },
   chance:      { label:'Chance',                     value:'tirage',  tier:'glyph', swatch:'purple' },
   chest:       { label:'Caisse Communautaire',       value:'tirage',  tier:'glyph', swatch:'green'  },
   prison:      { label:'ALLEZ EN PRISON',            value:'0€',      tier:'glyph', swatch:'danger' },
@@ -1797,12 +1797,12 @@ function showLotPreview(catKey){
    générique par palier) : le nom du lot réellement gagné s'affiche,
    sans jamais mentionner de prix. */
 const CATEGORY_MESSAGES = {
-  commune:     '🃏 LOT CLASSIQUE GAGNÉ !',
-  booster8:    '🎁 BOOSTER GAGNÉ !',
-  alternative: '✨ LOT ALTERNATIF GAGNÉ ! ✨',
-  gradee:      '⭐ CARTE GRADÉE GAGNÉE ! ⭐',
-  booster50:   '🎁 GROS BOOSTER GAGNÉ ! 🎁',
-  etb:         '🎁 ETB GAGNÉ ! 🎁',
+  commune:     '🃏 PIOCHE DU PROF. CHEN GAGNÉE ! 🃏',
+  booster8:    '🎁 BOOSTER DU MARCHAND GAGNÉ ! 🎁',
+  alternative: '✨ ZONE SAFARI GAGNÉE ! ✨',
+  gradee:      '⭐ MUSÉE POKÉMON GAGNÉ ! ⭐',
+  booster50:   '🎁 BUTIN DE LA LIGUE POKÉMON GAGNÉ ! 🎁',
+  etb:         '🎁 COFFRE DU CONSEIL DES 4 GAGNÉ ! 🎁',
   jackpot300:  '👑 CARTE DARKRAI GAGNÉE ! 👑',
 };
 
