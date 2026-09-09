@@ -1966,16 +1966,10 @@ function revealCelebration(catKey, forcedCard, level){
   }
 
   const effectiveLevel = rareCardDrawn ? 5 : level;
-  // Pioche du Prof. Chen et Booster du Marchand : reveal classique,
-  // sans confettis ni éclair (sauf carte rare tirée d'une Chance/
-  // Caisse, qui garde son effet quel que soit le lot obtenu).
-  const skipFx = !rareCardDrawn && (catKey==='commune' || catKey==='booster8');
-  if(!skipFx){
-    const bursts = effectiveLevel;
-    for(let b=0;b<bursts;b++){ setTimeout(()=>spawnParticles(effectiveLevel), b*220); }
-    if(effectiveLevel>=3){ triggerLightning(); if(effectiveLevel>=4) setTimeout(triggerLightning, 380); }
-  }
-  celebEndAt = performance.now() + (skipFx ? 1200 : 1400 + effectiveLevel*350);
+  const bursts = effectiveLevel;
+  for(let b=0;b<bursts;b++){ setTimeout(()=>spawnParticles(effectiveLevel), b*220); }
+  if(effectiveLevel>=3){ triggerLightning(); if(effectiveLevel>=4) setTimeout(triggerLightning, 380); }
+  celebEndAt = performance.now() + 1400 + effectiveLevel*350;
   if(!celebRAF) celebFrame();
   setTimeout(()=>{ celeb.classList.remove('shake'); }, rareCardDrawn ? 900 : 700);
 }
