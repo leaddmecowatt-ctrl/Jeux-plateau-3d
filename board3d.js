@@ -377,8 +377,12 @@ renderer.setClearAlpha(0);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+/* Le tone mapping filmic (ACES) adoucit/assombrit légèrement les
+   couleurs — pensé pour un fond noir, mais ça fait paraître le
+   plateau "terne" à côté de la photo vive qui l'entoure maintenant.
+   Exposure remontée pour que le plateau garde du punch. */
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.96;
+renderer.toneMappingExposure = 1.35;
 
 const scene = new THREE.Scene();
 
