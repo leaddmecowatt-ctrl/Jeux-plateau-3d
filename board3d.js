@@ -357,7 +357,10 @@ const hint3d = document.getElementById('hint3d');
 
 let renderer;
 try{
-  renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true, powerPreference:'high-performance' });
+  /* premultipliedAlpha:false évite le liseré sombre qui apparaît
+     sinon sur les bords antialiasés des cases/du centre, là où le
+     canvas transparent se fond avec la photo de fond derrière lui. */
+  renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true, premultipliedAlpha:false, powerPreference:'high-performance' });
 }catch(e){
   const fb = document.createElement('div');
   fb.className = 'gl-fallback';
