@@ -1811,9 +1811,14 @@ resetBtn.addEventListener('click', restart);
 if(startBtn) startBtn.addEventListener('click', startGame);
 if(winBtn) winBtn.addEventListener('click', ()=>{
   if(currentIndex<0) return;
-  const cat = fundedCategory(tiles[currentIndex].catKey);
-  celebrate(cat, null, {locked:true});
-  broadcastSync({type:'celebrate', catKey:cat});
+  const realCat = tiles[currentIndex].catKey;
+  // Le plafond de reversement continue de calculer et suivre le
+  // pourcentage payé exactement comme avant (mêmes 50%, même formule),
+  // mais on affiche et on remet toujours le vrai lot de la case tirée,
+  // jamais une version dégradée vers un palier moins cher.
+  fundedCategory(realCat);
+  celebrate(realCat, null, {locked:true});
+  broadcastSync({type:'celebrate', catKey:realCat});
 });
 
 /* Raccourcis clavier pour piloter le jeu sans viser précisément les
