@@ -674,6 +674,35 @@ const MOTION = {
   prison:    {bob:0.07, pulse:true},
 };
 
+/* Matériaux/géométries partagés par les 40 cases pour le socle
+   "compartiment encastré" (collerette dorée qui dépasse légèrement,
+   liseré noir en retrait, rivets aux coins) — un seul jeu d'objets
+   réutilisé partout, pour rester léger malgré le surcroît de détail. */
+const tileGoldMat = new THREE.MeshStandardMaterial({
+  color:new THREE.Color(GOLD), roughness:.32, metalness:.78,
+  emissive:new THREE.Color(GOLD), emissiveIntensity:.16
+});
+const tileBezelMat = new THREE.MeshStandardMaterial({color:0x0a0a0a, roughness:.5, metalness:.25});
+const tileCollarGeo = new THREE.BoxGeometry(TILE+0.09,0.04,TILE+0.09);
+const tileBezelGeo = new THREE.BoxGeometry(TILE*0.97,0.02,TILE*0.97);
+const tileRivetGeo = new THREE.CylinderGeometry(0.035,0.035,0.02,8);
+const RIVET_OFFSETS = [[-1,-1],[1,-1],[-1,1],[1,1]];
+
+// Ces trois éléments sont identiques sur les 40 cases (mêmes
+// géométrie/matériau, seule la position/rotation change) : un seul
+// InstancedMesh chacun plutôt que 40 (ou 160) mesh séparés, pour
+// garder le rendu léger malgré le surcroît de détail.
+const tileCollarInst = new THREE.InstancedMesh(tileCollarGeo, tileGoldMat, 40);
+tileCollarInst.castShadow = false; tileCollarInst.receiveShadow = false;
+boardGroup.add(tileCollarInst);
+const tileBezelInst = new THREE.InstancedMesh(tileBezelGeo, tileBezelMat, 40);
+tileBezelInst.receiveShadow = false;
+boardGroup.add(tileBezelInst);
+const tileRivetInst = new THREE.InstancedMesh(tileRivetGeo, tileGoldMat, 40*RIVET_OFFSETS.length);
+boardGroup.add(tileRivetInst);
+const _instDummy = new THREE.Object3D();
+const _yAxis = new THREE.Vector3(0,1,0);
+
 for(let i=0;i<40;i++){
   const {r,c} = ringPos(i);
   const world = toWorld(r,c);
@@ -695,16 +724,40 @@ for(let i=0;i<40;i++){
   baseTile.receiveShadow = true;
   group.add(baseTile);
 
+  // collerette dorée qui dépasse légèrement du corps coloré : donne
+  // au socle un vrai relief de "compartiment encastré" plutôt qu'une
+  // simple case plate, façon coffret physique
+  _instDummy.position.set(world.x, 0.10, world.z);
+  _instDummy.rotation.set(0, outwardYaw(r,c), 0);
+  _instDummy.updateMatrix();
+  tileCollarInst.setMatrixAt(i, _instDummy.matrix);
+
   const accentColor = SWATCH_COLORS[catDef.swatch];
   const sideMat = new THREE.MeshStandardMaterial({
     color:new THREE.Color(accentColor),roughness:.7,metalness:.12,
     emissive:new THREE.Color(accentColor),emissiveIntensity:.32
   });
-  const bodyTile = new THREE.Mesh(new THREE.BoxGeometry(TILE,0.14,TILE), sideMat);
-  bodyTile.position.y = 0.15;
+  const bodyTile = new THREE.Mesh(new THREE.BoxGeometry(TILE,0.08,TILE), sideMat);
+  bodyTile.position.y = 0.16;
   bodyTile.castShadow = true;
   bodyTile.receiveShadow = true;
   group.add(bodyTile);
+
+  // liseré noir en léger retrait entre le corps coloré et la carte,
+  // avec quatre rivets dorés aux coins façon plaque vissée
+  _instDummy.position.set(world.x, 0.21, world.z);
+  _instDummy.updateMatrix();
+  tileBezelInst.setMatrixAt(i, _instDummy.matrix);
+
+  const rivetOffset = TILE*0.40;
+  RIVET_OFFSETS.forEach(([dx,dz], k)=>{
+    const local = new THREE.Vector3(dx*rivetOffset, 0.222, dz*rivetOffset);
+    local.applyAxisAngle(_yAxis, outwardYaw(r,c));
+    _instDummy.position.set(world.x+local.x, local.y, world.z+local.z);
+    _instDummy.updateMatrix();
+    tileRivetInst.setMatrixAt(i*RIVET_OFFSETS.length+k, _instDummy.matrix);
+  });
+
   const tileTopY = 0.22;
 
   let faceTex;
@@ -778,6 +831,9 @@ for(let i=0;i<40;i++){
     breathePhase: ((r+c)%8)*0.4
   });
 }
+tileCollarInst.instanceMatrix.needsUpdate = true;
+tileBezelInst.instanceMatrix.needsUpdate = true;
+tileRivetInst.instanceMatrix.needsUpdate = true;
 
 /* Le "Départ" n'est pas une case à part hors plateau : le joueur
    démarre directement sur la case 1 elle-même (pas de lot réclamé
