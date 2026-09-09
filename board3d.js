@@ -357,10 +357,12 @@ const hint3d = document.getElementById('hint3d');
 
 let renderer;
 try{
-  /* premultipliedAlpha:false évite le liseré sombre qui apparaît
-     sinon sur les bords antialiasés des cases/du centre, là où le
-     canvas transparent se fond avec la photo de fond derrière lui. */
-  renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true, premultipliedAlpha:false, powerPreference:'high-performance' });
+  /* premultipliedAlpha:false causait une teinte visible sur tout ce
+     qui se voit à travers le canvas transparent (comparé au fond
+     direct hors du plateau) — revenu au comportement par défaut
+     (true), plus fidèle en couleur pour la composition avec la photo
+     derrière. */
+  renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true, powerPreference:'high-performance' });
 }catch(e){
   const fb = document.createElement('div');
   fb.className = 'gl-fallback';
