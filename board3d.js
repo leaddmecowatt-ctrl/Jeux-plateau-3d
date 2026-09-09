@@ -525,35 +525,13 @@ function addFloodlight(x,z){
 }
 [[7.5,7.5],[-7.5,7.5],[7.5,-7.5],[-7.5,-7.5]].forEach(([x,z])=>addFloodlight(x,z));
 
-/* ---------- Plinthe + plateau central ---------- */
+/* ---------- Plateau central ----------
+   Pas de plinthe/socle : le plateau (cases + centre) est isolé de
+   son environnement, sans aucune surface rectangulaire opaque ou
+   translucide autour — l'arrière-plan de la page doit être visible
+   directement sur les 4 côtés, jusqu'au contour réel des cases. */
 const boardGroup = new THREE.Group();
 scene.add(boardGroup);
-
-const plinthMat = new THREE.MeshStandardMaterial({color:0x0a0a0a,emissive:0x1c1204,emissiveIntensity:.25,roughness:.65,metalness:.25});
-const plinth = new THREE.Mesh(new THREE.BoxGeometry(11*CELL+0.7,0.5,11*CELL+0.7), plinthMat);
-plinth.position.y = -0.25;
-plinth.receiveShadow = true;
-plinth.castShadow = true;
-boardGroup.add(plinth);
-
-const rimGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(11*CELL+0.7,0.5,11*CELL+0.7));
-const rimLine = new THREE.LineSegments(rimGeo, new THREE.LineBasicMaterial({color:0xffd76a}));
-rimLine.position.copy(plinth.position);
-boardGroup.add(rimLine);
-
-/* petit liseré tricolore (clin d'oeil Pokémon bleu/blanc/rouge) au
-   pied du plinthe, discret sous le thème noir & or */
-{
-  const stripe = new THREE.Mesh(
-    new THREE.BoxGeometry(11*CELL+0.74,0.06,0.09),
-    new THREE.MeshStandardMaterial({color:0xffffff, roughness:.5})
-  );
-  [[0x1a56db,-0.10],[0xffffff,0],[0xe0323f,0.10]].forEach(([c,dz])=>{
-    const s = new THREE.Mesh(new THREE.BoxGeometry(11*CELL+0.74,0.02,0.03), new THREE.MeshStandardMaterial({color:c,roughness:.5}));
-    s.position.set(0,-0.49,(11*CELL+0.7)/2+0.05+dz);
-    boardGroup.add(s);
-  });
-}
 
 /* points lumineux dorés qui tournent en continu autour du plateau,
    façon roue de jeu télévisé (en plus du liseré de loupiotes fixes) */
