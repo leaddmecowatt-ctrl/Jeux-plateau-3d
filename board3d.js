@@ -1,9 +1,5 @@
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/three/OrbitControls.js';
-import { EffectComposer } from './vendor/three/examples/jsm/postprocessing/EffectComposer.js';
-import { RenderPass } from './vendor/three/examples/jsm/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from './vendor/three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from './vendor/three/examples/jsm/postprocessing/OutputPass.js';
 
 /* =========================================================================
    PIKAJACKPOT — plateau 40 cases en vraie 3D (WebGL / three.js)
@@ -475,11 +471,11 @@ controls.autoRotateSpeed = 0.55;
 }
 controls.update();
 
-const composer = new EffectComposer(renderer);
-composer.addPass(new RenderPass(scene, camera));
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(1,1), 0.28, 0.55, 0.82);
-composer.addPass(bloomPass);
-composer.addPass(new OutputPass());
+/* Pas d'effet de bloom (halo lumineux) : son flou à large rayon
+   "bavait" sur le sol transparent du plateau autour des anneaux/
+   lumières, empêchant la photo de fond de se voir correctement même
+   là où rien n'est dessiné — au lieu d'un halo doux, on préfère un
+   plateau qui reste vraiment transparent là où il doit l'être. */
 
 let idleTimer = null;
 let gameStarted = false;
@@ -599,38 +595,44 @@ function makeCenterPlateTexture(){
   const size = 640;
   const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
   const ctx = cvs.getContext('2d');
-  // Pas de fond opaque : le sol du plateau reste transparent (la
-  // photo derrière le plateau doit se voir jusqu'au centre), seuls
-  // les anneaux/texte/pokéball restent visibles. Juste un voile
-  // sombre discret autour du texte pour qu'il reste lisible.
-  const grad = ctx.createRadialGradient(size*0.5,size*0.53,size*0.02,size*0.5,size*0.53,size*0.32);
-  grad.addColorStop(0,'rgba(10,8,3,.55)'); grad.addColorStop(0.7,'rgba(10,8,3,.28)'); grad.addColorStop(1,'rgba(10,8,3,0)');
-  ctx.fillStyle = grad; ctx.fillRect(0,0,size,size);
+  // Pas de fond du tout, pas même un voile discret : le sol du
+  // plateau reste entièrement transparent jusqu'au centre, la photo
+  // derrière doit se voir sans aucune couche. La lisibilité du texte
+  // vient uniquement de son ombre portée (plus bas), pas d'un fond.
 
-  // anneaux dorés concentriques façon roue
+  // anneaux dorés concentriques façon roue — ombre portée sombre pour
+  // rester lisibles quel que soit ce qui se voit derrière (photo)
+  ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = size*0.01;
   for(let i=0;i<3;i++){
     ctx.beginPath(); ctx.arc(size/2,size/2,size*(0.46-i*0.07),0,Math.PI*2);
     ctx.lineWidth = size*0.012; ctx.strokeStyle = i===1?GOLD_BRIGHT:GOLD; ctx.globalAlpha=0.85-i*0.15;
     ctx.stroke();
   }
-  ctx.globalAlpha=1;
+  ctx.globalAlpha=1; ctx.shadowBlur=0;
 
-  // mini Pokeball classique rouge/blanc au-dessus du texte
+  // mini Pokeball classique rouge/blanc au-dessus du texte — ombre
+  // sombre pour se détacher de n'importe quel fond derrière
   const pbY = size*0.30, pbR = size*0.075;
+  ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = size*0.015;
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR,Math.PI,0); ctx.fillStyle='#f5484f'; ctx.fill();
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR,0,Math.PI); ctx.fillStyle='#f6fbff'; ctx.fill();
+  ctx.shadowBlur = 0;
   ctx.fillStyle='#12283f'; ctx.fillRect(size/2-pbR,pbY-pbR*0.09,pbR*2,pbR*0.18);
   ctx.lineWidth=pbR*0.09; ctx.strokeStyle='#12283f';
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR,0,Math.PI*2); ctx.stroke();
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR*0.34,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill(); ctx.stroke();
 
-  // texte PIKAJACKPOT
+  // texte PIKAJACKPOT — contour sombre systématique (pas juste une
+  // lueur dorée) pour rester lisible même sur une photo très claire
   ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.font='900 '+(size*0.108)+'px Arial,Helvetica,sans-serif';
-  ctx.fillStyle = GOLD_BRIGHT;
-  ctx.shadowColor = 'rgba(255,210,110,.9)'; ctx.shadowBlur = size*0.02;
+  ctx.lineJoin='round'; ctx.lineWidth=size*0.014; ctx.strokeStyle='rgba(0,0,0,.8)';
   ctx.save();
   ctx.translate(size/2, size*0.53);
+  ctx.strokeText('PIKA', -size*0.001, -size*0.06);
+  ctx.strokeText('JACKPOT', 0, size*0.075);
+  ctx.shadowColor = 'rgba(255,210,110,.9)'; ctx.shadowBlur = size*0.02;
+  ctx.fillStyle = GOLD_BRIGHT;
   ctx.fillText('PIKA', -size*0.001, -size*0.06);
   ctx.fillStyle = '#ffffff';
   ctx.fillText('JACKPOT', 0, size*0.075);
@@ -653,7 +655,6 @@ const centerPlate = new THREE.Mesh(
   new THREE.MeshStandardMaterial({map:makeCenterPlateTexture(),roughness:.7,metalness:.1,transparent:true})
 );
 centerPlate.position.y = 0.07;
-centerPlate.receiveShadow = true;
 boardGroup.add(centerPlate);
 
 /* ---------- Les 40 cases ---------- */
@@ -1108,7 +1109,7 @@ function animate(){
     player.torso.rotation.z *= 0.8;
   }
 
-  composer.render();
+  renderer.render(scene, camera);
 }
 animate();
 
@@ -1119,8 +1120,6 @@ function resize(){
   renderer.setSize(w,h,false);
   camera.aspect = w/h;
   camera.updateProjectionMatrix();
-  composer.setSize(w,h);
-  bloomPass.setSize(w,h);
 }
 window.addEventListener('resize',resize,{passive:true});
 window.addEventListener('orientationchange',()=>setTimeout(resize,150),{passive:true});
