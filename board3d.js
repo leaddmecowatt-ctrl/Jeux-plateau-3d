@@ -1474,18 +1474,99 @@ function revealImpact(){
   triggerImpactFlash();
 }
 
-function shortPlaceName(idx){ return idx<0 ? 'Départ' : POKEMON_PLACES[idx]; }
+/* Version courte pour la bannière (case 40 : le nom complet "Ligue
+   Pokémon — Salle du Champion" est trop long pour tenir, la partie
+   utile est "Salle du Champion"). placeLabel() garde le nom complet
+   pour le texte de statut, qui a plus de place. */
+function shortPlaceName(idx){
+  if(idx<0) return 'Départ';
+  if(idx===39) return 'Salle du Champion';
+  return POKEMON_PLACES[idx];
+}
+
+/* Préposition naturelle pour "Rendez-vous ..." selon le lieu (vide =
+   simple virgule façon "Rendez-vous, Azuria" pour les villes/routes ;
+   "au"/"à la"/"à l'" pour les lieux génériques qui en ont besoin,
+   ex. "Rendez-vous au Centre Pokémon"). Indices alignés sur
+   POKEMON_PLACES. */
+const PLACE_PREP = [
+  /* 0 Bourg Palette */                        '',
+  /* 1 Route 1 */                              '',
+  /* 2 Jadielle */                             '',
+  /* 3 Centre Pokémon */                       'au ',
+  /* 4 Forêt de Jade */                        'à la ',
+  /* 5 Mont Sélénite */                        'au ',
+  /* 6 Argenta */                              '',
+  /* 7 Azuria */                               '',
+  /* 8 Cascade d'Azuria */                     'à la ',
+  /* 9 Carmin-sur-Mer */                       '',
+  /* 10 Route 24 */                            '',
+  /* 11 Lavanville */                          '',
+  /* 12 Tour Pokémon */                        'à la ',
+  /* 13 Zone Safari */                         'à la ',
+  /* 14 Céladopole */                          '',
+  /* 15 Casino de Céladopole */                'au ',
+  /* 16 Fuchsia */                             '',
+  /* 17 Île Écume */                           "à l'",
+  /* 18 Parmanie */                            '',
+  /* 19 Manoir Pokémon */                      'au ',
+  /* 20 Île Cramoisie */                       "à l'",
+  /* 21 Route 21 */                            '',
+  /* 22 Doublonville */                        '',
+  /* 23 Centrale Électrique */                 'à la ',
+  /* 24 Ligue Pokémon */                       'à la ',
+  /* 25 Plateau Indigo */                      'au ',
+  /* 26 Grotte Taupiqueur */                   'à la ',
+  /* 27 Route 11 */                            '',
+  /* 28 Chenaptôme */                          '',
+  /* 29 Verdaphage */                          '',
+  /* 30 Bourg Geon */                          '',
+  /* 31 Écorcia */                             '',
+  /* 32 Rosalia */                             '',
+  /* 33 Cerisia */                             '',
+  /* 34 Blackthorn */                          '',
+  /* 35 Route 46 */                            '',
+  /* 36 Grotte Sombre */                       'à la ',
+  /* 37 Antre Draco */                         "à l'",
+  /* 38 Salle du Conseil des 4 */              'à la ',
+  /* 39 Ligue Pokémon — Salle du Champion */   'à la ',
+];
+function placePhrase(idx){
+  const name = shortPlaceName(idx);
+  const prep = PLACE_PREP[idx] || '';
+  return prep ? ' '+prep+name : ', '+name;
+}
+
 let placeBannerGen = 0;
+/* Certains lieux donnent un texte long ("Rendez-vous à la Ligue
+   Pokémon — Salle du Champion") qui déborderait du bandeau à taille
+   fixe — on repart de la taille CSS max à chaque nouveau texte, puis
+   on réduit tant que ça dépasse la largeur disponible. */
+function fitPlaceBanner(){
+  if(!placeBanner) return;
+  placeBanner.style.fontSize = '';
+  const wrap = placeBanner.parentElement;
+  if(!wrap) return;
+  const maxW = wrap.clientWidth*0.96;
+  let size = parseFloat(getComputedStyle(placeBanner).fontSize);
+  let guard = 0;
+  while(placeBanner.scrollWidth > maxW && size > 13 && guard < 40){
+    size -= 1;
+    placeBanner.style.fontSize = size+'px';
+    guard++;
+  }
+}
 /* Le nom du lieu reste affiché en grand tant que le pion y est —
    on ne fait un fondu (sortie/entrée) que lors d'un changement de
    case, pas une simple apparition éclair qui disparaît toute seule. */
 function updatePlaceBanner(idx, traveling){
   if(!placeBanner) return;
   const gen = ++placeBannerGen;
-  const nextText = traveling ? '➜ '+shortPlaceName(idx) : (idx<0 ? 'Départ' : '📍 Rendez-vous : '+shortPlaceName(idx));
+  const nextText = traveling ? '➜ '+shortPlaceName(idx) : (idx<0 ? 'Départ' : '📍 Rendez-vous'+placePhrase(idx));
   const applyText = ()=>{
     if(gen !== placeBannerGen) return;
     placeBanner.textContent = nextText;
+    fitPlaceBanner();
     placeBanner.classList.add('show');
   };
   if(placeBanner.classList.contains('show')){
