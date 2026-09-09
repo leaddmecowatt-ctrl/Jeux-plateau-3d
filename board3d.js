@@ -157,8 +157,15 @@ function roundRectPath(ctx,x,y,w,h,r){
 let _maxAniso = 8;
 function getMaxAniso(){ return renderer ? renderer.capabilities.getMaxAnisotropy() : _maxAniso; }
 const flatFaceCache = new Map();
-function getFlatPhotoFace(catKey, caseNum, accentColor, badge){
-  const key = catKey+'|'+caseNum+'|'+badge;
+function getFlatPhotoFace(catKey, accentColor, badge){
+  // Clé de cache SANS le numéro de case : le rendu ne dépend que de
+  // la catégorie/couleur/badge, jamais du numéro affiché à côté (qui
+  // est un sprite séparé) — sinon chacune des 40 cases générait sa
+  // propre texture 960×960 au lieu de partager les ~8 variantes
+  // réelles, ce qui pouvait saturer la mémoire GPU sur mobile et
+  // faire clignoter des cases en noir le temps qu'une texture évincée
+  // soit rechargée.
+  const key = catKey+'|'+badge;
   if(flatFaceCache.has(key)) return flatFaceCache.get(key);
   const size = 960;
   const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
@@ -692,13 +699,23 @@ const RIVET_OFFSETS = [[-1,-1],[1,-1],[-1,1],[1,1]];
 // géométrie/matériau, seule la position/rotation change) : un seul
 // InstancedMesh chacun plutôt que 40 (ou 160) mesh séparés, pour
 // garder le rendu léger malgré le surcroît de détail.
+// frustumCulled=false est indispensable ici : par défaut, Three.js
+// calcule la sphère de culling d'un InstancedMesh à partir de la
+// seule géométrie de base (centrée à l'origine), sans tenir compte
+// de l'étalement réel des 40 instances sur tout le plateau — sans
+// ça, le moteur peut faire disparaître tout le lot (collerette,
+// liseré, rivets) selon l'angle de caméra, d'où des cases qui
+// "deviennent noires" par intermittence en tournant la vue.
 const tileCollarInst = new THREE.InstancedMesh(tileCollarGeo, tileGoldMat, 40);
 tileCollarInst.castShadow = false; tileCollarInst.receiveShadow = false;
+tileCollarInst.frustumCulled = false;
 boardGroup.add(tileCollarInst);
 const tileBezelInst = new THREE.InstancedMesh(tileBezelGeo, tileBezelMat, 40);
 tileBezelInst.receiveShadow = false;
+tileBezelInst.frustumCulled = false;
 boardGroup.add(tileBezelInst);
 const tileRivetInst = new THREE.InstancedMesh(tileRivetGeo, tileGoldMat, 40*RIVET_OFFSETS.length);
+tileRivetInst.frustumCulled = false;
 boardGroup.add(tileRivetInst);
 const _instDummy = new THREE.Object3D();
 const _yAxis = new THREE.Vector3(0,1,0);
@@ -762,10 +779,10 @@ for(let i=0;i<40;i++){
 
   let faceTex;
   if(catDef.tier === 'flat'){
-    faceTex = getFlatPhotoFace(catKey, caseNum, accentColor, data.isVisite ? '🔓' : null);
+    faceTex = getFlatPhotoFace(catKey, accentColor, data.isVisite ? '🔓' : null);
   } else {
     // pour les cases "float"/"glyph", la face reste sobre noir & or
-    faceTex = getFlatPhotoFace(catKey, caseNum, accentColor, null);
+    faceTex = getFlatPhotoFace(catKey, accentColor, null);
   }
   const faceMat = new THREE.MeshBasicMaterial({map:faceTex});
   const face = new THREE.Mesh(new THREE.PlaneGeometry(TILE*0.94,TILE*0.94), faceMat);
