@@ -190,7 +190,9 @@ function getFlatPhotoFace(catKey, caseNum, accentColor, badge){
   ctx.restore();
 
   roundRectPath(ctx,9,9,size-18,size-18,r);
-  ctx.lineWidth = 10; ctx.strokeStyle = GOLD; ctx.stroke();
+  ctx.shadowColor = accentColor; ctx.shadowBlur = size*0.035;
+  ctx.lineWidth = 10; ctx.strokeStyle = accentColor; ctx.stroke();
+  ctx.shadowBlur = 0;
   roundRectPath(ctx,15,15,size-30,size-30,r*0.85);
   ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.stroke();
 
@@ -694,7 +696,10 @@ for(let i=0;i<40;i++){
   group.add(baseTile);
 
   const accentColor = SWATCH_COLORS[catDef.swatch];
-  const sideMat = new THREE.MeshStandardMaterial({color:new THREE.Color(accentColor),roughness:.7,metalness:.12});
+  const sideMat = new THREE.MeshStandardMaterial({
+    color:new THREE.Color(accentColor),roughness:.7,metalness:.12,
+    emissive:new THREE.Color(accentColor),emissiveIntensity:.32
+  });
   const bodyTile = new THREE.Mesh(new THREE.BoxGeometry(TILE,0.14,TILE), sideMat);
   bodyTile.position.y = 0.15;
   bodyTile.castShadow = true;
