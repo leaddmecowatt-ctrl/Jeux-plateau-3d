@@ -612,8 +612,12 @@ function makeCenterPlateTexture(){
   const size = 640;
   const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
   const ctx = cvs.getContext('2d');
-  const grad = ctx.createRadialGradient(size*0.5,size*0.4,size*0.05,size*0.5,size*0.5,size*0.66);
-  grad.addColorStop(0,'#241a06'); grad.addColorStop(0.55,'#120d02'); grad.addColorStop(1,'#000000');
+  // Pas de fond opaque : le sol du plateau reste transparent (la
+  // photo derrière le plateau doit se voir jusqu'au centre), seuls
+  // les anneaux/texte/pokéball restent visibles. Juste un voile
+  // sombre discret autour du texte pour qu'il reste lisible.
+  const grad = ctx.createRadialGradient(size*0.5,size*0.53,size*0.02,size*0.5,size*0.53,size*0.32);
+  grad.addColorStop(0,'rgba(10,8,3,.55)'); grad.addColorStop(0.7,'rgba(10,8,3,.28)'); grad.addColorStop(1,'rgba(10,8,3,0)');
   ctx.fillStyle = grad; ctx.fillRect(0,0,size,size);
 
   // anneaux dorés concentriques façon roue
@@ -659,7 +663,7 @@ function makeCenterPlateTexture(){
 }
 const centerPlate = new THREE.Mesh(
   new THREE.BoxGeometry(9*CELL,0.14,9*CELL),
-  new THREE.MeshStandardMaterial({map:makeCenterPlateTexture(),roughness:.7,metalness:.1})
+  new THREE.MeshStandardMaterial({map:makeCenterPlateTexture(),roughness:.7,metalness:.1,transparent:true})
 );
 centerPlate.position.y = 0.07;
 centerPlate.receiveShadow = true;
