@@ -787,7 +787,14 @@ for(let i=0;i<40;i++){
   const faceMat = new THREE.MeshBasicMaterial({map:faceTex});
   const face = new THREE.Mesh(new THREE.PlaneGeometry(TILE*0.94,TILE*0.94), faceMat);
   face.rotation.x = -Math.PI/2;
-  face.position.y = tileTopY+0.002;
+  // Marge généreuse au-dessus du liseré noir (case fixe à y=0.22,
+  // non affectée par la "respiration") : la case elle-même respire
+  // (group.scale.y oscille ±1.2%), donc à y=tileTopY+0.002 la carte
+  // pouvait redescendre sous le liseré à chaque cycle et se faire
+  // entièrement cacher par lui — d'où des cases qui semblaient
+  // clignoter en noir. +0.02 reste largement au-dessus même au creux
+  // de l'oscillation.
+  face.position.y = tileTopY+0.02;
   face.receiveShadow = true;
   group.add(face);
 
