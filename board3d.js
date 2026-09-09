@@ -366,6 +366,11 @@ try{
   throw e;
 }
 renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+/* alpha:true permet la transparence mais ne l'active pas : Three.js
+   efface quand même chaque image en noir opaque (alpha 1) par
+   défaut. Sans ceci, le canvas reste un rectangle noir plein là où
+   il n'y a ni case ni centre, quel que soit le fond de scène. */
+renderer.setClearAlpha(0);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -420,7 +425,10 @@ function makeStudioBackdrop(){
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
-scene.background = makeStudioBackdrop();
+/* Pas de fond de scène opaque : le canvas (alpha:true) reste
+   transparent partout où il n'y a ni case ni centre, pour que le
+   fond de la page (photo derrière le plateau) touche directement
+   les cases, sans rectangle noir tout autour. */
 
 const camera = new THREE.PerspectiveCamera(40,1,0.1,100);
 camera.position.set(0,13.5,11);
