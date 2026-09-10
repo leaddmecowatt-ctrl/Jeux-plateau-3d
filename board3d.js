@@ -146,6 +146,16 @@ const SWATCH_COLORS = {
   green:'#33b46a', gold:'#e9c34a', danger:'#d62b2b',
 };
 
+/* Éclaircit (percent>0) ou assombrit (percent<0) une couleur hex,
+   pour dériver un dégradé lisible/vif à partir d'une seule couleur
+   d'accent (au lieu de retomber sur du noir plat). */
+function shadeHex(hex, percent){
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n>>16)&255, g = (n>>8)&255, b = n&255;
+  const mix = (c)=> Math.max(0, Math.min(255, Math.round(c + (percent>0 ? 255-c : c)*percent)));
+  return '#'+[mix(r),mix(g),mix(b)].map(v=>v.toString(16).padStart(2,'0')).join('');
+}
+
 function roundRectPath(ctx,x,y,w,h,r){
   ctx.beginPath();
   ctx.roundRect(x,y,w,h,r);
@@ -220,18 +230,22 @@ function getFlatPhotoFace(catKey, accentColor, badge){
     const pad = size*0.028;
     const bw = size-2*pad, bh = size-2*pad-size*0.19;
 
-    // Fond flouté "cover" : la même image, agrandie et floutée pour
-    // remplir tout l'espace, sert de fond derrière la version nette —
-    // ça évite les bandes noires sur les côtés (carte plus étroite que
-    // la case) sans jamais rogner la carte elle-même au premier plan
-    // (technique classique type Spotify/Apple Music).
-    const coverScale = Math.max(bw/img.width, bh/img.height) * 1.15;
-    const cw = img.width*coverScale, ch = img.height*coverScale;
+    // Fond en dégradé dans la couleur d'accent de la catégorie (déjà
+    // utilisée pour la bordure de la case) : évite les bandes noires
+    // sur les côtés (carte plus étroite que la case) sans jamais
+    // rogner la carte elle-même au premier plan, et reste cohérent
+    // avec le code couleur déjà en place plutôt qu'un flou terne.
+    const bgGrad = ctx.createRadialGradient(
+      pad+bw/2, pad+bh*0.42, bh*0.05,
+      pad+bw/2, pad+bh/2, bh*0.75
+    );
+    bgGrad.addColorStop(0, shadeHex(accentColor, 0.4));
+    bgGrad.addColorStop(0.55, accentColor);
+    bgGrad.addColorStop(1, shadeHex(accentColor, -0.55));
     ctx.save();
     roundRectPath(ctx, pad, pad, bw, bh, r*0.7); ctx.clip();
-    ctx.filter = 'blur(26px) saturate(1.25) brightness(0.55)';
-    ctx.drawImage(img, pad+(bw-cw)/2, pad+(bh-ch)/2, cw, ch);
-    ctx.filter = 'none';
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(pad, pad, bw, bh);
     ctx.restore();
 
     // "contain" fit (jamais "cover") : on voit toujours la carte/l'objet
