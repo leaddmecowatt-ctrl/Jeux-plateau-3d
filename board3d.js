@@ -1389,11 +1389,22 @@ function saveTotals(){
    direct, puis disparaît pour ne pas être recliqué par erreur en
    cours de stream. Réapparaît au prochain chargement de page. */
 const resetBankBtn = document.getElementById('resetBankBtn');
+const bankResetFlash = document.getElementById('bankResetFlash');
+let bankResetFlashTimer = null;
+function flashBankResetToken(){
+  if(!bankResetFlash) return;
+  clearTimeout(bankResetFlashTimer);
+  bankResetFlash.classList.remove('show');
+  void bankResetFlash.offsetWidth; // relance l'animation même en rafale
+  bankResetFlash.classList.add('show');
+  bankResetFlashTimer = setTimeout(()=>{ bankResetFlash.classList.remove('show'); }, 1400);
+}
 if(resetBankBtn) resetBankBtn.addEventListener('click', ()=>{
   totalMise = 0;
   totalPaid = 0;
   saveTotals();
   resetBankBtn.hidden = true;
+  flashBankResetToken();
 });
 
 /* Paliers du plus cher au moins cher : un lot qui ferait dépasser le
