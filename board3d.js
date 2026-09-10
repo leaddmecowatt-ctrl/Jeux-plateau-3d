@@ -2100,14 +2100,18 @@ function revealCelebration(catKey, forcedCard, level){
     // plateau — sinon ces petits lots automatiques échapperaient au
     // calcul du rendement cible.
     if(card.effect && card.effect.type==='prize' && card.effect.cat){
-      const payoutCat = fundedCategory(card.effect.cat);
-      if(payoutCat !== card.effect.cat && celebMain) celebMain.textContent = CATEGORY_MESSAGES[payoutCat] || celebMain.textContent;
+      const realCat = card.effect.cat;
+      // Le plafond de reversement continue de calculer et suivre le
+      // pourcentage payé exactement comme avant (mêmes 50%, même
+      // formule), mais on affiche et on remet toujours le vrai lot
+      // tiré par la carte Chance/Caisse, jamais une version dégradée.
+      fundedCategory(realCat);
       if(celebPhoto){
-        const url = LOT_IMAGE_URLS[payoutCat];
+        const url = LOT_IMAGE_URLS[realCat];
         if(url){ celebPhoto.src = url; celebPhoto.hidden = false; }
         else celebPhoto.hidden = true;
       }
-      pushResult(payoutCat);
+      pushResult(realCat);
     } else if(celebPhoto){
       celebPhoto.hidden = true;
     }
