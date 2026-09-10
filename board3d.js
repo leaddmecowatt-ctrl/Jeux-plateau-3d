@@ -931,11 +931,11 @@ tileRivetInst.instanceMatrix.needsUpdate = true;
    feux d'artifice de la célébration. Les éclats sont un seul
    InstancedMesh (léger), la physique est juste une chute + une
    vitesse radiale, pas une vraie fracture du maillage. ---------- */
-const SHAKE_MS = 850, SHATTER_MS = 1000;
-const SHARD_ROWS = 12, SHARD_COUNT = SHARD_ROWS*SHARD_ROWS;
+const SHAKE_MS = 1300, SHATTER_MS = 2400, SHATTER_FADE_MS = 700;
+const SHARD_ROWS = 18, SHARD_COUNT = SHARD_ROWS*SHARD_ROWS;
 const shardMat = new THREE.MeshStandardMaterial({
-  color:0x171208, roughness:.55, metalness:.35,
-  emissive:new THREE.Color(GOLD), emissiveIntensity:.15,
+  color:0x171208, roughness:.5, metalness:.4,
+  emissive:new THREE.Color(GOLD), emissiveIntensity:.22,
   transparent:true
 });
 const boardShards = new THREE.InstancedMesh(new THREE.BoxGeometry(0.82,0.14,0.82), shardMat, SHARD_COUNT);
@@ -947,11 +947,21 @@ const shardState = [];
   const span = 11*CELL, cell = span/SHARD_ROWS, half = (SHARD_ROWS-1)/2;
   for(let row=0; row<SHARD_ROWS; row++){
     for(let col=0; col<SHARD_ROWS; col++){
-      shardState.push({ x0:(col-half)*cell, z0:(row-half)*cell });
+      const x0=(col-half)*cell, z0=(row-half)*cell;
+      shardState.push({ x0, z0, dist:Math.hypot(x0,z0) });
     }
   }
 }
-let shakeUntil = 0, shatterUntil = 0, shatterActive = false;
+const shardMaxDist = shardState.reduce((m,s)=>Math.max(m,s.dist), 1);
+
+// éclat doré central au moment de l'impact, pour un rendu plus premium
+const shatterFlash = new THREE.Sprite(new THREE.SpriteMaterial({
+  map:goldDotTex, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:0
+}));
+shatterFlash.position.set(0, 0.4, 0);
+scene.add(shatterFlash);
+
+let shakeUntil = 0, shatterUntil = 0, shatterActive = false, shatterStartT = 0;
 const _shardDummy = new THREE.Object3D();
 function startBoardShatter(){
   const now = clock.getElapsedTime();
@@ -963,10 +973,19 @@ function startBoardShatter(){
     s.x = s.x0; s.y = 0.1; s.z = s.z0;
     s.rx = 0; s.ry = Math.random()*Math.PI; s.rz = 0;
     const ang = Math.atan2(s.z0, s.x0) + (Math.random()-0.5)*0.6;
-    const spd = 3 + Math.random()*3.5;
+    const spd = 1.5 + Math.random()*2.1;
     s.vx = Math.cos(ang)*spd; s.vz = Math.sin(ang)*spd;
-    s.vy = 4 + Math.random()*3;
-    s.vrx = (Math.random()-0.5)*6; s.vry = (Math.random()-0.5)*6; s.vrz = (Math.random()-0.5)*6;
+    s.vy = 2.6 + Math.random()*2.2;
+    s.vrx = (Math.random()-0.5)*4.5; s.vry = (Math.random()-0.5)*4.5; s.vrz = (Math.random()-0.5)*4.5;
+    // onde de choc en cascade : le centre part en premier, les bords
+    // suivent avec un léger retard, pour un éclatement qui se lit
+    // bien à l'oeil plutôt qu'un "pop" instantané de toutes les pièces
+    s.delay = (s.dist/shardMaxDist) * 0.32 * (SHATTER_MS/1000);
+    // taille variable par éclat, pour un aspect plus organique qu'une
+    // simple grille de cubes identiques
+    s.sx = 0.65 + Math.random()*0.55;
+    s.sy = 0.7 + Math.random()*0.5;
+    s.sz = 0.65 + Math.random()*0.55;
   });
 }
 
@@ -1293,31 +1312,46 @@ function animate(){
 
   // Séisme puis éclatement du plateau (effet "Carte Darkrai")
   if(shakeUntil>0 && t<shakeUntil){
-    const mag = Math.min(1, (shakeUntil-t)/(SHAKE_MS/1000)) * 0.12;
+    // le tremblement monte en intensité à l'approche de l'éclatement,
+    // plus lisible qu'une secousse à amplitude constante
+    const progress = 1 - Math.max(0, shakeUntil-t)/(SHAKE_MS/1000);
+    const mag = Math.pow(progress, 1.6) * 0.14;
     boardGroup.position.set((Math.random()-0.5)*mag, 0, (Math.random()-0.5)*mag);
     boardGroup.rotation.z = (Math.random()-0.5)*mag*0.15;
   } else if(shatterUntil>0 && t<shatterUntil){
     if(!shatterActive){
       shatterActive = true;
+      shatterStartT = t;
       boardGroup.position.set(0,0,0); boardGroup.rotation.z = 0;
       boardGroup.visible = false;
       boardShards.visible = true;
+      shatterFlash.scale.set(0.1,0.1,0.1);
+      shatterFlash.material.opacity = 1;
     }
-    const remain = shatterUntil - t, fadeStart = 0.35;
+    const since = t - shatterStartT;
+    const remain = shatterUntil - t, fadeStart = SHATTER_FADE_MS/1000;
     shardMat.opacity = remain < fadeStart ? Math.max(0, remain/fadeStart) : 1;
     shardState.forEach((s,i)=>{
-      s.x += s.vx*dt; s.z += s.vz*dt; s.y += s.vy*dt; s.vy -= 9*dt;
-      s.rx += s.vrx*dt; s.ry += s.vry*dt; s.rz += s.vrz*dt;
+      if(since >= s.delay){
+        s.x += s.vx*dt; s.z += s.vz*dt; s.y += s.vy*dt; s.vy -= 6*dt;
+        s.rx += s.vrx*dt; s.ry += s.vry*dt; s.rz += s.vrz*dt;
+      }
       _shardDummy.position.set(s.x, s.y, s.z);
       _shardDummy.rotation.set(s.rx, s.ry, s.rz);
+      _shardDummy.scale.set(s.sx, s.sy, s.sz);
       _shardDummy.updateMatrix();
       boardShards.setMatrixAt(i, _shardDummy.matrix);
     });
     boardShards.instanceMatrix.needsUpdate = true;
+    if(shatterFlash.material.opacity > 0){
+      shatterFlash.scale.multiplyScalar(1 + dt*9);
+      shatterFlash.material.opacity = Math.max(0, shatterFlash.material.opacity - dt*3.2);
+    }
   } else if(shatterUntil>0){
     boardGroup.visible = true;
     boardGroup.position.set(0,0,0); boardGroup.rotation.z = 0;
     boardShards.visible = false;
+    shatterFlash.material.opacity = 0;
     shakeUntil = 0; shatterUntil = 0; shatterActive = false;
   }
 
