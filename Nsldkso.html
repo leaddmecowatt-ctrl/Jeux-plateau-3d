@@ -390,15 +390,19 @@ html.display-mode .display-badge{ display:block; }
 .celeb-sub[hidden]{display:none}
 
 /* Jeton de confirmation "Démarrage cagnotte" (touche E) : un simple
-   flash au centre du plateau pour confirmer que la commande a bien
-   été prise en compte, sans texte ni interaction — disparaît seul. */
+   flash au centre du PLATEAU (pas de l'écran entier, sinon la bande
+   du haut décale le centrage) pour confirmer que la commande a bien
+   été prise en compte, sans texte ni interaction — disparaît seul.
+   Positionné à l'intérieur de .board-wrap (qui est en position
+   relative et contient le canvas #gl en inset:0), donc inset:0 ici
+   retombe pile sur le centre visuel du plateau. */
 .bank-reset-flash{
-  position:fixed;inset:0;z-index:55;display:flex;align-items:center;justify-content:center;
+  position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;
   pointer-events:none;opacity:0;visibility:hidden;transition:opacity .3s ease;
 }
 .bank-reset-flash.show{opacity:1;visibility:visible;animation:bankFlashPop .5s cubic-bezier(.2,1.6,.4,1)}
 .bank-reset-flash img{
-  width:min(46vw,240px);height:auto;
+  width:min(30vw,150px);height:auto;
   filter:drop-shadow(0 10px 24px rgba(0,0,0,.6)) drop-shadow(0 0 30px rgba(255,110,40,.65));
 }
 @keyframes bankFlashPop{from{transform:scale(.5) rotate(-8deg);opacity:0}to{transform:scale(1) rotate(0);opacity:1}}
@@ -530,6 +534,9 @@ if(new URLSearchParams(location.search).get('view')==='display'){
           <canvas id="gl"></canvas>
           <div class="hint3d" id="hint3d">🖱️ glisser pour tourner la vue</div>
           <div class="results-ticker" id="resultsTicker" aria-hidden="true"></div>
+          <div class="bank-reset-flash" id="bankResetFlash" aria-hidden="true">
+            <img src="./assets/ui/jeton_confirm.png" alt="">
+          </div>
         </div>
       </div>
 
@@ -597,10 +604,6 @@ if(new URLSearchParams(location.search).get('view')==='display'){
       <span id="celebMain">🎉 Lot remporté !</span>
       <div class="celeb-sub" id="celebSub" hidden></div>
     </div>
-  </div>
-
-  <div class="bank-reset-flash" id="bankResetFlash" aria-hidden="true">
-    <img src="./assets/ui/jeton_confirm.png" alt="">
   </div>
 </div>
 
