@@ -50,7 +50,7 @@ function outwardYaw(r,c){
    ========================================================================= */
 const CATS = {
   commune:     { label:'Pioche du Prof. Chen',        value:'~0,68€',  tier:'flat',  swatch:'bronze' },
-  booster8:    { label:'Booster du Marchand',         value:'8€',      tier:'flat',  swatch:'blue'   },
+  booster8:    { label:'Booster du Marchand',         value:'8€',      tier:'float', swatch:'blue'   },
   alternative: { label:'Zone Safari',                 value:'~7,20€',  tier:'flat',  swatch:'red'    },
   gradee:      { label:'Musée Pokémon',               value:'20-80€',  tier:'float', swatch:'gold'   },
   booster50:   { label:'Butin de la Ligue Pokémon',   value:'50€',     tier:'float', swatch:'gold'   },
@@ -885,6 +885,7 @@ const tiles = [];
 
 /* vitesses/amplitudes d'animation par catégorie */
 const MOTION = {
+  booster8:  {bob:0.10, swing:0.3},
   gradee:    {bob:0.11, swing:0.35},
   booster50: {bob:0.13, swing:0.3},
   etb:       {bob:0.15, swing:0.28},
