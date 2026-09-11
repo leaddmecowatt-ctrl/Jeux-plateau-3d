@@ -292,6 +292,86 @@ function getFlatPhotoFace(catKey, accentColor, badge){
   return tex;
 }
 
+/* Texture dédiée à la case "Départ" (case 1) : ni photo ni prix, pour
+   qu'elle ne se lise jamais comme un lot — même dans le cas rare où
+   une carte Chance ferait reculer un joueur jusque-là (le côté
+   mécanique est bloqué séparément dans updateWinButton). */
+let _departFace = null;
+function getDepartFace(){
+  if(_departFace) return _departFace;
+  const size = 960;
+  const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
+  const ctx = cvs.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  const r = size*0.16;
+
+  ctx.save();
+  roundRectPath(ctx,9,9,size-18,size-18,r); ctx.clip();
+  ctx.fillStyle = '#0c0c0c'; ctx.fillRect(0,0,size,size);
+
+  const pad = size*0.028;
+  const bw = size-2*pad, bh = size-2*pad-size*0.19;
+  const bgGrad = ctx.createRadialGradient(
+    pad+bw/2, pad+bh*0.42, bh*0.05,
+    pad+bw/2, pad+bh/2, bh*0.75
+  );
+  bgGrad.addColorStop(0, shadeHex(GOLD, 0.4));
+  bgGrad.addColorStop(0.55, GOLD);
+  bgGrad.addColorStop(1, shadeHex(GOLD, -0.55));
+  ctx.save();
+  roundRectPath(ctx, pad, pad, bw, bh, r*0.7); ctx.clip();
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(pad, pad, bw, bh);
+  ctx.restore();
+
+  // mini Pokeball centrée, même style que la plaque centrale
+  const pbY = pad+bh*0.4, pbR = bh*0.15;
+  ctx.shadowColor = 'rgba(0,0,0,.8)'; ctx.shadowBlur = size*0.015;
+  ctx.beginPath(); ctx.arc(pad+bw/2,pbY,pbR,Math.PI,0); ctx.fillStyle='#f5484f'; ctx.fill();
+  ctx.beginPath(); ctx.arc(pad+bw/2,pbY,pbR,0,Math.PI); ctx.fillStyle='#f6fbff'; ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle='#12283f'; ctx.fillRect(pad+bw/2-pbR,pbY-pbR*0.09,pbR*2,pbR*0.18);
+  ctx.lineWidth=pbR*0.09; ctx.strokeStyle='#12283f';
+  ctx.beginPath(); ctx.arc(pad+bw/2,pbY,pbR,0,Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(pad+bw/2,pbY,pbR*0.34,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill(); ctx.stroke();
+
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.font='900 '+(bh*0.17)+'px Arial,Helvetica,sans-serif';
+  ctx.lineJoin='round'; ctx.lineWidth=size*0.01; ctx.strokeStyle='rgba(0,0,0,.8)';
+  const txtY = pad+bh*0.78;
+  ctx.strokeText('DÉPART', pad+bw/2, txtY);
+  ctx.fillStyle = '#fff9e6';
+  ctx.fillText('DÉPART', pad+bw/2, txtY);
+
+  const gloss = ctx.createLinearGradient(0,0,0,size);
+  gloss.addColorStop(0,'rgba(255,255,255,.06)'); gloss.addColorStop(.22,'rgba(255,255,255,0)');
+  ctx.fillStyle = gloss; ctx.fillRect(0,0,size,size);
+  ctx.restore();
+
+  roundRectPath(ctx,9,9,size-18,size-18,r);
+  ctx.shadowColor = GOLD; ctx.shadowBlur = size*0.035;
+  ctx.lineWidth = 10; ctx.strokeStyle = GOLD; ctx.stroke();
+  ctx.shadowBlur = 0;
+  roundRectPath(ctx,15,15,size-30,size-30,r*0.85);
+  ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.stroke();
+
+  const bandH = size*0.22;
+  ctx.fillStyle = GOLD;
+  roundRectPath(ctx,9,size-9-bandH,size-18,bandH,r*0.7); ctx.fill();
+  ctx.fillStyle = '#0c0c0c'; ctx.globalAlpha=.28;
+  roundRectPath(ctx,9,size-9-bandH,size-18,bandH,r*0.7); ctx.fill(); ctx.globalAlpha=1;
+  ctx.fillStyle = '#fff9e6';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  drawFittedBandLabel(ctx, 'Point de départ', size/2, size-9-bandH/2+2, size-18-size*0.06, size*0.088, size*0.045);
+
+  const tex = new THREE.CanvasTexture(cvs);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = getMaxAniso();
+  _departFace = tex;
+  return tex;
+}
+
 /* Texture "carte flottante encadrée or" : utilisée pour les gros lots
    (gradée, gros booster, ETB, jackpot final) qui flottent au-dessus
    de leur case, avec un cadre doré plus riche et un halo. */
@@ -844,7 +924,12 @@ for(let i=0;i<40;i++){
   const tileTopY = 0.22;
 
   let faceTex;
-  if(catDef.tier === 'flat'){
+  if(i === 0){
+    // Case 1 : le joueur y démarre sans lancer, jamais de lot associé
+    // à l'affichage — voir aussi updateWinButton qui bloque le côté
+    // mécanique si un recul y ramène le joueur plus tard.
+    faceTex = getDepartFace();
+  } else if(catDef.tier === 'flat'){
     faceTex = getFlatPhotoFace(catKey, accentColor, data.isVisite ? '🔓' : null);
   } else {
     // pour les cases "float"/"glyph", la face reste sobre noir & or
@@ -1718,7 +1803,9 @@ function placeLabel(idx){
 
 function updateWinButton(){
   if(!winBtn) return;
-  const onPrize = currentIndex>=0 && !moving;
+  // La case 1 (Départ) n'offre jamais de lot, même si un recul (carte
+  // Chance) y ramène le joueur plus tard en cours de partie.
+  const onPrize = currentIndex>0 && !moving;
   const cat = onPrize ? tiles[currentIndex].catKey : null;
   // Chance / Caisse Communautaire se révèlent tout seuls (pas de
   // bouton à cliquer, la partie continue automatiquement après).
