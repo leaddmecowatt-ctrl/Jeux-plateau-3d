@@ -1951,6 +1951,7 @@ function updateWinButton(){
   const autoResolved = cat==='chance' || cat==='chest';
   winBtn.hidden = !onPrize || autoResolved;
   if(onPrize && !autoResolved){
+    winBtn.disabled = false;
     winBtn.textContent = cat==='prison' ? '💀 FIN DE PARTIE' : '🎉 LOT REMPORTÉ';
     winBtn.dataset.tier = cat;
     // Dès l'arrivée sur la case, on montre le lot en grand au milieu
@@ -2122,7 +2123,11 @@ function clearWinUndo(){
 }
 
 if(winBtn) winBtn.addEventListener('click', ()=>{
-  if(currentIndex<0) return;
+  if(currentIndex<0 || winBtn.disabled) return;
+  // Empêche un double-tap tactile (le gestionnaire touchend ci-dessous
+  // déclenche déjà un click manuel) de valider le même lot deux fois
+  // d'affilée, ce qui relançait deux fois la célébration en parallèle.
+  winBtn.disabled = true;
   const realCat = tiles[currentIndex].catKey;
   // Le plafond de reversement continue de calculer et suivre le
   // pourcentage payé exactement comme avant (mêmes 50%, même formule),
@@ -2240,6 +2245,12 @@ function pushResult(catKey){
 }
 let celebCtx = celebCanvas ? celebCanvas.getContext('2d') : null;
 let celebParticles = [], celebRockets = [], celebRAF = null, celebEndAt = 0, celebLocked = false;
+// Compteur de génération : la carte Darkrai (jackpot300) affiche son
+// verdict après un délai (tremblement + éclats du plateau). Si entre
+// temps l'animateur relance une partie ou valide un autre lot, ce
+// jeton empêche l'affichage différé, désormais périmé, d'écraser plus
+// tard la photo du lot réellement à l'écran avec celle du jackpot.
+let celebGen = 0;
 
 function resizeCelebCanvas(){
   if(!celebCanvas) return;
@@ -2362,6 +2373,7 @@ function celebFrame(){
 }
 
 function clearCelebration(){
+  celebGen++;
   if(celebRAF) cancelAnimationFrame(celebRAF);
   celebRAF = null;
   celebParticles = [];
@@ -2382,6 +2394,10 @@ function showLotPreview(catKey){
   if(!celeb || !celebCanvas) return;
   const url = LOT_IMAGE_URLS[catKey];
   if(!url) return;
+  // Un nouvel aperçu de case invalide tout reveal différé du jackpot
+  // encore en attente (voir celebGen dans celebrate()) : il ne doit
+  // plus pouvoir s'afficher par-dessus cette nouvelle case.
+  celebGen++;
   celebLocked = false;
   celeb.dataset.level = '';
   celeb.classList.remove('shake');
@@ -2410,6 +2426,7 @@ const CATEGORY_MESSAGES = {
 
 function celebrate(catKey, forcedCard, opts){
   celebLocked = !!(opts && opts.locked);
+  const myCelebGen = ++celebGen;
   const level = TIER_LEVEL[catKey] ?? 1;
   if(level===0){
     // La case Prison arrête la partie, mais ne repart jamais totalement
@@ -2440,8 +2457,19 @@ function celebrate(catKey, forcedCard, opts){
   // célébration (photo, feux d'artifice) démarre une fois le
   // plateau reformé, pile au bon moment.
   if(catKey==='jackpot300'){
+    // On efface tout de suite l'aperçu affiché en arrivant sur la case
+    // (sinon sa photo resterait visible, figée, pendant tout le
+    // tremblement du plateau) : rien ne s'affiche tant que le vrai
+    // reveal n'est pas prêt, jamais une photo périmée d'un autre lot.
+    celeb.classList.remove('show','shake');
     startBoardShatter();
-    setTimeout(()=>revealCelebration(catKey, forcedCard, level), SHAKE_MS+SHATTER_MS+120);
+    setTimeout(()=>{
+      // Le jeton de génération protège contre un reveal différé qui
+      // arriverait après coup (nouvelle partie, nouveau lot validé
+      // entre-temps) : il ne doit jamais écraser un autre affichage.
+      if(myCelebGen !== celebGen) return;
+      revealCelebration(catKey, forcedCard, level);
+    }, SHAKE_MS+SHATTER_MS+120);
     return;
   }
   revealCelebration(catKey, forcedCard, level);
