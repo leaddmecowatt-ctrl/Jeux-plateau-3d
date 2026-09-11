@@ -58,7 +58,7 @@ const CATS = {
   jackpot300:  { label:'Carte Darkrai',               value:'300€',    tier:'float', swatch:'gold'   },
   chance:      { label:'Chance',                     value:'tirage',  tier:'glyph', swatch:'purple' },
   chest:       { label:'Caisse Communautaire',       value:'tirage',  tier:'glyph', swatch:'green'  },
-  prison:      { label:'ALLEZ EN PRISON',            value:'0€',      tier:'glyph', swatch:'danger' },
+  prison:      { label:'Prison',                     value:'0€',      tier:'glyph', swatch:'danger' },
 };
 
 /* Pioches Chance / Caisse Communautaire (mêmes decks que le modèle
@@ -2412,7 +2412,6 @@ function celebrate(catKey, forcedCard, opts){
   celebLocked = !!(opts && opts.locked);
   const level = TIER_LEVEL[catKey] ?? 1;
   if(level===0){
-    celebLocked = false;
     // La case Prison arrête la partie, mais ne repart jamais totalement
     // les mains vides : une carte commune de consolation est offerte
     // (même logique de plafond de reversement que les autres lots).
@@ -2422,11 +2421,16 @@ function celebrate(catKey, forcedCard, opts){
       if(url){ celebPhoto.src = url; celebPhoto.hidden = false; }
       else celebPhoto.hidden = true;
     }
-    if(celebMain){ celebMain.hidden = false; celebMain.textContent = '💀 Fin de partie... mais une carte quand même !'; }
-    if(celebSub) celebSub.hidden = true;
-    if(celeb){ celeb.classList.add('show'); celeb.dataset.level='0'; }
+    if(celebMain){ celebMain.hidden = false; celebMain.textContent = '🔒 FIN DE PARTIE'; }
+    if(celebSub){ celebSub.textContent = 'Le joueur est envoyé en prison — une carte de consolation est offerte quand même !'; celebSub.hidden = false; }
+    if(celeb){ celeb.classList.add('show','shake'); celeb.dataset.level='0'; }
+    playImpact();
     pushResult(payoutCat);
-    setTimeout(clearCelebration, 2600);
+    setTimeout(()=>{ if(celeb) celeb.classList.remove('shake'); }, 700);
+    // Comme pour un lot validé : reste affiché tant que l'animateur n'a
+    // pas relancé la partie, sauf sur l'écran secondaire (pas de verrou)
+    // où l'affichage se referme tout seul après un délai.
+    if(!celebLocked) setTimeout(clearCelebration, 3400);
     return;
   }
   if(!celeb || !celebCanvas) return;

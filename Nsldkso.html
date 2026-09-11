@@ -387,7 +387,27 @@ html.display-mode .display-badge{ display:block; }
   box-shadow:0 12px 28px rgba(0,0,0,.6),0 0 26px rgba(255,226,122,.55);
 }
 .celeb-photo[hidden]{display:none}
-.celebration[data-level="0"] .celeb-text{color:#ff6b6b;border-color:#8a0e0e}
+/* Fin de partie (case Prison) : un traitement à part, plus sombre et
+   dramatique, pour qu'on ne le confonde jamais avec un lot gagné. */
+.celebration[data-level="0"]::before{
+  content:"";position:absolute;inset:0;
+  background:radial-gradient(ellipse at center, rgba(120,10,10,.35), rgba(0,0,0,.75) 70%);
+  animation:prisonPulse 1.8s ease-in-out infinite;
+}
+@keyframes prisonPulse{
+  0%,100%{opacity:.7} 50%{opacity:1}
+}
+.celebration[data-level="0"] .celeb-text{
+  color:#ff8a8a;border:2px solid #b31414;border-radius:18px;
+  background:radial-gradient(ellipse at 50% 30%, rgba(70,6,6,.92), rgba(8,2,2,.96));
+  box-shadow:0 0 50px rgba(220,20,20,.55),inset 0 0 40px rgba(0,0,0,.7);
+  text-shadow:0 0 22px rgba(255,60,60,.85),0 2px 4px rgba(0,0,0,.9);
+}
+.celebration[data-level="0"] #celebMain{
+  font-family:'Cinzel',Georgia,serif;font-size:clamp(28px,8vw,52px);letter-spacing:.03em;
+}
+.celebration[data-level="0"] .celeb-sub{color:#ffd9d9}
+.celebration[data-level="0"] .celeb-photo{border-color:#b31414;box-shadow:0 12px 28px rgba(0,0,0,.7),0 0 26px rgba(220,20,20,.5)}
 .celeb-sub{
   margin-top:8px;font-size:clamp(13px,3.2vw,17px);font-weight:700;color:#fff;
   text-shadow:0 2px 3px rgba(0,0,0,.8);
