@@ -665,30 +665,48 @@ function perimeterPosAt(u){ // u in [0,1)
   return [x0+(x1-x0)*lp, z0+(z1-z0)*lp];
 }
 
-/* ---------- Plaque centrale "PIKAJACKPOT" ---------- */
+/* ---------- Plaque centrale "PIKAJACKPOT" + légende des lots ---------- */
+// L'ordre d'affichage suit la progression logique des paliers (petit
+// lot flat -> gros lot flottant), pas l'ordre des cases sur le
+// plateau.
+const CENTER_LEGEND_ORDER = ['commune','alternative','booster8','gradee','booster50','etb','jackpot300'];
+
+function fitFontSingleLine(ctx, text, maxWidth, maxFont, minFont, weight){
+  const family = 'Arial,Helvetica,sans-serif';
+  let fontSize = maxFont;
+  ctx.font = weight+' '+fontSize+'px '+family;
+  while(fontSize > minFont && ctx.measureText(text).width > maxWidth){
+    fontSize -= 1;
+    ctx.font = weight+' '+fontSize+'px '+family;
+  }
+  return fontSize;
+}
+
 function makeCenterPlateTexture(){
-  const size = 640;
+  const size = 1100;
   const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
   const ctx = cvs.getContext('2d');
   // Pas de fond du tout, pas même un voile discret : le sol du
   // plateau reste entièrement transparent jusqu'au centre, la photo
-  // derrière doit se voir sans aucune couche. La lisibilité du texte
-  // vient uniquement de son ombre portée (plus bas), pas d'un fond.
+  // derrière doit se voir sans aucune couche, y compris derrière la
+  // légende des lots. La lisibilité de chaque élément vient
+  // uniquement de son ombre portée / contour sombre, jamais d'un
+  // aplat de fond.
 
   // anneaux dorés concentriques façon roue — ombre portée sombre pour
   // rester lisibles quel que soit ce qui se voit derrière (photo)
-  ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = size*0.01;
+  ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = size*0.008;
   for(let i=0;i<3;i++){
-    ctx.beginPath(); ctx.arc(size/2,size/2,size*(0.46-i*0.07),0,Math.PI*2);
-    ctx.lineWidth = size*0.012; ctx.strokeStyle = i===1?GOLD_BRIGHT:GOLD; ctx.globalAlpha=0.85-i*0.15;
+    ctx.beginPath(); ctx.arc(size/2,size/2,size*(0.495-i*0.045),0,Math.PI*2);
+    ctx.lineWidth = size*0.008; ctx.strokeStyle = i===1?GOLD_BRIGHT:GOLD; ctx.globalAlpha=0.8-i*0.13;
     ctx.stroke();
   }
   ctx.globalAlpha=1; ctx.shadowBlur=0;
 
   // mini Pokeball classique rouge/blanc au-dessus du texte — ombre
   // sombre pour se détacher de n'importe quel fond derrière
-  const pbY = size*0.30, pbR = size*0.075;
-  ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = size*0.015;
+  const pbY = size*0.095, pbR = size*0.032;
+  ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = size*0.012;
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR,Math.PI,0); ctx.fillStyle='#f5484f'; ctx.fill();
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR,0,Math.PI); ctx.fillStyle='#f6fbff'; ctx.fill();
   ctx.shadowBlur = 0;
@@ -697,25 +715,91 @@ function makeCenterPlateTexture(){
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR,0,Math.PI*2); ctx.stroke();
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR*0.34,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill(); ctx.stroke();
 
-  // texte PIKAJACKPOT — contour sombre systématique (pas juste une
-  // lueur dorée) pour rester lisible même sur une photo très claire
+  // texte PIKAJACKPOT — une seule ligne compacte (on garde toute la
+  // hauteur possible pour la légende des lots en dessous) — contour
+  // sombre systématique pour rester lisible même sur une photo claire
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.font='900 '+(size*0.108)+'px Arial,Helvetica,sans-serif';
-  ctx.lineJoin='round'; ctx.lineWidth=size*0.014; ctx.strokeStyle='rgba(0,0,0,.8)';
-  ctx.save();
-  ctx.translate(size/2, size*0.53);
-  ctx.strokeText('PIKA', -size*0.001, -size*0.06);
-  ctx.strokeText('JACKPOT', 0, size*0.075);
-  ctx.shadowColor = 'rgba(255,210,110,.9)'; ctx.shadowBlur = size*0.02;
+  ctx.font='900 '+(size*0.062)+'px Arial,Helvetica,sans-serif';
+  ctx.lineJoin='round'; ctx.lineWidth=size*0.009; ctx.strokeStyle='rgba(0,0,0,.8)';
+  const titleY = size*0.152;
+  ctx.strokeText('★ PIKAJACKPOT ★', size/2, titleY);
+  ctx.shadowColor = 'rgba(255,210,110,.9)'; ctx.shadowBlur = size*0.014;
   ctx.fillStyle = GOLD_BRIGHT;
-  ctx.fillText('PIKA', -size*0.001, -size*0.06);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText('JACKPOT', 0, size*0.075);
-  ctx.restore();
+  ctx.fillText('★ PIKAJACKPOT ★', size/2, titleY);
   ctx.shadowBlur = 0;
 
-  // liseré tricolore (clin d'oeil Pokémon) sous le texte
-  const stripeY = size*0.66, stripeW = size*0.42, stripeH = size*0.018;
+  // sous-titre "TOUS LES LOTS À GAGNER"
+  ctx.font = '700 '+(size*0.026)+'px Arial,Helvetica,sans-serif';
+  ctx.lineWidth = size*0.006; ctx.strokeStyle = 'rgba(0,0,0,.75)';
+  const subY = size*0.196;
+  ctx.strokeText('TOUS LES LOTS À GAGNER', size/2, subY);
+  ctx.fillStyle = '#fff6da';
+  ctx.fillText('TOUS LES LOTS À GAGNER', size/2, subY);
+
+  // liste des lots réels : puce couleur + nom + valeur + vraie photo,
+  // sans aucun fond plein — chaque ligne flotte sur la photo derrière
+  const rowsTop = size*0.245, rowsBottom = size*0.86, rows = CENTER_LEGEND_ORDER.length;
+  const rowH = (rowsBottom-rowsTop)/rows;
+  const chipX = size*0.145, chipR = size*0.016;
+  const textX = size*0.185, textMaxW = size*0.46;
+  const thumbSize = size*0.082, thumbX = size*0.795 - thumbSize/2;
+  CENTER_LEGEND_ORDER.forEach((catKey,i)=>{
+    const cy = rowsTop + rowH*(i+0.5);
+    const cat = CATS[catKey];
+    const color = SWATCH_COLORS[cat.swatch] || GOLD;
+
+    // puce couleur
+    ctx.shadowColor='rgba(0,0,0,.8)'; ctx.shadowBlur=size*0.006;
+    ctx.beginPath(); ctx.arc(chipX,cy,chipR,0,Math.PI*2);
+    ctx.fillStyle = color; ctx.fill();
+    ctx.lineWidth = size*0.003; ctx.strokeStyle = 'rgba(255,255,255,.65)'; ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // nom du lot (contour sombre + remplissage clair, rétréci si trop long)
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    const nameFont = fitFontSingleLine(ctx, cat.label, textMaxW, size*0.028, size*0.017, '800');
+    ctx.font = '800 '+nameFont+'px Arial,Helvetica,sans-serif';
+    ctx.lineJoin='round'; ctx.lineWidth = size*0.005; ctx.strokeStyle='rgba(0,0,0,.85)';
+    ctx.strokeText(cat.label, textX, cy - rowH*0.15);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(cat.label, textX, cy - rowH*0.15);
+
+    // valeur (plus petite, dorée)
+    ctx.font = '700 '+(size*0.0185)+'px Arial,Helvetica,sans-serif';
+    ctx.lineWidth = size*0.004; ctx.strokeStyle='rgba(0,0,0,.85)';
+    ctx.strokeText(cat.value, textX, cy + rowH*0.22);
+    ctx.fillStyle = GOLD_BRIGHT;
+    ctx.fillText(cat.value, textX, cy + rowH*0.22);
+
+    // vraie photo du lot, recadrée "cover" en petit carré, cadre or
+    const img = LOT_IMAGES[catKey];
+    const thumbY = cy - thumbSize/2;
+    ctx.save();
+    roundRectPath(ctx, thumbX, thumbY, thumbSize, thumbSize, size*0.01);
+    ctx.clip();
+    ctx.fillStyle = '#0c0c0c'; ctx.fillRect(thumbX,thumbY,thumbSize,thumbSize);
+    if(img){
+      const scale = Math.max(thumbSize/img.width, thumbSize/img.height);
+      const iw = img.width*scale, ih = img.height*scale;
+      ctx.drawImage(img, thumbX+(thumbSize-iw)/2, thumbY+(thumbSize-ih)/2, iw, ih);
+    }
+    ctx.restore();
+    roundRectPath(ctx, thumbX, thumbY, thumbSize, thumbSize, size*0.01);
+    ctx.shadowColor = color; ctx.shadowBlur = size*0.012;
+    ctx.lineWidth = size*0.005; ctx.strokeStyle = color; ctx.stroke();
+    ctx.shadowBlur = 0;
+  });
+
+  // touche manuscrite "Bonne chance !" + liseré tricolore, en bas
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.font='italic 700 '+(size*0.034)+'px Georgia,serif';
+  ctx.lineWidth = size*0.006; ctx.strokeStyle='rgba(0,0,0,.75)';
+  const luckY = size*0.905;
+  ctx.strokeText('Bonne chance !', size/2, luckY);
+  ctx.fillStyle = GOLD_BRIGHT;
+  ctx.fillText('Bonne chance !', size/2, luckY);
+
+  const stripeY = size*0.945, stripeW = size*0.3, stripeH = size*0.012;
   [[-1,'#1a56db'],[0,'#ffffff'],[1,'#e0323f']].forEach(([d,c])=>{
     ctx.fillStyle = c;
     ctx.fillRect(size/2 - stripeW/2, stripeY + d*stripeH, stripeW, stripeH);
@@ -1980,7 +2064,7 @@ function pushResult(catKey){
   });
 }
 let celebCtx = celebCanvas ? celebCanvas.getContext('2d') : null;
-let celebParticles = [], celebRAF = null, celebEndAt = 0, celebLocked = false;
+let celebParticles = [], celebRockets = [], celebRAF = null, celebEndAt = 0, celebLocked = false;
 
 function resizeCelebCanvas(){
   if(!celebCanvas) return;
@@ -1989,24 +2073,51 @@ function resizeCelebCanvas(){
 }
 window.addEventListener('resize', resizeCelebCanvas, {passive:true});
 
-function spawnParticles(level){
-  const W = celebCanvas.width, H = celebCanvas.height;
-  const count = [0,24,40,60,90,140][level];
-  const colors = level>=4 ? ['#ffe27a','#fff2c2','#ffffff','#ffd200'] : ['#ffe27a','#e0323f','#1a56db','#ffffff'];
-  // À partir du niveau 3, une partie des particules laisse une traînée
-  // façon étincelle de feu d'artifice plutôt qu'un simple confetti.
-  const sparkShare = level>=4 ? 0.55 : (level>=3 ? 0.35 : 0);
+/* Vrai feu d'artifice : une fusée part du bas de l'écran avec une
+   traînée, ralentit en montant, puis éclate en boule à l'apex avec
+   un flash lumineux + des étincelles qui retombent. Plusieurs fusées
+   sont lancées en décalé pour un petit spectacle, pas un simple
+   confetti qui tombe d'un point fixe. */
+function spawnFirework(x, y, level, colors){
+  const cols = colors || (level>=4 ? ['#ffe27a','#fff2c2','#ffffff','#ffd200'] : ['#ffe27a','#e0323f','#1a56db','#ffffff']);
+  const count = 26 + level*10;
+  celebParticles.push({
+    x, y, px:x, py:y, vx:0, vy:0, g:0, size: 26+level*7, color:'#fff6d8',
+    life:1, decay:0.085, shape:'flash', rot:0, vr:0, spark:false
+  });
   for(let i=0;i<count;i++){
-    const ang = Math.random()*Math.PI*2;
-    const spd = (2+Math.random()*5) * (1+level*0.25);
-    const isSpark = Math.random() < sparkShare;
+    const ang = (i/count)*Math.PI*2 + (Math.random()-0.5)*0.3;
+    const spd = (2.3+Math.random()*3)*(1+level*0.12);
+    const isSpark = Math.random() < 0.4;
     celebParticles.push({
-      x:W/2, y:H*0.4, px:W/2, py:H*0.4, vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd - 2,
-      g: 0.12+Math.random()*0.06, size: isSpark ? 2+Math.random()*2 : 3+Math.random()*5,
-      color: colors[(Math.random()*colors.length)|0], life:1, decay: 0.006+Math.random()*0.006,
-      shape: Math.random()<0.5?'rect':'circle', rot:Math.random()*Math.PI, vr:(Math.random()-0.5)*0.3,
+      x, y, px:x, py:y, vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd,
+      g: 0.09+Math.random()*0.035, size: isSpark ? 1.6+Math.random()*1.6 : 2.6+Math.random()*3.2,
+      color: cols[(Math.random()*cols.length)|0], life:1, decay: 0.011+Math.random()*0.009,
+      shape: isSpark ? 'spark' : (Math.random()<0.5?'rect':'circle'), rot:Math.random()*Math.PI, vr:(Math.random()-0.5)*0.3,
       spark:isSpark
     });
+  }
+}
+
+function launchFireworksShow(level){
+  if(!celebCanvas) return;
+  const palettes = level>=4
+    ? [['#ffe27a','#fff2c2','#ffffff','#ffd200'], ['#ffb347','#ffe27a','#ffffff']]
+    : [['#ffe27a','#e0323f','#1a56db','#ffffff'], ['#1a56db','#ffffff','#ffe27a']];
+  const W = celebCanvas.width, H = celebCanvas.height;
+  const rocketCount = 2 + level;
+  for(let i=0;i<rocketCount;i++){
+    setTimeout(()=>{
+      const x = W*(0.18+Math.random()*0.64);
+      const y1 = H*(0.22+Math.random()*0.2);
+      const colors = palettes[(Math.random()*palettes.length)|0];
+      celebRockets.push({
+        x, y:H*1.05, y0:H*1.05, y1, px:x, py:H*1.05,
+        start: performance.now(), dur: 480+Math.random()*220,
+        exploded:false, level, colors
+      });
+      if(!celebRAF) celebFrame();
+    }, i*(200+Math.random()*140));
   }
 }
 
@@ -2014,12 +2125,45 @@ function celebFrame(){
   if(!celebCtx) return;
   const W = celebCanvas.width, H = celebCanvas.height;
   celebCtx.clearRect(0,0,W,H);
+
+  const now = performance.now();
+  celebRockets.forEach(r=>{
+    const frac = Math.min(1, (now - r.start) / r.dur);
+    const eased = 1 - Math.pow(1-frac, 2);
+    r.py = r.y;
+    r.y = r.y0 + (r.y1 - r.y0) * eased;
+    if(frac >= 1 && !r.exploded){
+      r.exploded = true;
+      spawnFirework(r.x, r.y1, r.level, r.colors);
+    }
+  });
+  celebCtx.save();
+  celebCtx.globalCompositeOperation = 'lighter';
+  celebRockets.forEach(r=>{
+    if(r.exploded) return;
+    celebCtx.globalAlpha = 0.9;
+    celebCtx.strokeStyle = r.colors[0]; celebCtx.lineWidth = 2;
+    celebCtx.beginPath(); celebCtx.moveTo(r.x,r.py); celebCtx.lineTo(r.x,r.y); celebCtx.stroke();
+    celebCtx.fillStyle = '#fff6d8';
+    celebCtx.beginPath(); celebCtx.arc(r.x,r.y,2.2,0,Math.PI*2); celebCtx.fill();
+  });
+  celebCtx.restore();
+  celebRockets = celebRockets.filter(r=>!r.exploded);
+
   celebParticles.forEach(p=>{
     p.px = p.x; p.py = p.y;
     p.x += p.vx; p.y += p.vy; p.vy += p.g; p.life -= p.decay; p.rot += p.vr;
     celebCtx.save();
     celebCtx.globalAlpha = Math.max(0,p.life);
-    if(p.spark){
+    if(p.shape==='flash'){
+      const rad = p.size * (1.15 - p.life*0.3);
+      const grad = celebCtx.createRadialGradient(p.x,p.y,0, p.x,p.y,rad);
+      grad.addColorStop(0, p.color);
+      grad.addColorStop(1, 'rgba(255,240,200,0)');
+      celebCtx.globalCompositeOperation = 'lighter';
+      celebCtx.fillStyle = grad;
+      celebCtx.beginPath(); celebCtx.arc(p.x,p.y,rad,0,Math.PI*2); celebCtx.fill();
+    } else if(p.spark){
       celebCtx.strokeStyle = p.color; celebCtx.lineWidth = p.size;
       celebCtx.beginPath(); celebCtx.moveTo(p.px,p.py); celebCtx.lineTo(p.x,p.y); celebCtx.stroke();
     } else {
@@ -2031,7 +2175,7 @@ function celebFrame(){
     celebCtx.restore();
   });
   celebParticles = celebParticles.filter(p=>p.life>0 && p.y<H+50);
-  if(performance.now() < celebEndAt || celebParticles.length){
+  if(performance.now() < celebEndAt || celebParticles.length || celebRockets.length){
     celebRAF = requestAnimationFrame(celebFrame);
   } else {
     celebRAF = null;
@@ -2046,6 +2190,7 @@ function clearCelebration(){
   if(celebRAF) cancelAnimationFrame(celebRAF);
   celebRAF = null;
   celebParticles = [];
+  celebRockets = [];
   celebLocked = false;
   if(celeb) celeb.classList.remove('show','shake');
 }
@@ -2179,11 +2324,10 @@ function revealCelebration(catKey, forcedCard, level){
   // Caisse, qui garde son effet quel que soit le lot obtenu).
   const skipFx = !rareCardDrawn && (catKey==='commune' || catKey==='booster8');
   if(!skipFx){
-    const bursts = effectiveLevel;
-    for(let b=0;b<bursts;b++){ setTimeout(()=>spawnParticles(effectiveLevel), b*220); }
+    launchFireworksShow(effectiveLevel);
     if(effectiveLevel>=3){ triggerLightning(); if(effectiveLevel>=4) setTimeout(triggerLightning, 380); }
   }
-  celebEndAt = performance.now() + (skipFx ? 1200 : 1400 + effectiveLevel*350);
+  celebEndAt = performance.now() + (skipFx ? 1200 : 1900 + effectiveLevel*500);
   if(!celebRAF) celebFrame();
   setTimeout(()=>{ celeb.classList.remove('shake'); }, rareCardDrawn ? 900 : 700);
 }
