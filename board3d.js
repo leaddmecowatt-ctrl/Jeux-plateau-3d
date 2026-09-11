@@ -528,16 +528,23 @@ function getGlyphTexture(kind, accentColor){
     ctx.fillText('🔓',cx,cy+size*0.03);
   } else {
     const medal = accentColor || GOLD;
-    const radius = size*0.42;
+    // liseré sombre + anneau blanc épais autour du médaillon : sans ça,
+    // il se fond dans une case dont la face a maintenant le même fond
+    // coloré (depuis la refonte des cases Chance/Caisse/Prison).
+    const rimR = size*0.46;
+    ctx.beginPath(); ctx.arc(cx,cy,rimR,0,Math.PI*2);
+    ctx.fillStyle = 'rgba(8,6,4,.85)'; ctx.fill();
+
+    const radius = size*0.40;
     const grad = ctx.createRadialGradient(cx,cy-radius*0.3,radius*0.08, cx,cy,radius);
     grad.addColorStop(0, shadeHex(medal,0.45));
     grad.addColorStop(0.6, medal);
     grad.addColorStop(1, shadeHex(medal,-0.5));
     ctx.beginPath(); ctx.arc(cx,cy,radius,0,Math.PI*2);
     ctx.fillStyle = grad; ctx.fill();
-    ctx.lineWidth = size*0.028; ctx.strokeStyle = '#fff9e6'; ctx.stroke();
+    ctx.lineWidth = size*0.045; ctx.strokeStyle = '#fff9e6'; ctx.stroke();
 
-    ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = size*0.04;
+    ctx.shadowColor = 'rgba(0,0,0,.7)'; ctx.shadowBlur = size*0.05;
     ctx.fillStyle = '#fff9e6';
     if(kind==='chance'){
       ctx.font='900 '+(size*0.44)+'px Arial,Helvetica,sans-serif';
@@ -1093,7 +1100,7 @@ for(let i=0;i<40;i++){
     floatBaseScale = h;
   } else if(catDef.tier === 'glyph'){
     const glyphKind = data.isVisite ? 'visite' : catKey;
-    floatObj = makeSprite(getGlyphTexture(glyphKind, accentColor), data.isVisite ? 0.3 : 0.42);
+    floatObj = makeSprite(getGlyphTexture(glyphKind, accentColor), data.isVisite ? 0.3 : 0.6);
     floatObj.position.y = tileTopY + 0.3;
     group.add(floatObj);
   }
@@ -1119,10 +1126,10 @@ for(let i=0;i<40;i++){
       // même halo scintillant, plus discret, sous le médaillon
       // Chance/Caisse/Prison pour qu'il ne se perde pas dans le décor.
       const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-        map:goldDotTex, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.4
+        map:goldDotTex, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.45
       }));
       glow.position.y = tileTopY+0.05;
-      glow.scale.set(0.5,0.5,0.5);
+      glow.scale.set(0.68,0.68,0.68);
       group.add(glow);
     }
   }
