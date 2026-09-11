@@ -2490,10 +2490,12 @@ function revealCelebration(catKey, forcedCard, level){
 
   const effectiveLevel = rareCardDrawn ? 5 : level;
   playFanfare(effectiveLevel);
-  // Pioche du Prof. Chen et Booster du Marchand : reveal classique,
-  // sans confettis ni éclair (sauf carte rare tirée d'une Chance/
-  // Caisse, qui garde son effet quel que soit le lot obtenu).
-  const skipFx = !rareCardDrawn && (catKey==='commune' || catKey==='booster8');
+  // Pioche du Prof. Chen : reveal classique, sans confettis ni éclair
+  // (sauf carte rare tirée d'une Chance/Caisse, qui garde son effet
+  // quel que soit le lot obtenu). Le Booster du Marchand, lui, a
+  // maintenant droit à son petit feu d'artifice (échelle réduite,
+  // niveau 1) pour ne pas paraître trop terne face aux gros lots.
+  const skipFx = !rareCardDrawn && catKey==='commune';
   if(!skipFx){
     launchFireworksShow(effectiveLevel);
     if(effectiveLevel>=3){ triggerLightning(); if(effectiveLevel>=4) setTimeout(triggerLightning, 380); }
