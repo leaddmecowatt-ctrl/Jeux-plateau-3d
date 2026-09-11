@@ -55,7 +55,7 @@ const CATS = {
   gradee:      { label:'Duopack 30 ans',              value:'20-80€',  tier:'float', swatch:'gold'   },
   booster50:   { label:'Tripack 30 ans',              value:'50€',     tier:'float', swatch:'gold'   },
   etb:         { label:'Coffret 30 ans',              value:'150€',    tier:'float', swatch:'gold'   },
-  jackpot300:  { label:'Carte Darkrai',               value:'300€',    tier:'float', swatch:'gold'   },
+  jackpot300:  { label:'ETB 30 ans',                  value:'300€',    tier:'float', swatch:'gold'   },
   chance:      { label:'Chance',                     value:'tirage',  tier:'glyph', swatch:'purple' },
   chest:       { label:'Caisse Communautaire',       value:'tirage',  tier:'glyph', swatch:'green'  },
   prison:      { label:'Prison',                     value:'0€',      tier:'glyph', swatch:'danger' },
@@ -2421,7 +2421,7 @@ const CATEGORY_MESSAGES = {
   gradee:      '⭐ DUOPACK 30 ANS GAGNÉ ! ⭐',
   booster50:   '🎁 TRIPACK 30 ANS GAGNÉ ! 🎁',
   etb:         '🎁 COFFRET 30 ANS GAGNÉ ! 🎁',
-  jackpot300:  '👑 CARTE DARKRAI GAGNÉE ! 👑',
+  jackpot300:  '👑 ETB 30 ANS GAGNÉ ! 👑',
 };
 
 function celebrate(catKey, forcedCard, opts){
