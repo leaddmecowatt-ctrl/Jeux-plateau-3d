@@ -285,6 +285,37 @@ function getFlatPhotoFace(catKey, accentColor, badge){
     ctx.filter = 'saturate(1.14) contrast(1.07) brightness(1.06)';
     ctx.drawImage(img, pad+(bw-iw)/2, pad+(bh-ih)/2, iw, ih);
     ctx.filter = 'none';
+  } else if(CATS[catKey] && CATS[catKey].tier === 'glyph'){
+    // Chance / Caisse Communautaire / Prison n'ont pas de photo, mais
+    // ne doivent plus rester une case plate noire : même fond dégradé
+    // coloré que les lots, avec le symbole en grand au centre.
+    const pad = size*0.028;
+    const bw = size-2*pad, bh = size-2*pad-size*0.19;
+    const bgGrad = ctx.createRadialGradient(
+      pad+bw/2, pad+bh*0.42, bh*0.05,
+      pad+bw/2, pad+bh/2, bh*0.75
+    );
+    bgGrad.addColorStop(0, shadeHex(accentColor, 0.4));
+    bgGrad.addColorStop(0.55, accentColor);
+    bgGrad.addColorStop(1, shadeHex(accentColor, -0.55));
+    ctx.save();
+    roundRectPath(ctx, pad, pad, bw, bh, r*0.7); ctx.clip();
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(pad, pad, bw, bh);
+    ctx.restore();
+
+    const glyphChar = { chance:'?', chest:'🗃️', prison:'🔒' }[catKey];
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = size*0.03;
+    ctx.fillStyle = '#fff9e6';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    if(catKey==='chance'){
+      ctx.font = '900 '+(bh*0.6)+'px Arial,Helvetica,sans-serif';
+    } else {
+      ctx.font = (bh*0.52)+'px "Segoe UI Emoji","Apple Color Emoji",Arial,sans-serif';
+    }
+    ctx.fillText(glyphChar, pad+bw/2, pad+bh*0.46);
+    ctx.restore();
   }
   const gloss = ctx.createLinearGradient(0,0,0,size);
   gloss.addColorStop(0,'rgba(255,255,255,.06)'); gloss.addColorStop(.22,'rgba(255,255,255,0)');
@@ -478,36 +509,50 @@ function getFramedPhotoTexture(catKey){
   return entry;
 }
 
-/* Icônes "glyphe" or/noir pour Chance, Caisse Communautaire, Prison */
+/* Icônes "glyphe" pour Chance, Caisse Communautaire, Prison : un
+   médaillon rond dégradé dans la couleur d'accent de la case (façon
+   jeton) derrière le symbole, sinon le glyphe flottait nu et minuscule
+   dans le décor, à peine lisible depuis la caméra par défaut. */
 const glyphCache = new Map();
-function getGlyphTexture(kind){
-  if(glyphCache.has(kind)) return glyphCache.get(kind);
-  const size = 200;
+function getGlyphTexture(kind, accentColor){
+  const key = kind+'|'+(accentColor||'');
+  if(glyphCache.has(key)) return glyphCache.get(key);
+  const size = 240;
   const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
   const ctx = cvs.getContext('2d');
   const cx=size/2, cy=size/2;
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  if(kind==='chance'){
-    ctx.shadowColor = 'rgba(154,95,224,.9)'; ctx.shadowBlur = size*0.22;
-    ctx.font='900 '+(size*0.62)+'px Arial,Helvetica,sans-serif';
-    ctx.fillStyle = GOLD_BRIGHT;
-    ctx.fillText('?',cx,cy+size*0.02);
-  } else if(kind==='chest'){
-    ctx.shadowColor = 'rgba(51,180,106,.9)'; ctx.shadowBlur = size*0.2;
-    ctx.font=(size*0.58)+'px "Segoe UI Emoji","Apple Color Emoji",Arial,sans-serif';
-    ctx.fillText('🗃️',cx,cy+size*0.03);
-  } else if(kind==='prison'){
-    ctx.shadowColor = 'rgba(214,43,43,.95)'; ctx.shadowBlur = size*0.28;
-    ctx.font=(size*0.56)+'px "Segoe UI Emoji","Apple Color Emoji",Arial,sans-serif';
-    ctx.fillText('🔒',cx,cy+size*0.03);
-  } else if(kind==='visite'){
+  if(kind==='visite'){
     ctx.shadowColor = 'rgba(255,255,255,.6)'; ctx.shadowBlur = size*0.12;
     ctx.font=(size*0.4)+'px "Segoe UI Emoji","Apple Color Emoji",Arial,sans-serif';
     ctx.fillText('🔓',cx,cy+size*0.03);
+  } else {
+    const medal = accentColor || GOLD;
+    const radius = size*0.42;
+    const grad = ctx.createRadialGradient(cx,cy-radius*0.3,radius*0.08, cx,cy,radius);
+    grad.addColorStop(0, shadeHex(medal,0.45));
+    grad.addColorStop(0.6, medal);
+    grad.addColorStop(1, shadeHex(medal,-0.5));
+    ctx.beginPath(); ctx.arc(cx,cy,radius,0,Math.PI*2);
+    ctx.fillStyle = grad; ctx.fill();
+    ctx.lineWidth = size*0.028; ctx.strokeStyle = '#fff9e6'; ctx.stroke();
+
+    ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = size*0.04;
+    ctx.fillStyle = '#fff9e6';
+    if(kind==='chance'){
+      ctx.font='900 '+(size*0.44)+'px Arial,Helvetica,sans-serif';
+      ctx.fillText('?',cx,cy+size*0.02);
+    } else if(kind==='chest'){
+      ctx.font=(size*0.38)+'px "Segoe UI Emoji","Apple Color Emoji",Arial,sans-serif';
+      ctx.fillText('🗃️',cx,cy+size*0.02);
+    } else if(kind==='prison'){
+      ctx.font=(size*0.36)+'px "Segoe UI Emoji","Apple Color Emoji",Arial,sans-serif';
+      ctx.fillText('🔒',cx,cy+size*0.02);
+    }
   }
   const tex = new THREE.CanvasTexture(cvs);
   tex.colorSpace = THREE.SRGBColorSpace;
-  glyphCache.set(kind,tex);
+  glyphCache.set(key,tex);
   return tex;
 }
 
@@ -1000,7 +1045,9 @@ for(let i=0;i<40;i++){
   } else if(catDef.tier === 'flat'){
     faceTex = getFlatPhotoFace(catKey, accentColor, data.isVisite ? '🔓' : null);
   } else {
-    // pour les cases "float"/"glyph", la face reste sobre noir & or
+    // "float" (le lot flotte déjà en carte au-dessus, la case reste
+    // sobre) / "glyph" (Chance, Caisse, Prison : pas de photo, mais
+    // getFlatPhotoFace dessine désormais son propre fond + symbole)
     faceTex = getFlatPhotoFace(catKey, accentColor, null);
   }
   const faceMat = new THREE.MeshBasicMaterial({map:faceTex});
@@ -1046,7 +1093,7 @@ for(let i=0;i<40;i++){
     floatBaseScale = h;
   } else if(catDef.tier === 'glyph'){
     const glyphKind = data.isVisite ? 'visite' : catKey;
-    floatObj = makeSprite(getGlyphTexture(glyphKind), 0.3);
+    floatObj = makeSprite(getGlyphTexture(glyphKind, accentColor), data.isVisite ? 0.3 : 0.42);
     floatObj.position.y = tileTopY + 0.3;
     group.add(floatObj);
   }
@@ -1067,6 +1114,15 @@ for(let i=0;i<40;i++){
       }));
       glow.position.y = tileTopY+0.06;
       glow.scale.set(glowScale,glowScale,glowScale);
+      group.add(glow);
+    } else if(catDef.tier==='glyph' && !data.isVisite){
+      // même halo scintillant, plus discret, sous le médaillon
+      // Chance/Caisse/Prison pour qu'il ne se perde pas dans le décor.
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+        map:goldDotTex, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.4
+      }));
+      glow.position.y = tileTopY+0.05;
+      glow.scale.set(0.5,0.5,0.5);
       group.add(glow);
     }
   }
