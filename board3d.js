@@ -1220,20 +1220,49 @@ const START_NODE = tiles[0];
   boardGroup.add(ring);
 }
 
-/* ---------- Pion articulé (façon dresseur, sac à dos inclus) ---------- */
+/* Contour noir "coque inversée" : une copie de chaque mesh assez
+   grande, un peu plus grosse, rendue seulement par ses faces arrière
+   (BackSide) — vue de face, le mesh normal la recouvre presque
+   entièrement et seul un fin liseré dépasse sur le pourtour, exactement
+   l'effet de contour des personnages de jeu cel-shaded. Les détails
+   minuscules (yeux, rougeurs) sont ignorés, un contour dessus ferait
+   plus de bruit que d'effet. */
+const toonOutlineMat = new THREE.MeshBasicMaterial({color:0x241a12, side:THREE.BackSide});
+function addToonOutlines(root, thickness){
+  // On collecte d'abord la liste des meshes, puis on ajoute les
+  // contours dans une seconde passe : ajouter un enfant pendant que
+  // traverse() parcourt encore l'arbre le fait aussi visiter ce nouvel
+  // enfant (même geometry, donc même rayon) et boucler à l'infini.
+  const meshes = [];
+  root.traverse(obj=>{ if(obj.isMesh && obj.geometry) meshes.push(obj); });
+  meshes.forEach(obj=>{
+    obj.geometry.computeBoundingSphere();
+    if(obj.geometry.boundingSphere.radius < 0.02) return;
+    const outline = new THREE.Mesh(obj.geometry, toonOutlineMat);
+    outline.scale.setScalar(1+thickness);
+    obj.add(outline);
+  });
+}
+
+/* ---------- Pion articulé (façon dresseur, sac à dos inclus) ----------
+   Rendu "toon" (aplats de couleur à 2 tons, sans reflets réalistes) +
+   contour noir façon coque inversée (une copie de chaque mesh, un peu
+   plus grosse, avec les faces avant retournées) pour se rapprocher du
+   style cel-shading d'un vrai jeu plutôt que du rendu plastique/PBR
+   d'avant. */
 function buildToken(){
   const root = new THREE.Group();
 
-  const skin = new THREE.MeshPhysicalMaterial({color:0xf3c39c,roughness:.55,clearcoat:.3,clearcoatRoughness:.4});
-  const jacket = new THREE.MeshPhysicalMaterial({color:0x2a5fc4,roughness:.45,metalness:.05,clearcoat:.4,clearcoatRoughness:.3});
-  const jacketLight = new THREE.MeshPhysicalMaterial({color:0xf3f7fb,roughness:.5,clearcoat:.3});
-  const jeans = new THREE.MeshStandardMaterial({color:0x3f63a8,roughness:.7});
-  const cap = new THREE.MeshPhysicalMaterial({color:0xe23b3f,roughness:.4,clearcoat:.5,clearcoatRoughness:.3});
-  const capDark = new THREE.MeshStandardMaterial({color:0xb32a2e,roughness:.5});
-  const hair = new THREE.MeshStandardMaterial({color:0x3b2a1e,roughness:.6});
-  const shoe = new THREE.MeshStandardMaterial({color:0x6b4226,roughness:.6});
-  const bag = new THREE.MeshStandardMaterial({color:0xb23a3a,roughness:.55});
-  const strap = new THREE.MeshStandardMaterial({color:0x5a2020,roughness:.6});
+  const skin = new THREE.MeshToonMaterial({color:0xf3c39c});
+  const jacket = new THREE.MeshToonMaterial({color:0x2a5fc4});
+  const jacketLight = new THREE.MeshToonMaterial({color:0xf3f7fb});
+  const jeans = new THREE.MeshToonMaterial({color:0x3f63a8});
+  const cap = new THREE.MeshToonMaterial({color:0xe23b3f});
+  const capDark = new THREE.MeshToonMaterial({color:0xb32a2e});
+  const hair = new THREE.MeshToonMaterial({color:0x3b2a1e});
+  const shoe = new THREE.MeshToonMaterial({color:0x6b4226});
+  const bag = new THREE.MeshToonMaterial({color:0xb23a3a});
+  const strap = new THREE.MeshToonMaterial({color:0x5a2020});
 
   function limb(mat,r,len){
     const g = new THREE.Group();
@@ -1284,6 +1313,7 @@ function buildToken(){
 
   const headGroup = new THREE.Group();
   headGroup.position.y = 0.5;
+  headGroup.scale.setScalar(1.18); // tête plus grosse, façon chibi : se lit mieux vue d'en haut
   torso.add(headGroup);
 
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.155,24,20), skin);
@@ -1331,6 +1361,8 @@ function buildToken(){
     s.castShadow = true;
     g.add(s);
   });
+
+  addToonOutlines(root, 0.045);
 
   return { root, legL, legR, armL, armR, torso };
 }
