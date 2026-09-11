@@ -1035,7 +1035,11 @@ for(let i=0;i<40;i++){
     const { tex, aspect } = getFramedPhotoTexture(catKey);
     const scaleByCat = { gradee:0.5, booster50:0.6, etb:0.7, jackpot300:0.8 }[catKey] || 0.5;
     const h = scaleByCat, w = h*aspect;
-    const mat = new THREE.MeshBasicMaterial({map:tex, transparent:true});
+    // double face : sinon la carte flottante devient invisible dès
+    // qu'on regarde le plateau depuis le côté opposé (le plan tourné
+    // vers l'extérieur montre alors sa face arrière, non texturée par
+    // défaut avec THREE.FrontSide).
+    const mat = new THREE.MeshBasicMaterial({map:tex, transparent:true, side:THREE.DoubleSide});
     floatObj = new THREE.Mesh(new THREE.PlaneGeometry(w,h), mat);
     floatObj.position.y = tileTopY + 0.32 + h*0.5;
     group.add(floatObj);
