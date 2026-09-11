@@ -665,48 +665,30 @@ function perimeterPosAt(u){ // u in [0,1)
   return [x0+(x1-x0)*lp, z0+(z1-z0)*lp];
 }
 
-/* ---------- Plaque centrale "PIKAJACKPOT" + légende des lots ---------- */
-// L'ordre d'affichage suit la progression logique des paliers (petit
-// lot flat -> gros lot flottant), pas l'ordre des cases sur le
-// plateau.
-const CENTER_LEGEND_ORDER = ['commune','alternative','booster8','gradee','booster50','etb','jackpot300'];
-
-function fitFontSingleLine(ctx, text, maxWidth, maxFont, minFont, weight){
-  const family = 'Arial,Helvetica,sans-serif';
-  let fontSize = maxFont;
-  ctx.font = weight+' '+fontSize+'px '+family;
-  while(fontSize > minFont && ctx.measureText(text).width > maxWidth){
-    fontSize -= 1;
-    ctx.font = weight+' '+fontSize+'px '+family;
-  }
-  return fontSize;
-}
-
+/* ---------- Plaque centrale "PIKAJACKPOT" ---------- */
 function makeCenterPlateTexture(){
-  const size = 1100;
+  const size = 640;
   const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
   const ctx = cvs.getContext('2d');
   // Pas de fond du tout, pas même un voile discret : le sol du
   // plateau reste entièrement transparent jusqu'au centre, la photo
-  // derrière doit se voir sans aucune couche, y compris derrière la
-  // légende des lots. La lisibilité de chaque élément vient
-  // uniquement de son ombre portée / contour sombre, jamais d'un
-  // aplat de fond.
+  // derrière doit se voir sans aucune couche. La lisibilité du texte
+  // vient uniquement de son ombre portée (plus bas), pas d'un fond.
 
   // anneaux dorés concentriques façon roue — ombre portée sombre pour
   // rester lisibles quel que soit ce qui se voit derrière (photo)
-  ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = size*0.008;
+  ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = size*0.01;
   for(let i=0;i<3;i++){
-    ctx.beginPath(); ctx.arc(size/2,size/2,size*(0.495-i*0.045),0,Math.PI*2);
-    ctx.lineWidth = size*0.008; ctx.strokeStyle = i===1?GOLD_BRIGHT:GOLD; ctx.globalAlpha=0.8-i*0.13;
+    ctx.beginPath(); ctx.arc(size/2,size/2,size*(0.46-i*0.07),0,Math.PI*2);
+    ctx.lineWidth = size*0.012; ctx.strokeStyle = i===1?GOLD_BRIGHT:GOLD; ctx.globalAlpha=0.85-i*0.15;
     ctx.stroke();
   }
   ctx.globalAlpha=1; ctx.shadowBlur=0;
 
   // mini Pokeball classique rouge/blanc au-dessus du texte — ombre
   // sombre pour se détacher de n'importe quel fond derrière
-  const pbY = size*0.095, pbR = size*0.032;
-  ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = size*0.012;
+  const pbY = size*0.30, pbR = size*0.075;
+  ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = size*0.015;
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR,Math.PI,0); ctx.fillStyle='#f5484f'; ctx.fill();
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR,0,Math.PI); ctx.fillStyle='#f6fbff'; ctx.fill();
   ctx.shadowBlur = 0;
@@ -715,91 +697,25 @@ function makeCenterPlateTexture(){
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR,0,Math.PI*2); ctx.stroke();
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR*0.34,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill(); ctx.stroke();
 
-  // texte PIKAJACKPOT — une seule ligne compacte (on garde toute la
-  // hauteur possible pour la légende des lots en dessous) — contour
-  // sombre systématique pour rester lisible même sur une photo claire
+  // texte PIKAJACKPOT — contour sombre systématique (pas juste une
+  // lueur dorée) pour rester lisible même sur une photo très claire
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.font='900 '+(size*0.062)+'px Arial,Helvetica,sans-serif';
-  ctx.lineJoin='round'; ctx.lineWidth=size*0.009; ctx.strokeStyle='rgba(0,0,0,.8)';
-  const titleY = size*0.152;
-  ctx.strokeText('★ PIKAJACKPOT ★', size/2, titleY);
-  ctx.shadowColor = 'rgba(255,210,110,.9)'; ctx.shadowBlur = size*0.014;
+  ctx.font='900 '+(size*0.108)+'px Arial,Helvetica,sans-serif';
+  ctx.lineJoin='round'; ctx.lineWidth=size*0.014; ctx.strokeStyle='rgba(0,0,0,.8)';
+  ctx.save();
+  ctx.translate(size/2, size*0.53);
+  ctx.strokeText('PIKA', -size*0.001, -size*0.06);
+  ctx.strokeText('JACKPOT', 0, size*0.075);
+  ctx.shadowColor = 'rgba(255,210,110,.9)'; ctx.shadowBlur = size*0.02;
   ctx.fillStyle = GOLD_BRIGHT;
-  ctx.fillText('★ PIKAJACKPOT ★', size/2, titleY);
+  ctx.fillText('PIKA', -size*0.001, -size*0.06);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('JACKPOT', 0, size*0.075);
+  ctx.restore();
   ctx.shadowBlur = 0;
 
-  // sous-titre "TOUS LES LOTS À GAGNER"
-  ctx.font = '700 '+(size*0.026)+'px Arial,Helvetica,sans-serif';
-  ctx.lineWidth = size*0.006; ctx.strokeStyle = 'rgba(0,0,0,.75)';
-  const subY = size*0.196;
-  ctx.strokeText('TOUS LES LOTS À GAGNER', size/2, subY);
-  ctx.fillStyle = '#fff6da';
-  ctx.fillText('TOUS LES LOTS À GAGNER', size/2, subY);
-
-  // liste des lots réels : puce couleur + nom + valeur + vraie photo,
-  // sans aucun fond plein — chaque ligne flotte sur la photo derrière
-  const rowsTop = size*0.245, rowsBottom = size*0.86, rows = CENTER_LEGEND_ORDER.length;
-  const rowH = (rowsBottom-rowsTop)/rows;
-  const chipX = size*0.145, chipR = size*0.016;
-  const textX = size*0.185, textMaxW = size*0.46;
-  const thumbSize = size*0.082, thumbX = size*0.795 - thumbSize/2;
-  CENTER_LEGEND_ORDER.forEach((catKey,i)=>{
-    const cy = rowsTop + rowH*(i+0.5);
-    const cat = CATS[catKey];
-    const color = SWATCH_COLORS[cat.swatch] || GOLD;
-
-    // puce couleur
-    ctx.shadowColor='rgba(0,0,0,.8)'; ctx.shadowBlur=size*0.006;
-    ctx.beginPath(); ctx.arc(chipX,cy,chipR,0,Math.PI*2);
-    ctx.fillStyle = color; ctx.fill();
-    ctx.lineWidth = size*0.003; ctx.strokeStyle = 'rgba(255,255,255,.65)'; ctx.stroke();
-    ctx.shadowBlur = 0;
-
-    // nom du lot (contour sombre + remplissage clair, rétréci si trop long)
-    ctx.textAlign='left'; ctx.textBaseline='middle';
-    const nameFont = fitFontSingleLine(ctx, cat.label, textMaxW, size*0.028, size*0.017, '800');
-    ctx.font = '800 '+nameFont+'px Arial,Helvetica,sans-serif';
-    ctx.lineJoin='round'; ctx.lineWidth = size*0.005; ctx.strokeStyle='rgba(0,0,0,.85)';
-    ctx.strokeText(cat.label, textX, cy - rowH*0.15);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(cat.label, textX, cy - rowH*0.15);
-
-    // valeur (plus petite, dorée)
-    ctx.font = '700 '+(size*0.0185)+'px Arial,Helvetica,sans-serif';
-    ctx.lineWidth = size*0.004; ctx.strokeStyle='rgba(0,0,0,.85)';
-    ctx.strokeText(cat.value, textX, cy + rowH*0.22);
-    ctx.fillStyle = GOLD_BRIGHT;
-    ctx.fillText(cat.value, textX, cy + rowH*0.22);
-
-    // vraie photo du lot, recadrée "cover" en petit carré, cadre or
-    const img = LOT_IMAGES[catKey];
-    const thumbY = cy - thumbSize/2;
-    ctx.save();
-    roundRectPath(ctx, thumbX, thumbY, thumbSize, thumbSize, size*0.01);
-    ctx.clip();
-    ctx.fillStyle = '#0c0c0c'; ctx.fillRect(thumbX,thumbY,thumbSize,thumbSize);
-    if(img){
-      const scale = Math.max(thumbSize/img.width, thumbSize/img.height);
-      const iw = img.width*scale, ih = img.height*scale;
-      ctx.drawImage(img, thumbX+(thumbSize-iw)/2, thumbY+(thumbSize-ih)/2, iw, ih);
-    }
-    ctx.restore();
-    roundRectPath(ctx, thumbX, thumbY, thumbSize, thumbSize, size*0.01);
-    ctx.shadowColor = color; ctx.shadowBlur = size*0.012;
-    ctx.lineWidth = size*0.005; ctx.strokeStyle = color; ctx.stroke();
-    ctx.shadowBlur = 0;
-  });
-
-  // touche manuscrite "Bonne chance !" + liseré tricolore, en bas
-  ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.font='italic 700 '+(size*0.034)+'px Georgia,serif';
-  ctx.lineWidth = size*0.006; ctx.strokeStyle='rgba(0,0,0,.75)';
-  const luckY = size*0.905;
-  ctx.strokeText('Bonne chance !', size/2, luckY);
-  ctx.fillStyle = GOLD_BRIGHT;
-  ctx.fillText('Bonne chance !', size/2, luckY);
-
-  const stripeY = size*0.945, stripeW = size*0.3, stripeH = size*0.012;
+  // liseré tricolore (clin d'oeil Pokémon) sous le texte
+  const stripeY = size*0.66, stripeW = size*0.42, stripeH = size*0.018;
   [[-1,'#1a56db'],[0,'#ffffff'],[1,'#e0323f']].forEach(([d,c])=>{
     ctx.fillStyle = c;
     ctx.fillRect(size/2 - stripeW/2, stripeY + d*stripeH, stripeW, stripeH);
