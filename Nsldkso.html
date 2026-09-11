@@ -217,6 +217,11 @@ body{overflow:hidden;color:#fff}
 }
 .winbtn[hidden]{display:none}
 @keyframes winPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.035)}}
+.undobtn{
+  grid-column:1/3;border:1px solid var(--gold);border-radius:8px;padding:8px;font-weight:800;font-size:12px;
+  background:#2a2210;color:#e8dcb0;
+}
+.undobtn[hidden]{display:none}
 button:disabled{opacity:.48;filter:grayscale(.7)}
 button:active:not(:disabled){transform:translateY(1px)}
 
@@ -552,6 +557,7 @@ if(new URLSearchParams(location.search).get('view')==='display'){
           </div>
           <button class="validate" id="validate" type="button">🃏 TIRER LES CARTES</button>
           <button class="winbtn" id="winBtn" type="button" hidden>🎉 LOT REMPORTÉ</button>
+          <button class="undobtn" id="undoBtn" type="button" hidden>↩ ANNULER LE DERNIER LOT</button>
         </div>
 
         <div class="lots-gallery">

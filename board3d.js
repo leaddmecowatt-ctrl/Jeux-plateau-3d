@@ -88,10 +88,39 @@ const CHEST_DECK = [
   { text: 'Rien de spécial', weight: 4, effect:{type:'none'} },
   RARE_GRADEE_CARD,
 ];
+/* Garde-fou "pitié" : la carte rare (grosse carte gradée) tombe en
+   moyenne 1 tirage sur 25, mais le pur hasard peut la faire attendre
+   bien plus longtemps, ce qui plombe l'ambiance d'un live où les
+   viewers ne voient défiler que des petits lots. Au-delà de
+   PITY_THRESHOLD tirages Chance/Caisse consécutifs sans carte rare,
+   elle est garantie au tirage suivant, puis le compteur repart à
+   zéro et le hasard normal reprend. Sur la durée la fréquence
+   moyenne ne change quasiment pas (elle plafonne juste les trous de
+   malchance) : le pourcentage de reversement cible n'est pas
+   affecté, seul le TIMING de cette carte l'est. Persistant
+   (localStorage) pour survivre à un rechargement de page. */
+const PITY_KEY = 'pika_pity_counter';
+const PITY_THRESHOLD = 32;
+let pityCounter = parseInt(localStorage.getItem(PITY_KEY), 10) || 0;
+function savePity(){ try{ localStorage.setItem(PITY_KEY, String(pityCounter)); }catch(e){} }
+
 function drawCard(deck){
+  if(pityCounter >= PITY_THRESHOLD && deck.includes(RARE_GRADEE_CARD)){
+    pityCounter = 0; savePity();
+    return RARE_GRADEE_CARD;
+  }
   const total = deck.reduce((s,c)=>s+c.weight,0);
   let r = Math.random()*total;
-  for(const c of deck){ r -= c.weight; if(r<=0) return c; }
+  for(const c of deck){
+    r -= c.weight;
+    if(r<=0){
+      pityCounter = c.rare ? 0 : pityCounter+1;
+      savePity();
+      return c;
+    }
+  }
+  pityCounter = deck[deck.length-1].rare ? 0 : pityCounter+1;
+  savePity();
   return deck[deck.length-1];
 }
 
@@ -590,9 +619,47 @@ function makeStudioBackdrop(){
    fond de la page (photo derrière le plateau) touche directement
    les cases, sans rectangle noir tout autour. */
 
-const camera = new THREE.PerspectiveCamera(40,1,0.1,100);
+const BASE_FOV = 40;
+const camera = new THREE.PerspectiveCamera(BASE_FOV,1,0.1,100);
 camera.position.set(0,13.5,11);
 scene.add(camera);
+
+/* Garde-fou anti-rognage des coins : au lieu d'un recul de caméra
+   fixe (qui rapetissait tout le plateau en permanence, y compris de
+   face où ce n'était pas nécessaire), on élargit le champ de vision
+   au fil de la rotation UNIQUEMENT le strict minimum requis pour que
+   les 4 coins restent visibles sous l'angle courant, et on revient à
+   BASE_FOV dès que l'angle redevient sûr (vue de face par défaut =
+   plateau au maximum, comme avant). */
+const BOARD_CORNER_R = 5.65;
+const boardCorners = [
+  new THREE.Vector3(-BOARD_CORNER_R, 0.5, -BOARD_CORNER_R),
+  new THREE.Vector3( BOARD_CORNER_R, 0.5, -BOARD_CORNER_R),
+  new THREE.Vector3( BOARD_CORNER_R, 0.5,  BOARD_CORNER_R),
+  new THREE.Vector3(-BOARD_CORNER_R, 0.5,  BOARD_CORNER_R),
+];
+let cameraPunchActive = false;
+const _cornerView = new THREE.Vector3();
+function updateCornerSafety(dt){
+  if(cameraPunchActive) return;
+  camera.updateMatrixWorld();
+  let maxTan = Math.tan(THREE.MathUtils.degToRad(BASE_FOV/2));
+  for(const corner of boardCorners){
+    _cornerView.copy(corner).applyMatrix4(camera.matrixWorldInverse);
+    const depth = -_cornerView.z;
+    if(depth <= 0.01) continue;
+    const tanV = Math.abs(_cornerView.y)/depth;
+    const tanH = (Math.abs(_cornerView.x)/depth)/camera.aspect;
+    maxTan = Math.max(maxTan, tanV, tanH);
+  }
+  // marge de 7% pour ne jamais laisser un coin à ras du bord
+  const targetFov = THREE.MathUtils.clamp(
+    THREE.MathUtils.radToDeg(2*Math.atan(maxTan/0.93)),
+    BASE_FOV, 72
+  );
+  camera.fov += (targetFov - camera.fov) * Math.min(1, dt*6);
+  camera.updateProjectionMatrix();
+}
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0,0.3,0);
@@ -1282,6 +1349,7 @@ function animate(){
   const t = clock.getElapsedTime();
 
   controls.update();
+  updateCornerSafety(dt);
 
   trimLights.forEach(tl=>{
     tl.spr.material.opacity = reduceMotion ? 0.5 : 0.28 + 0.45*Math.max(0, Math.sin(t*2.2 - tl.idx*0.5));
@@ -1364,6 +1432,7 @@ function animate(){
     }
 
     if(segIdx !== walk.lastSeg){
+      if(walk.lastSeg >= 0) playHop();
       walk.lastSeg = segIdx;
       currentIndex = walk.indices[segIdx];
       setActive(currentIndex);
@@ -1387,12 +1456,18 @@ function animate(){
       walk = null;
     }
   } else if(!reduceMotion){
-    // au repos : tout revient doucement en position neutre
+    // au repos : les restes de la marche reviennent doucement en
+    // position neutre...
     player.legL.rotation.x *= 0.8; player.legR.rotation.x *= 0.8;
     player.armL.rotation.x *= 0.8; player.armR.rotation.x *= 0.8;
-    player.torso.position.y += (0.3 - player.torso.position.y)*0.2;
     player.root.rotation.x *= 0.8;
     player.torso.rotation.z *= 0.8;
+    // ...pendant qu'une légère respiration + un regard qui balaie
+    // doucement les alentours empêchent le pion de paraître figé
+    // en attendant le prochain tirage.
+    player.torso.position.y = 0.3 + Math.sin(t*1.1)*0.006;
+    const idleYaw = Math.sin(t*0.35)*0.16;
+    player.torso.rotation.y += (idleYaw - player.torso.rotation.y)*0.04;
   }
 
   // Séisme puis éclatement du plateau (effet "Carte Darkrai")
@@ -1463,6 +1538,7 @@ resize();
 const validate = document.getElementById('validate');
 const resetBtn = document.getElementById('reset');
 const winBtn = document.getElementById('winBtn');
+const undoBtn = document.getElementById('undoBtn');
 const startBtn = document.getElementById('startBtn');
 const topNum = document.getElementById('topNum');
 const statusEl = document.getElementById('status');
@@ -1524,6 +1600,7 @@ if(resetBankBtn) resetBankBtn.addEventListener('click', ()=>{
   saveTotals();
   resetBankBtn.hidden = true;
   flashBankResetToken();
+  clearWinUndo();
 });
 
 /* Paliers du plus cher au moins cher : un lot qui ferait dépasser le
@@ -1601,6 +1678,62 @@ function playImpact(){
     noise.start(now);
   }catch(e){}
 }
+/* Petit "tap" à chaque case franchie pendant le déplacement du pion
+   — pitch légèrement aléatoire à chaque fois pour ne pas devenir
+   monotone sur un grand déplacement. */
+function playHop(){
+  const ctx = getAudioCtx(); if(!ctx) return;
+  try{
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.type = 'triangle';
+    const freq = 300 + Math.random()*70;
+    osc.frequency.setValueAtTime(freq, now);
+    osc.frequency.exponentialRampToValueAtTime(freq*0.6, now+0.08);
+    gain.gain.setValueAtTime(0.14, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now+0.09);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(now); osc.stop(now+0.1);
+  }catch(e){}
+}
+/* "Cha-ching" façon pièces qui tombent, à la validation d'un lot. */
+function playCoin(){
+  const ctx = getAudioCtx(); if(!ctx) return;
+  try{
+    const now = ctx.currentTime;
+    [[1180,0],[1760,0.07]].forEach(([freq,delay])=>{
+      const osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now+delay);
+      gain.gain.setValueAtTime(0.0001, now+delay);
+      gain.gain.exponentialRampToValueAtTime(0.26, now+delay+0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now+delay+0.3);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(now+delay); osc.stop(now+delay+0.32);
+    });
+  }catch(e){}
+}
+/* Fanfare qui s'étoffe avec le niveau du lot (1 = juste le cha-ching,
+   5 = arpège complet en plus). */
+function playFanfare(level){
+  playCoin();
+  const ctx = getAudioCtx(); if(!ctx || level<3) return;
+  try{
+    const now = ctx.currentTime;
+    const notes = level>=5 ? [523.25,659.25,783.99,1046.5] : [523.25,659.25,783.99];
+    notes.forEach((freq,i)=>{
+      const delay = 0.16 + i*0.1;
+      const osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now+delay);
+      gain.gain.setValueAtTime(0.0001, now+delay);
+      gain.gain.exponentialRampToValueAtTime(0.2, now+delay+0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now+delay+0.5);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(now+delay); osc.stop(now+delay+0.52);
+    });
+  }catch(e){}
+}
 /* Punch-zoom caméra via le champ de vision (pas la position) pour ne
    jamais entrer en conflit avec OrbitControls (auto-rotation, zoom
    utilisateur en cours, etc.). */
@@ -1610,9 +1743,10 @@ function cameraPunch(){
   const punchFov = baseFov*0.93;
   const start = performance.now();
   const outDur=140, holdDur=60, inDur=260, total=outDur+holdDur+inDur;
+  cameraPunchActive = true;
   function step(now){
     const el = now-start;
-    if(el>=total){ camera.fov = baseFov; camera.updateProjectionMatrix(); return; }
+    if(el>=total){ camera.fov = baseFov; camera.updateProjectionMatrix(); cameraPunchActive = false; return; }
     let fov;
     if(el<outDur) fov = baseFov + (punchFov-baseFov)*(el/outDur);
     else if(el<outDur+holdDur) fov = punchFov;
@@ -1936,6 +2070,7 @@ function restart(){
   validate.disabled = false;
   if(winBtn) winBtn.hidden = true;
   clearCelebration();
+  clearWinUndo();
   gameStarted = false;
   controls.autoRotate = !reduceMotion;
   if(startBtn){ startBtn.hidden = false; startBtn.textContent = '▶ DÉMARRER LA PARTIE'; }
@@ -1959,6 +2094,7 @@ async function drawAndMove(){
   // On continue plutôt que de garder le lot affiché : l'aperçu (ou le
   // lot validé) de la case précédente s'efface avant le nouveau tirage.
   clearCelebration();
+  clearWinUndo();
   validate.disabled = true;
   const draw = computeCardDraw();
   broadcastSync({type:'draw', draw});
@@ -1970,6 +2106,16 @@ async function drawAndMove(){
 validate.addEventListener('click', drawAndMove);
 resetBtn.addEventListener('click', restart);
 if(startBtn) startBtn.addEventListener('click', startGame);
+/* "Annuler le dernier lot" : filet de sécurité pour un mauvais clic
+   sur LOT REMPORTÉ pendant un direct. Reste disponible jusqu'au
+   prochain tirage/redémarrage, pas juste quelques secondes — le
+   temps que l'animatrice remarque l'erreur en filmant. */
+let lastWinUndo = null;
+function clearWinUndo(){
+  lastWinUndo = null;
+  if(undoBtn) undoBtn.hidden = true;
+}
+
 if(winBtn) winBtn.addEventListener('click', ()=>{
   if(currentIndex<0) return;
   const realCat = tiles[currentIndex].catKey;
@@ -1977,16 +2123,32 @@ if(winBtn) winBtn.addEventListener('click', ()=>{
   // pourcentage payé exactement comme avant (mêmes 50%, même formule),
   // mais on affiche et on remet toujours le vrai lot de la case tirée,
   // jamais une version dégradée vers un palier moins cher.
+  const paidBefore = totalPaid;
   fundedCategory(realCat);
   celebrate(realCat, null, {locked:true});
   broadcastSync({type:'celebrate', catKey:realCat});
+  lastWinUndo = { amountAdded: totalPaid - paidBefore };
+  if(undoBtn) undoBtn.hidden = false;
+});
+
+if(undoBtn) undoBtn.addEventListener('click', ()=>{
+  if(!lastWinUndo) return;
+  totalPaid = Math.max(0, totalPaid - lastWinUndo.amountAdded);
+  saveTotals();
+  if(lastResults.length){ lastResults.shift(); renderResultsTicker(); }
+  clearCelebration();
+  celebLocked = false;
+  clearWinUndo();
+  updateWinButton();
+  statusEl.textContent = 'Dernière validation annulée — le lot de '+placeLabel(currentIndex)+' reste à distribuer.';
 });
 
 /* Raccourcis clavier pour piloter le jeu sans viser précisément les
    boutons à l'écran (pratique en filmant en direct) : A = démarrer,
    B = tirer les cartes, C = recommencer la partie, D = valider le lot
-   remporté, E = démarrage cagnotte (remet la cagnotte à 0€). Ignorés si on
-   est en train de taper dans un champ de texte. */
+   remporté, E = démarrage cagnotte (remet la cagnotte à 0€), Z = annuler
+   le dernier lot validé par erreur. Ignorés si on est en train de taper
+   dans un champ de texte. */
 window.addEventListener('keydown', (e)=>{
   const tag = (document.activeElement && document.activeElement.tagName) || '';
   if(tag==='INPUT' || tag==='TEXTAREA') return;
@@ -1996,6 +2158,7 @@ window.addEventListener('keydown', (e)=>{
   else if(k==='c'){ resetBtn.click(); }
   else if(k==='d'){ if(winBtn && !winBtn.hidden) winBtn.click(); }
   else if(k==='e'){ if(resetBankBtn && !resetBankBtn.hidden) resetBankBtn.click(); }
+  else if(k==='z'){ if(undoBtn && !undoBtn.hidden) undoBtn.click(); }
 });
 
 if(syncChannel && isDisplay){
@@ -2022,7 +2185,7 @@ if(openDisplayBtn){
   const fallbackInput = document.getElementById('openDisplayUrl');
   if(fallbackInput) fallbackInput.value = url.toString();
 }
-[validate,resetBtn,winBtn,startBtn].forEach(btn=>{
+[validate,resetBtn,winBtn,startBtn,undoBtn].forEach(btn=>{
   if(!btn) return;
   btn.addEventListener('touchend', e=>{ e.preventDefault(); btn.click(); }, {passive:false});
 });
@@ -2052,10 +2215,8 @@ const celebPhoto = document.getElementById('celebPhoto');
    toute autonomie, sans message de sync supplémentaire. */
 const resultsTicker = document.getElementById('resultsTicker');
 let lastResults = [];
-function pushResult(catKey){
-  const url = LOT_IMAGE_URLS[catKey];
-  if(!url || !resultsTicker) return;
-  lastResults = [{catKey,url}, ...lastResults].slice(0,5);
+function renderResultsTicker(){
+  if(!resultsTicker) return;
   resultsTicker.innerHTML = '';
   lastResults.forEach((r,i)=>{
     const item = document.createElement('div');
@@ -2065,6 +2226,12 @@ function pushResult(catKey){
     item.appendChild(img);
     resultsTicker.appendChild(item);
   });
+}
+function pushResult(catKey){
+  const url = LOT_IMAGE_URLS[catKey];
+  if(!url || !resultsTicker) return;
+  lastResults = [{catKey,url}, ...lastResults].slice(0,5);
+  renderResultsTicker();
 }
 let celebCtx = celebCanvas ? celebCanvas.getContext('2d') : null;
 let celebParticles = [], celebRockets = [], celebRAF = null, celebEndAt = 0, celebLocked = false;
@@ -2322,6 +2489,7 @@ function revealCelebration(catKey, forcedCard, level){
   }
 
   const effectiveLevel = rareCardDrawn ? 5 : level;
+  playFanfare(effectiveLevel);
   // Pioche du Prof. Chen et Booster du Marchand : reveal classique,
   // sans confettis ni éclair (sauf carte rare tirée d'une Chance/
   // Caisse, qui garde son effet quel que soit le lot obtenu).
