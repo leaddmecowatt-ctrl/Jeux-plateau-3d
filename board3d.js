@@ -99,9 +99,17 @@ const CHEST_DECK = [
    malchance) : le pourcentage de reversement cible n'est pas
    affecté, seul le TIMING de cette carte l'est. Persistant
    (localStorage) pour survivre à un rechargement de page. */
+// localStorage peut être bloqué (mode privé strict, cookies tiers
+// désactivés, contexte d'iframe restreint comme un artifact) : la
+// lecture peut alors lever une exception, pas juste renvoyer null —
+// sans ce garde-fou, ça empêcherait carrément le jeu de démarrer.
+function safeGetItem(key){
+  try{ return localStorage.getItem(key); }catch(e){ return null; }
+}
+
 const PITY_KEY = 'pika_pity_counter';
 const PITY_THRESHOLD = 32;
-let pityCounter = parseInt(localStorage.getItem(PITY_KEY), 10) || 0;
+let pityCounter = parseInt(safeGetItem(PITY_KEY), 10) || 0;
 function savePity(){ try{ localStorage.setItem(PITY_KEY, String(pityCounter)); }catch(e){} }
 
 function drawCard(deck){
@@ -1220,30 +1228,6 @@ const START_NODE = tiles[0];
   boardGroup.add(ring);
 }
 
-/* Contour noir "coque inversée" : une copie de chaque mesh assez
-   grande, un peu plus grosse, rendue seulement par ses faces arrière
-   (BackSide) — vue de face, le mesh normal la recouvre presque
-   entièrement et seul un fin liseré dépasse sur le pourtour, exactement
-   l'effet de contour des personnages de jeu cel-shaded. Les détails
-   minuscules (yeux, rougeurs) sont ignorés, un contour dessus ferait
-   plus de bruit que d'effet. */
-const toonOutlineMat = new THREE.MeshBasicMaterial({color:0x241a12, side:THREE.BackSide});
-function addToonOutlines(root, thickness){
-  // On collecte d'abord la liste des meshes, puis on ajoute les
-  // contours dans une seconde passe : ajouter un enfant pendant que
-  // traverse() parcourt encore l'arbre le fait aussi visiter ce nouvel
-  // enfant (même geometry, donc même rayon) et boucler à l'infini.
-  const meshes = [];
-  root.traverse(obj=>{ if(obj.isMesh && obj.geometry) meshes.push(obj); });
-  meshes.forEach(obj=>{
-    obj.geometry.computeBoundingSphere();
-    if(obj.geometry.boundingSphere.radius < 0.02) return;
-    const outline = new THREE.Mesh(obj.geometry, toonOutlineMat);
-    outline.scale.setScalar(1+thickness);
-    obj.add(outline);
-  });
-}
-
 /* Dégradé doux à 4 paliers (plutôt que le noir/blanc tranché par
    défaut de MeshToonMaterial) : un ombrage plus proche d'un rendu de
    jeu mobile soigné que d'un cel-shading dur à la BD. */
@@ -1261,11 +1245,9 @@ function toonGradient(){
 }
 
 /* ---------- Pion articulé (façon dresseur, sac à dos inclus) ----------
-   Rendu "toon" (aplats de couleur à 2 tons, sans reflets réalistes) +
-   contour noir façon coque inversée (une copie de chaque mesh, un peu
-   plus grosse, avec les faces avant retournées) pour se rapprocher du
-   style cel-shading d'un vrai jeu plutôt que du rendu plastique/PBR
-   d'avant. */
+   Rendu "toon" avec dégradé doux (au lieu du rendu plastique/PBR
+   d'avant), sans contour noir — retiré après essai, jugé trop
+   "autocollant" pour le rendu recherché. */
 function buildToken(){
   const root = new THREE.Group();
 
@@ -1707,8 +1689,8 @@ const TOTAL_MISE_KEY = 'pika_total_mise';
 const TOTAL_PAID_KEY = 'pika_total_paid';
 const AVG_MISE = 9;
 const CEILING_RATIO = 0.50;  // plafond de reversement cible (~50%, vérifié par simulation)
-let totalMise = parseFloat(localStorage.getItem(TOTAL_MISE_KEY)) || 0;
-let totalPaid = parseFloat(localStorage.getItem(TOTAL_PAID_KEY)) || 0;
+let totalMise = parseFloat(safeGetItem(TOTAL_MISE_KEY)) || 0;
+let totalPaid = parseFloat(safeGetItem(TOTAL_PAID_KEY)) || 0;
 function saveTotals(){
   try{
     localStorage.setItem(TOTAL_MISE_KEY, String(totalMise));
