@@ -1393,6 +1393,13 @@ let currentIndex = -1; // -1 = au départ, pas encore sur le plateau
 let moving = false;
 let generation = 0;
 let finished = false;
+// Règle du jeu : 3 lancers par partie, +1 lancer supplémentaire à
+// chaque double obtenu (cumulable). Une fois les lancers épuisés, le
+// joueur garde le lot de la case où il se trouve — il ne pouvait
+// jusqu'ici jamais être bloqué, ce qui laissait enchaîner des lancers
+// illimités sur une seule mise.
+let rollsUsed = 0;
+let rollsAllowed = 3;
 
 function tileAt(idx){ return idx===-1 ? START_NODE : tiles[idx]; }
 
@@ -2129,8 +2136,20 @@ async function move(forcedCount, forcedCard){
   }
 
   moving = false;
-  validate.disabled = finished;
   updateWinButton();
+  const rollsExhausted = rollsUsed>=rollsAllowed;
+  const finalCat = currentIndex>=0 ? tiles[currentIndex].catKey : null;
+  const canClaim = currentIndex>0 && finalCat!=='chance' && finalCat!=='chest';
+  if(rollsExhausted && !finished && canClaim){
+    // Plus aucun lancer possible et le joueur n'a pas choisi de
+    // s'arrêter avant : la règle du jeu dit qu'il garde alors le lot
+    // sur lequel il est resté — validé automatiquement, sans action
+    // de l'animateur.
+    statusEl.textContent = 'Plus de lancer disponible (3 lancers, +1 par double) — le lot est automatiquement remporté.';
+    claimCurrentLot();
+  } else {
+    validate.disabled = finished || rollsExhausted;
+  }
 }
 
 /* Chance / Caisse Communautaire se révèlent automatiquement (pas de
@@ -2175,6 +2194,8 @@ function restart(){
   generation++;
   moving = false;
   finished = false;
+  rollsUsed = 0;
+  rollsAllowed = 3;
   walk = null;
   currentIndex = -1;
   player.root.scale.set(1,1,1);
@@ -2205,7 +2226,7 @@ function startGame(){
 }
 
 async function drawAndMove(){
-  if(moving || finished) return;
+  if(moving || finished || rollsUsed>=rollsAllowed) return;
   // Premier lancer d'une partie (le pion est encore sur Départ) : une
   // partie complète = une mise, créditée automatiquement à la
   // cagnotte interne, sans aucune saisie manuelle.
@@ -2216,6 +2237,12 @@ async function drawAndMove(){
   clearWinUndo();
   validate.disabled = true;
   const draw = computeCardDraw();
+  // Règle des 3 lancers (+1 par double, cumulable) : consommé dès le
+  // lancer effectué, pas seulement à la validation du lot, sinon un
+  // joueur pourrait enchaîner les lancers sans jamais les épuiser tant
+  // qu'il ne valide rien.
+  rollsUsed++;
+  if(draw.isDouble) rollsAllowed++;
   broadcastSync({type:'draw', draw});
   topNum.textContent = draw.total;
   await playCardDrawAnimation(draw);
@@ -2235,24 +2262,33 @@ function clearWinUndo(){
   if(undoBtn) undoBtn.hidden = true;
 }
 
-if(winBtn) winBtn.addEventListener('click', ()=>{
-  if(currentIndex<0 || winBtn.disabled) return;
-  // Empêche un double-tap tactile (le gestionnaire touchend ci-dessous
-  // déclenche déjà un click manuel) de valider le même lot deux fois
-  // d'affilée, ce qui relançait deux fois la célébration en parallèle.
-  winBtn.disabled = true;
+/* Valider un lot (bouton "LOT REMPORTÉ", ou automatique quand les
+   lancers sont épuisés) MET FIN au tour : "s'arrêter pour garder le
+   lot" et "continuer à lancer" sont mutuellement exclusifs — sinon un
+   joueur pourrait valider un lot puis continuer à lancer et en
+   valider un second sur la même mise, ce qui double la rentabilité
+   attendue par mise. */
+function claimCurrentLot(){
+  if(currentIndex<0 || (winBtn && winBtn.disabled)) return;
+  if(winBtn) winBtn.disabled = true;
   const realCat = tiles[currentIndex].catKey;
   // Le plafond de reversement continue de calculer et suivre le
   // pourcentage payé exactement comme avant (mêmes 50%, même formule),
   // mais on affiche et on remet toujours le vrai lot de la case tirée,
   // jamais une version dégradée vers un palier moins cher.
   const paidBefore = totalPaid;
+  const rollsUsedBefore = rollsUsed;
   fundedCategory(realCat);
   celebrate(realCat, null, {locked:true});
   broadcastSync({type:'celebrate', catKey:realCat});
-  lastWinUndo = { amountAdded: totalPaid - paidBefore };
+  lastWinUndo = { amountAdded: totalPaid - paidBefore, rollsUsedBefore };
   if(undoBtn) undoBtn.hidden = false;
-});
+  // Un lot gardé épuise le tour : plus aucun lancer sur cette mise.
+  rollsUsed = rollsAllowed;
+  validate.disabled = true;
+}
+
+if(winBtn) winBtn.addEventListener('click', claimCurrentLot);
 
 if(undoBtn) undoBtn.addEventListener('click', ()=>{
   if(!lastWinUndo) return;
@@ -2261,6 +2297,11 @@ if(undoBtn) undoBtn.addEventListener('click', ()=>{
   if(lastResults.length){ lastResults.shift(); renderResultsTicker(); }
   clearCelebration();
   celebLocked = false;
+  // Annuler un lot validé par erreur redonne aussi le tour : sinon le
+  // joueur resterait bloqué sans lancer alors qu'aucun lot n'a
+  // réellement été gardé.
+  rollsUsed = lastWinUndo.rollsUsedBefore;
+  if(!finished) validate.disabled = (rollsUsed>=rollsAllowed);
   clearWinUndo();
   updateWinButton();
   statusEl.textContent = 'Dernière validation annulée — le lot de '+placeLabel(currentIndex)+' reste à distribuer.';
