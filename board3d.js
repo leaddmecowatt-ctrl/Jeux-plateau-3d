@@ -1244,6 +1244,22 @@ function addToonOutlines(root, thickness){
   });
 }
 
+/* Dégradé doux à 4 paliers (plutôt que le noir/blanc tranché par
+   défaut de MeshToonMaterial) : un ombrage plus proche d'un rendu de
+   jeu mobile soigné que d'un cel-shading dur à la BD. */
+let _toonGradient = null;
+function toonGradient(){
+  if(_toonGradient) return _toonGradient;
+  const data = new Uint8Array([90,150,205,255]);
+  const tex = new THREE.DataTexture(data, data.length, 1, THREE.RedFormat);
+  tex.needsUpdate = true;
+  tex.minFilter = THREE.NearestFilter;
+  tex.magFilter = THREE.NearestFilter;
+  tex.generateMipmaps = false;
+  _toonGradient = tex;
+  return tex;
+}
+
 /* ---------- Pion articulé (façon dresseur, sac à dos inclus) ----------
    Rendu "toon" (aplats de couleur à 2 tons, sans reflets réalistes) +
    contour noir façon coque inversée (une copie de chaque mesh, un peu
@@ -1253,20 +1269,21 @@ function addToonOutlines(root, thickness){
 function buildToken(){
   const root = new THREE.Group();
 
-  const skin = new THREE.MeshToonMaterial({color:0xf3c39c});
-  const jacket = new THREE.MeshToonMaterial({color:0x2a5fc4});
-  const jacketLight = new THREE.MeshToonMaterial({color:0xf3f7fb});
-  const jeans = new THREE.MeshToonMaterial({color:0x3f63a8});
-  const cap = new THREE.MeshToonMaterial({color:0xe23b3f});
-  const capDark = new THREE.MeshToonMaterial({color:0xb32a2e});
-  const hair = new THREE.MeshToonMaterial({color:0x3b2a1e});
-  const shoe = new THREE.MeshToonMaterial({color:0x6b4226});
-  const bag = new THREE.MeshToonMaterial({color:0xb23a3a});
-  const strap = new THREE.MeshToonMaterial({color:0x5a2020});
+  const grad = toonGradient();
+  const skin = new THREE.MeshToonMaterial({color:0xf3c39c, gradientMap:grad});
+  const jacket = new THREE.MeshToonMaterial({color:0x2a5fc4, gradientMap:grad});
+  const jacketLight = new THREE.MeshToonMaterial({color:0xf3f7fb, gradientMap:grad});
+  const jeans = new THREE.MeshToonMaterial({color:0x3f63a8, gradientMap:grad});
+  const cap = new THREE.MeshToonMaterial({color:0xe23b3f, gradientMap:grad});
+  const capDark = new THREE.MeshToonMaterial({color:0xb32a2e, gradientMap:grad});
+  const hair = new THREE.MeshToonMaterial({color:0x3b2a1e, gradientMap:grad});
+  const shoe = new THREE.MeshToonMaterial({color:0x6b4226, gradientMap:grad});
+  const bag = new THREE.MeshToonMaterial({color:0xb23a3a, gradientMap:grad});
+  const strap = new THREE.MeshToonMaterial({color:0x5a2020, gradientMap:grad});
 
   function limb(mat,r,len){
     const g = new THREE.Group();
-    const geo = new THREE.CapsuleGeometry(r,len,4,10);
+    const geo = new THREE.CapsuleGeometry(r,len,8,16);
     const mesh = new THREE.Mesh(geo,mat);
     mesh.position.y = -len/2 - r;
     mesh.castShadow = true;
@@ -1274,9 +1291,27 @@ function buildToken(){
     return g;
   }
 
+  // Jambe en deux segments (short bleu + peau nue en dessous) plutôt
+  // qu'une seule capsule bleue du bassin à la chaussure : lit beaucoup
+  // mieux comme "short + jambe", au lieu d'un pantalon plein.
+  function leg(){
+    const g = new THREE.Group();
+    const shortsR = 0.062, shortsLen = 0.04;
+    const shorts = new THREE.Mesh(new THREE.CapsuleGeometry(shortsR,shortsLen,8,16), jeans);
+    shorts.position.y = -shortsLen/2 - shortsR;
+    shorts.castShadow = true;
+    g.add(shorts);
+    const shinR = 0.05, shinLen = 0.1;
+    const shin = new THREE.Mesh(new THREE.CapsuleGeometry(shinR,shinLen,8,16), skin);
+    shin.position.y = -(shortsLen+2*shortsR) - shinLen/2 - shinR;
+    shin.castShadow = true;
+    g.add(shin);
+    return g;
+  }
+
   const hipY = 0.3;
-  const legL = limb(jeans,0.06,0.2); legL.position.set(-0.085,hipY,0); root.add(legL);
-  const legR = limb(jeans,0.06,0.2); legR.position.set(0.085,hipY,0); root.add(legR);
+  const legL = leg(); legL.position.set(-0.085,hipY,0); root.add(legL);
+  const legR = leg(); legR.position.set(0.085,hipY,0); root.add(legR);
 
   const shoulderY = 0.53;
   const armL = limb(jacket,0.05,0.19); armL.position.set(-0.165,shoulderY,0); root.add(armL);
@@ -1285,7 +1320,7 @@ function buildToken(){
   const torso = new THREE.Group();
   torso.position.y = hipY;
   root.add(torso);
-  const torsoMesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.145,0.19,4,12), jacket);
+  const torsoMesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.145,0.19,8,18), jacket);
   torsoMesh.position.y = 0.23;
   torsoMesh.castShadow = true;
   torso.add(torsoMesh);
@@ -1362,7 +1397,8 @@ function buildToken(){
     g.add(s);
   });
 
-  addToonOutlines(root, 0.045);
+  // Contour retiré : trop "autocollant" pour le rendu lisse et doux
+  // recherché (façon jeu mobile), plutôt qu'un cel-shading BD marqué.
 
   return { root, legL, legR, armL, armR, torso };
 }
