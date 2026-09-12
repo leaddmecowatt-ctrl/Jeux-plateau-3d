@@ -202,6 +202,72 @@ function roundRectPath(ctx,x,y,w,h,r){
   ctx.roundRect(x,y,w,h,r);
 }
 
+/* Icônes dessinées en vectoriel (pas des emoji) pour les médaillons
+   de catégorie. Les emoji dépendent de la police du navigateur/webview
+   qui affiche la page : certains (notamment 🎁, 🗃️, 🔒) se retrouvent
+   rendus en glyphe de secours noir/monochrome sur des environnements
+   à police d'emoji limitée (webview intégrée, etc.), ce qui donnait
+   un "cadeau noir" au lieu de l'icône dorée attendue. Un dessin
+   vectoriel rend exactement pareil partout. */
+function drawVectorIcon(ctx, kind, cx, cy, r, color){
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.fillStyle = color; ctx.strokeStyle = color;
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  if(kind==='card'){
+    const w=r*1.3, h=r*1.7;
+    roundRectPath(ctx, -w/2, -h/2, w, h, r*0.18); ctx.fill();
+    ctx.globalCompositeOperation = 'destination-out';
+    roundRectPath(ctx, -w*0.32, -h*0.26, w*0.64, h*0.4, r*0.08); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+  } else if(kind==='box'){
+    const s = r*1.5;
+    roundRectPath(ctx, -s/2, -s/2, s, s, r*0.15); ctx.fill();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillRect(-s*0.09, -s/2, s*0.18, s);
+    ctx.fillRect(-s/2, -s*0.09, s, s*0.18);
+    ctx.globalCompositeOperation = 'source-over';
+  } else if(kind==='compass'){
+    ctx.beginPath(); ctx.arc(0,0,r*0.82,0,Math.PI*2);
+    ctx.lineWidth = r*0.16; ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0,-r*0.58); ctx.lineTo(r*0.22,0); ctx.lineTo(0,r*0.58); ctx.lineTo(-r*0.22,0);
+    ctx.closePath(); ctx.fill();
+  } else if(kind==='star'){
+    const spikes=5, outerR=r*0.95, innerR=r*0.42;
+    ctx.beginPath();
+    for(let i=0;i<spikes*2;i++){
+      const ang = -Math.PI/2 + i*Math.PI/spikes;
+      const rad = i%2===0 ? outerR : innerR;
+      const x = Math.cos(ang)*rad, y = Math.sin(ang)*rad;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.closePath(); ctx.fill();
+  } else if(kind==='gift'){
+    const w=r*1.5, h=r*1.15;
+    roundRectPath(ctx, -w/2, -h*0.15, w, h*0.9, r*0.1); ctx.fill();
+    roundRectPath(ctx, -w/2, -h*0.45, w, h*0.32, r*0.08); ctx.fill();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillRect(-w*0.09, -h*0.45, w*0.18, h*1.2);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.beginPath();
+    ctx.ellipse(-w*0.13,-h*0.5,w*0.14,h*0.15,0,0,Math.PI*2);
+    ctx.ellipse(w*0.13,-h*0.5,w*0.14,h*0.15,0,0,Math.PI*2);
+    ctx.fill();
+  } else if(kind==='lock'){
+    const w=r*1.1, h=r*0.9;
+    ctx.beginPath(); ctx.arc(0,-h*0.12,w*0.42,Math.PI,0);
+    ctx.lineWidth = r*0.22; ctx.stroke();
+    roundRectPath(ctx, -w/2, -h*0.1, w, h*0.75, r*0.12); ctx.fill();
+  } else if(kind==='unlock'){
+    const w=r*1.1, h=r*0.9;
+    ctx.beginPath(); ctx.arc(-w*0.12,-h*0.3,w*0.42,Math.PI*0.95,Math.PI*1.85);
+    ctx.lineWidth = r*0.22; ctx.stroke();
+    roundRectPath(ctx, -w/2, -h*0.1, w, h*0.75, r*0.12); ctx.fill();
+  }
+  ctx.restore();
+}
+
 /* Affiche le nom d'un lot dans le bandeau en bas de case, en
    réduisant la taille de police jusqu'à ce qu'il tienne sur une
    ligne, ou en le répartissant sur deux lignes si même la taille
@@ -316,17 +382,17 @@ function getFlatPhotoFace(catKey, accentColor, badge){
     ctx.fillRect(pad, pad, bw, bh);
     ctx.restore();
 
-    const glyphChar = { chance:'?', chest:'🗃️', prison:'🔒' }[catKey];
     ctx.save();
     ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = size*0.03;
-    ctx.fillStyle = '#fff9e6';
-    ctx.textAlign='center'; ctx.textBaseline='middle';
     if(catKey==='chance'){
+      ctx.fillStyle = '#fff9e6';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
       ctx.font = '900 '+(bh*0.6)+'px Arial,Helvetica,sans-serif';
+      ctx.fillText('?', pad+bw/2, pad+bh*0.46);
     } else {
-      ctx.font = (bh*0.52)+'px "Segoe UI Emoji","Apple Color Emoji",Arial,sans-serif';
+      const glyphKind = { chest:'gift', prison:'lock' }[catKey];
+      drawVectorIcon(ctx, glyphKind, pad+bw/2, pad+bh*0.46, bh*0.28, '#fff9e6');
     }
-    ctx.fillText(glyphChar, pad+bw/2, pad+bh*0.46);
     ctx.restore();
   }
   const gloss = ctx.createLinearGradient(0,0,0,size);
@@ -352,9 +418,7 @@ function getFlatPhotoFace(catKey, accentColor, badge){
   drawFittedBandLabel(ctx, CATS[catKey].label, size/2, size-9-bandH/2+2, size-18-size*0.06, size*0.088, size*0.045);
 
   if(badge){
-    ctx.font=(size*0.15)+'px "Segoe UI Emoji","Apple Color Emoji",Arial,sans-serif';
-    ctx.textAlign='left'; ctx.textBaseline='top';
-    ctx.fillText(badge, 16, 16);
+    drawVectorIcon(ctx, 'unlock', 16+size*0.075, 16+size*0.075, size*0.075, '#fff9e6');
   }
 
   const tex = new THREE.CanvasTexture(cvs);
@@ -536,8 +600,7 @@ function getGlyphTexture(kind, accentColor){
   ctx.textAlign='center'; ctx.textBaseline='middle';
   if(kind==='visite'){
     ctx.shadowColor = 'rgba(255,255,255,.6)'; ctx.shadowBlur = size*0.12;
-    ctx.font=(size*0.4)+'px "Segoe UI Emoji","Apple Color Emoji",Arial,sans-serif';
-    ctx.fillText('🔓',cx,cy+size*0.03);
+    drawVectorIcon(ctx, 'unlock', cx, cy+size*0.02, size*0.22, '#fff9e6');
   } else {
     const medal = accentColor || GOLD;
     // liseré sombre + anneau blanc épais autour du médaillon : sans ça,
@@ -562,11 +625,9 @@ function getGlyphTexture(kind, accentColor){
       ctx.font='900 '+(size*0.44)+'px Arial,Helvetica,sans-serif';
       ctx.fillText('?',cx,cy+size*0.02);
     } else if(kind==='chest'){
-      ctx.font=(size*0.38)+'px "Segoe UI Emoji","Apple Color Emoji",Arial,sans-serif';
-      ctx.fillText('🗃️',cx,cy+size*0.02);
+      drawVectorIcon(ctx, 'gift', cx, cy+size*0.02, size*0.24, '#fff9e6');
     } else if(kind==='prison'){
-      ctx.font=(size*0.36)+'px "Segoe UI Emoji","Apple Color Emoji",Arial,sans-serif';
-      ctx.fillText('🔒',cx,cy+size*0.02);
+      drawVectorIcon(ctx, 'lock', cx, cy+size*0.02, size*0.22, '#fff9e6');
     }
   }
   const tex = new THREE.CanvasTexture(cvs);
@@ -914,12 +975,12 @@ function perimeterPosAt(u){ // u in [0,1)
    resté transparent) pour que la liste reste lisible par-dessus
    n'importe quelle photo de fond. */
 const CENTER_LEGEND_ROWS = [
-  {swatch:'bronze', catKey:'commune',     icon:'🎴', title:'Pioche du Prof. Chen'},
-  {swatch:'blue',   catKey:'booster8',    icon:'📦', title:'Booster du Marchand'},
-  {swatch:'red',    catKey:'alternative', icon:'🧭', title:'Zone Safari'},
-  {swatch:'gold',   catKey:'jackpot300',  icon:'⭐', title:'Duopack → ETB 30 ans'},
-  {swatch:'purple', catKey:null,          icon:'❓', title:'Chance'},
-  {swatch:'green',  catKey:null,          icon:'🎁', title:'Caisse Communautaire'},
+  {swatch:'bronze', catKey:'commune',     icon:'card',     title:'Pioche du Prof. Chen'},
+  {swatch:'blue',   catKey:'booster8',    icon:'box',      title:'Booster du Marchand'},
+  {swatch:'red',    catKey:'alternative', icon:'compass',  title:'Zone Safari'},
+  {swatch:'gold',   catKey:'jackpot300',  icon:'star',     title:'Duopack → ETB 30 ans'},
+  {swatch:'purple', catKey:null,          icon:'question', title:'Chance'},
+  {swatch:'green',  catKey:null,          icon:'gift',     title:'Caisse Communautaire'},
 ];
 function makeCenterPlateTexture(){
   const size = 900;
@@ -1004,9 +1065,13 @@ function makeCenterPlateTexture(){
       const iw=img.width, ih=img.height, side=Math.min(iw,ih);
       ctx.drawImage(img,(iw-side)/2,(ih-side)/2,side,side, dotX-dotR*0.88,dotY-dotR*0.88,dotR*1.76,dotR*1.76);
       ctx.restore();
+    } else if(r.icon==='question'){
+      ctx.font = '900 '+(dotR*1.3)+'px Arial,Helvetica,sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillStyle = '#fff9e6';
+      ctx.fillText('?', dotX, dotY+dotR*0.05);
     } else {
-      ctx.font = (dotR*1.25)+'px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText(r.icon, dotX, dotY+dotR*0.05);
+      drawVectorIcon(ctx, r.icon, dotX, dotY, dotR*0.85, '#fff9e6');
     }
     ctx.lineWidth = size*0.0055; ctx.strokeStyle = color;
     ctx.beginPath(); ctx.arc(dotX,dotY,dotR,0,Math.PI*2); ctx.stroke();
@@ -1232,8 +1297,13 @@ for(let i=0;i<40;i++){
     color:new THREE.Color(accentColor),roughness:.7,metalness:.12,
     emissive:new THREE.Color(accentColor),emissiveIntensity:.32
   });
-  const bodyTile = new THREE.Mesh(new THREE.BoxGeometry(TILE,0.08,TILE), sideMat);
-  bodyTile.position.y = 0.16;
+  // Corps de la case bien épaissi (0.30 au lieu de 0.08 à l'origine) :
+  // un vrai bloc massif avec des flancs colorés visibles, façon jeton
+  // de casino/case de plateau premium, plutôt qu'une carte plate.
+  // Posé directement sur la collerette (qui culmine à 0.135).
+  const BODY_H = 0.30, BODY_BOTTOM = 0.135;
+  const bodyTile = new THREE.Mesh(new THREE.BoxGeometry(TILE,BODY_H,TILE), sideMat);
+  bodyTile.position.y = BODY_BOTTOM + BODY_H/2;
   bodyTile.castShadow = true;
   bodyTile.receiveShadow = true;
   topGroup.add(bodyTile);
@@ -1244,15 +1314,17 @@ for(let i=0;i<40;i++){
   // que l'animation (vague/rebond) puisse les remettre à jour chaque
   // frame en même temps que le reste de la carte, sans jamais se
   // désynchroniser d'elle.
-  const bezelBase = { x: world.x, z: world.z };
-  _instDummy.position.set(world.x, 0.21, world.z);
+  const BEZEL_Y = BODY_BOTTOM + BODY_H + 0.0175;
+  const bezelBase = { x: world.x, z: world.z, y: BEZEL_Y };
+  _instDummy.position.set(world.x, BEZEL_Y, world.z);
   _instDummy.updateMatrix();
   tileBezelInst.setMatrixAt(i, _instDummy.matrix);
 
+  const RIVET_Y = BEZEL_Y + 0.0195;
   const rivetOffset = TILE*0.40;
   const rivetPositions = [];
   RIVET_OFFSETS.forEach(([dx,dz], k)=>{
-    const local = new THREE.Vector3(dx*rivetOffset, 0.222, dz*rivetOffset);
+    const local = new THREE.Vector3(dx*rivetOffset, RIVET_Y, dz*rivetOffset);
     local.applyAxisAngle(_yAxis, outwardYaw(r,c));
     const rx = world.x+local.x, rz = world.z+local.z;
     rivetPositions.push({x:rx, z:rz});
@@ -1261,7 +1333,7 @@ for(let i=0;i<40;i++){
     tileRivetInst.setMatrixAt(i*RIVET_OFFSETS.length+k, _instDummy.matrix);
   });
 
-  const tileTopY = 0.22;
+  const tileTopY = BEZEL_Y + 0.0175;
 
   let faceTex;
   if(i === 0){
@@ -1270,7 +1342,7 @@ for(let i=0;i<40;i++){
     // mécanique si un recul y ramène le joueur plus tard.
     faceTex = getDepartFace();
   } else if(catDef.tier === 'flat'){
-    faceTex = getFlatPhotoFace(catKey, accentColor, data.isVisite ? '🔓' : null);
+    faceTex = getFlatPhotoFace(catKey, accentColor, data.isVisite);
   } else {
     // "float" (le lot flotte déjà en carte au-dessus, la case reste
     // sobre) / "glyph" (Chance, Caisse, Prison : pas de photo, mais
@@ -1372,7 +1444,7 @@ for(let i=0;i<40;i++){
   tiles.push({
     group, topGroup, world, tileTopY, catKey, catDef, caseNum, isVisite:data.isVisite,
     halo, floatObj, shadowDisc, floatBaseScale, holoShine, motion: MOTION[catKey]||{bob:0.08},
-    bezelBase, rivetPositions, bezelIndex:i,
+    bezelBase, rivetPositions, rivetY:RIVET_Y, bezelIndex:i,
     phase: Math.random()*Math.PI*2,
     breathePhase: ((r+c)%8)*0.4
   });
@@ -1801,11 +1873,11 @@ function animate(){
       // qu'ils suivent exactement le même mouvement que la carte,
       // sans jamais s'en désynchroniser.
       _instDummy.rotation.set(0,0,0);
-      _instDummy.position.set(tile.bezelBase.x, 0.21+posY, tile.bezelBase.z);
+      _instDummy.position.set(tile.bezelBase.x, tile.bezelBase.y+posY, tile.bezelBase.z);
       _instDummy.updateMatrix();
       tileBezelInst.setMatrixAt(tile.bezelIndex, _instDummy.matrix);
       tile.rivetPositions.forEach((rp,k)=>{
-        _instDummy.position.set(rp.x, 0.222+posY, rp.z);
+        _instDummy.position.set(rp.x, tile.rivetY+posY, rp.z);
         _instDummy.updateMatrix();
         tileRivetInst.setMatrixAt(tile.bezelIndex*RIVET_OFFSETS.length+k, _instDummy.matrix);
       });
