@@ -1160,8 +1160,8 @@ const tileGoldMat = new THREE.MeshStandardMaterial({
   emissive:new THREE.Color(GOLD), emissiveIntensity:.12
 });
 const tileBezelMat = new THREE.MeshStandardMaterial({color:0x0a0a0a, roughness:.5, metalness:.25});
-const tileCollarGeo = new THREE.BoxGeometry(TILE+0.09,0.04,TILE+0.09);
-const tileBezelGeo = new THREE.BoxGeometry(TILE*0.97,0.02,TILE*0.97);
+const tileCollarGeo = new THREE.BoxGeometry(TILE+0.09,0.07,TILE+0.09);
+const tileBezelGeo = new THREE.BoxGeometry(TILE*0.97,0.035,TILE*0.97);
 const tileRivetGeo = new THREE.CylinderGeometry(0.035,0.035,0.02,8);
 const RIVET_OFFSETS = [[-1,-1],[1,-1],[-1,1],[1,1]];
 
@@ -1211,6 +1211,14 @@ for(let i=0;i<40;i++){
   baseTile.receiveShadow = true;
   group.add(baseTile);
 
+  // Sous-groupe "carte" : tout ce qui doit flotter/rebondir ensemble
+  // (corps coloré, photo, numéro, halo, lot flottant) — le socle
+  // (base + collerette dorée) reste fixe, façon carte posée dans son
+  // logement. Le liseré + les rivets suivent aussi ce mouvement via
+  // leurs InstancedMesh, remis à jour chaque frame en même temps.
+  const topGroup = new THREE.Group();
+  group.add(topGroup);
+
   // collerette dorée qui dépasse légèrement du corps coloré : donne
   // au socle un vrai relief de "compartiment encastré" plutôt qu'une
   // simple case plate, façon coffret physique
@@ -1228,19 +1236,27 @@ for(let i=0;i<40;i++){
   bodyTile.position.y = 0.16;
   bodyTile.castShadow = true;
   bodyTile.receiveShadow = true;
-  group.add(bodyTile);
+  topGroup.add(bodyTile);
 
   // liseré noir en léger retrait entre le corps coloré et la carte,
-  // avec quatre rivets dorés aux coins façon plaque vissée
+  // avec quatre rivets dorés aux coins façon plaque vissée — leurs
+  // positions de base sont conservées (bezelBase/rivetPositions) pour
+  // que l'animation (vague/rebond) puisse les remettre à jour chaque
+  // frame en même temps que le reste de la carte, sans jamais se
+  // désynchroniser d'elle.
+  const bezelBase = { x: world.x, z: world.z };
   _instDummy.position.set(world.x, 0.21, world.z);
   _instDummy.updateMatrix();
   tileBezelInst.setMatrixAt(i, _instDummy.matrix);
 
   const rivetOffset = TILE*0.40;
+  const rivetPositions = [];
   RIVET_OFFSETS.forEach(([dx,dz], k)=>{
     const local = new THREE.Vector3(dx*rivetOffset, 0.222, dz*rivetOffset);
     local.applyAxisAngle(_yAxis, outwardYaw(r,c));
-    _instDummy.position.set(world.x+local.x, local.y, world.z+local.z);
+    const rx = world.x+local.x, rz = world.z+local.z;
+    rivetPositions.push({x:rx, z:rz});
+    _instDummy.position.set(rx, local.y, rz);
     _instDummy.updateMatrix();
     tileRivetInst.setMatrixAt(i*RIVET_OFFSETS.length+k, _instDummy.matrix);
   });
@@ -1264,21 +1280,19 @@ for(let i=0;i<40;i++){
   const faceMat = new THREE.MeshBasicMaterial({map:faceTex});
   const face = new THREE.Mesh(new THREE.PlaneGeometry(TILE*0.94,TILE*0.94), faceMat);
   face.rotation.x = -Math.PI/2;
-  // Marge généreuse au-dessus du liseré noir (case fixe à y=0.22,
-  // non affectée par la "respiration") : la case elle-même respire
-  // (group.scale.y oscille ±1.2%), donc à y=tileTopY+0.002 la carte
-  // pouvait redescendre sous le liseré à chaque cycle et se faire
-  // entièrement cacher par lui — d'où des cases qui semblaient
-  // clignoter en noir. +0.02 reste largement au-dessus même au creux
-  // de l'oscillation.
+  // Marge généreuse au-dessus du liseré : la carte (topGroup, qui
+  // inclut la photo ET le liseré/rivets via leurs InstancedMesh remis
+  // à jour chaque frame) respire et rebondit ensemble, donc l'écart
+  // entre eux reste constant — +0.02 est juste une marge de rendu
+  // pour éviter tout z-fighting entre la photo et le liseré.
   face.position.y = tileTopY+0.02;
   face.receiveShadow = true;
-  group.add(face);
+  topGroup.add(face);
 
   const numSpr = makeSprite(numberTexture(caseNum), 0.2);
   numSpr.position.set(TILE*0.35, tileTopY+0.01, TILE*0.36);
   numSpr.rotation.x = -Math.PI/2;
-  group.add(numSpr);
+  topGroup.add(numSpr);
 
   const halo = new THREE.Mesh(
     new THREE.TorusGeometry(TILE*0.56,0.035,8,32),
@@ -1286,7 +1300,7 @@ for(let i=0;i<40;i++){
   );
   halo.rotation.x = Math.PI/2;
   halo.position.y = tileTopY+0.03;
-  group.add(halo);
+  topGroup.add(halo);
 
   let floatObj = null, shadowDisc = null, floatBaseScale = 0.34, holoShine = null;
   // Case 1 (Départ) : aucune décoration flottante, même si sa catégorie
@@ -1303,7 +1317,7 @@ for(let i=0;i<40;i++){
     const mat = new THREE.MeshBasicMaterial({map:tex, transparent:true, side:THREE.DoubleSide});
     floatObj = new THREE.Mesh(new THREE.PlaneGeometry(w,h), mat);
     floatObj.position.y = tileTopY + 0.32 + h*0.5;
-    group.add(floatObj);
+    topGroup.add(floatObj);
     floatBaseScale = h;
 
     // reflet holo qui défile en boucle sur la carte, comme une vraie
@@ -1323,7 +1337,7 @@ for(let i=0;i<40;i++){
     const glyphKind = data.isVisite ? 'visite' : catKey;
     floatObj = makeSprite(getGlyphTexture(glyphKind, accentColor), data.isVisite ? 0.3 : 0.6);
     floatObj.position.y = tileTopY + 0.3;
-    group.add(floatObj);
+    topGroup.add(floatObj);
   }
   if(floatObj){
     shadowDisc = new THREE.Mesh(
@@ -1356,8 +1370,9 @@ for(let i=0;i<40;i++){
   }
 
   tiles.push({
-    group, world, tileTopY, catKey, catDef, caseNum, isVisite:data.isVisite,
+    group, topGroup, world, tileTopY, catKey, catDef, caseNum, isVisite:data.isVisite,
     halo, floatObj, shadowDisc, floatBaseScale, holoShine, motion: MOTION[catKey]||{bob:0.08},
+    bezelBase, rivetPositions, bezelIndex:i,
     phase: Math.random()*Math.PI*2,
     breathePhase: ((r+c)%8)*0.4
   });
@@ -1606,7 +1621,12 @@ let pendingOutcome = null;
 function tileAt(idx){ return idx===-1 ? START_NODE : tiles[idx]; }
 
 function setActive(index){
-  tiles.forEach((t,i)=>{ t.isActive = (i===index); if(!t.isActive){ t.halo.material.opacity = 0; } });
+  tiles.forEach((t,i)=>{
+    const wasActive = t.isActive;
+    t.isActive = (i===index);
+    if(!t.isActive){ t.halo.material.opacity = 0; }
+    else if(!wasActive){ t.popT0 = clock.getElapsedTime(); }
+  });
 }
 setActive(-1);
 
@@ -1761,7 +1781,34 @@ function animate(){
   tiles.forEach(tile=>{
     if(!reduceMotion){
       const breathe = 1 + Math.sin(t*1.9 + tile.breathePhase)*0.012;
-      tile.group.scale.set(1,breathe,1);
+      tile.topGroup.scale.set(1,breathe,1);
+      // vague qui parcourt en continu les 40 cases autour du plateau
+      // (façon "ola" de stade), pour que le plateau entier ait l'air
+      // vivant même sans aucune action du joueur — seule la "carte"
+      // (topGroup) bouge, le socle (base + collerette) reste fixe.
+      let posY = Math.sin(t*1.3 - (tile.caseNum-1)*0.35) * 0.05;
+      // petit rebond "ressort" quand la case vient de devenir active
+      // (le pion vient d'y arriver) : réaction visuelle immédiate,
+      // amortie en ~0.5s, en plus des éclats/punch caméra déjà en jeu
+      if(tile.popT0 != null){
+        const pe = t - tile.popT0;
+        if(pe < 0.6) posY += Math.exp(-pe*7)*Math.sin(pe*20)*0.16;
+        else tile.popT0 = null;
+      }
+      tile.topGroup.position.y = posY;
+      // le liseré + les rivets sont des InstancedMesh partagés (pas
+      // des enfants de topGroup) : on les remet à jour ici pour
+      // qu'ils suivent exactement le même mouvement que la carte,
+      // sans jamais s'en désynchroniser.
+      _instDummy.rotation.set(0,0,0);
+      _instDummy.position.set(tile.bezelBase.x, 0.21+posY, tile.bezelBase.z);
+      _instDummy.updateMatrix();
+      tileBezelInst.setMatrixAt(tile.bezelIndex, _instDummy.matrix);
+      tile.rivetPositions.forEach((rp,k)=>{
+        _instDummy.position.set(rp.x, 0.222+posY, rp.z);
+        _instDummy.updateMatrix();
+        tileRivetInst.setMatrixAt(tile.bezelIndex*RIVET_OFFSETS.length+k, _instDummy.matrix);
+      });
     }
     if(tile.floatObj){
       const m = tile.motion;
@@ -1793,6 +1840,10 @@ function animate(){
       tile.halo.rotation.z += dt*0.6;
     }
   });
+  if(!reduceMotion){
+    tileBezelInst.instanceMatrix.needsUpdate = true;
+    tileRivetInst.instanceMatrix.needsUpdate = true;
+  }
 
   // marche continue du pion sur tout le trajet demandé
   if(walk){
