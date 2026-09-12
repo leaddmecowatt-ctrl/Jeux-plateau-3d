@@ -1111,6 +1111,30 @@ function makeCornerOrnamentTexture(){
   });
 }
 
+/* ---------- Reflet holographique façon carte rare ----------
+   Un bandeau diagonal clair qui défile en boucle sur les cartes-lots
+   flottantes, comme le reflet d'une carte Pokémon holo qu'on incline
+   à la lumière — de la "dopamine visuelle" en continu, même quand
+   personne ne joue, sans dépendre d'une action du joueur. */
+function makeHoloShineTexture(){
+  const size = 256;
+  const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
+  const ctx = cvs.getContext('2d');
+  ctx.save();
+  ctx.translate(size/2,size/2); ctx.rotate(Math.PI/5); ctx.translate(-size/2,-size/2);
+  const grad = ctx.createLinearGradient(0,0,size*0.16,0);
+  grad.addColorStop(0,'rgba(255,255,255,0)');
+  grad.addColorStop(0.5,'rgba(255,255,255,.4)');
+  grad.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(-size,-size,size*3,size*3);
+  ctx.restore();
+  const tex = new THREE.CanvasTexture(cvs);
+  tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+const holoShineBaseTex = makeHoloShineTexture();
+
 /* ---------- Les 40 cases ---------- */
 const TILE = 0.95;
 const tiles = [];
@@ -1264,7 +1288,7 @@ for(let i=0;i<40;i++){
   halo.position.y = tileTopY+0.03;
   group.add(halo);
 
-  let floatObj = null, shadowDisc = null, floatBaseScale = 0.34;
+  let floatObj = null, shadowDisc = null, floatBaseScale = 0.34, holoShine = null;
   // Case 1 (Départ) : aucune décoration flottante, même si sa catégorie
   // de fond ('booster8') en aurait normalement une — voir getDepartFace
   // plus haut, la case n'est thématiquement pas un vrai lot.
@@ -1281,6 +1305,20 @@ for(let i=0;i<40;i++){
     floatObj.position.y = tileTopY + 0.32 + h*0.5;
     group.add(floatObj);
     floatBaseScale = h;
+
+    // reflet holo qui défile en boucle sur la carte, comme une vraie
+    // carte rare inclinée à la lumière — chaque carte a son propre
+    // décalage de phase et de vitesse pour ne pas scintiller à l'unisson
+    const shineTex = holoShineBaseTex.clone();
+    shineTex.needsUpdate = true;
+    const shineMat = new THREE.MeshBasicMaterial({
+      map:shineTex, transparent:true, depthWrite:false, side:THREE.DoubleSide,
+      blending:THREE.AdditiveBlending, opacity:.32
+    });
+    const shineMesh = new THREE.Mesh(new THREE.PlaneGeometry(w,h), shineMat);
+    shineMesh.position.set(0,0,0.002);
+    floatObj.add(shineMesh);
+    holoShine = { tex:shineTex, speed:0.16+Math.random()*0.1, phase:Math.random() };
   } else if(i !== 0 && catDef.tier === 'glyph'){
     const glyphKind = data.isVisite ? 'visite' : catKey;
     floatObj = makeSprite(getGlyphTexture(glyphKind, accentColor), data.isVisite ? 0.3 : 0.6);
@@ -1319,7 +1357,7 @@ for(let i=0;i<40;i++){
 
   tiles.push({
     group, world, tileTopY, catKey, catDef, caseNum, isVisite:data.isVisite,
-    halo, floatObj, shadowDisc, floatBaseScale, motion: MOTION[catKey]||{bob:0.08},
+    halo, floatObj, shadowDisc, floatBaseScale, holoShine, motion: MOTION[catKey]||{bob:0.08},
     phase: Math.random()*Math.PI*2,
     breathePhase: ((r+c)%8)*0.4
   });
@@ -1647,7 +1685,8 @@ const sparklePool = Array.from({length:SPARKLE_POOL_SIZE}, ()=>{
   return { spr, vx:0, vy:0, vz:0, life:0, maxLife:1 };
 });
 let sparkleCursor = 0;
-function spawnSparkles(x,y,z,count,spread,upSpeed){
+function spawnSparkles(x,y,z,count,spread,upSpeed,lifeMin,lifeMax){
+  lifeMin = lifeMin ?? 0.45; lifeMax = lifeMax ?? 0.75;
   for(let i=0;i<count;i++){
     const p = sparklePool[sparkleCursor];
     sparkleCursor = (sparkleCursor+1)%sparklePool.length;
@@ -1657,7 +1696,7 @@ function spawnSparkles(x,y,z,count,spread,upSpeed){
     p.vz = Math.sin(ang)*r;
     p.vy = upSpeed*(0.6+Math.random()*0.7);
     p.life = 0;
-    p.maxLife = 0.45+Math.random()*0.3;
+    p.maxLife = lifeMin + Math.random()*(lifeMax-lifeMin);
     p.spr.position.set(x, y, z);
     const s = 0.13+Math.random()*0.1;
     p.spr.scale.set(s,s,s);
@@ -1678,6 +1717,24 @@ function updateSparkles(dt){
   }
 }
 
+/* Poussière dorée ambiante qui monte doucement en continu autour du
+   plateau, même sans qu'aucune partie soit en cours — pour que le
+   plateau paraisse "vivant" au premier coup d'œil, pas seulement
+   pendant un lancer de dé. */
+let ambientSparkleTimer = 0;
+function updateAmbientSparkles(dt){
+  if(reduceMotion) return;
+  ambientSparkleTimer -= dt;
+  if(ambientSparkleTimer <= 0){
+    ambientSparkleTimer = 0.28 + Math.random()*0.35;
+    const [x,z] = perimeterPosAt(Math.random());
+    const inward = 0.3+Math.random()*1.1;
+    const ang = Math.atan2(-z,-x);
+    const jx = x + Math.cos(ang)*inward, jz = z + Math.sin(ang)*inward;
+    spawnSparkles(jx, 0.15+Math.random()*0.25, jz, 1, 0.12, 0.32, 1.3, 2.1);
+  }
+}
+
 function animate(){
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);
@@ -1686,6 +1743,7 @@ function animate(){
   controls.update();
   updateCornerSafety(dt);
   updateSparkles(dt);
+  updateAmbientSparkles(dt);
 
   trimLights.forEach(tl=>{
     tl.spr.material.opacity = reduceMotion ? 0.5 : 0.28 + 0.45*Math.max(0, Math.sin(t*2.2 - tl.idx*0.5));
@@ -1725,6 +1783,9 @@ function animate(){
         const k = 1 - Math.min(Math.abs(bob)/ (m.bob||1), 1)*0.5;
         tile.shadowDisc.scale.set(k,k,k);
         tile.shadowDisc.material.opacity = 0.3*k;
+      }
+      if(tile.holoShine && !reduceMotion){
+        tile.holoShine.tex.offset.x = (t*tile.holoShine.speed + tile.holoShine.phase) % 1;
       }
     }
     if(tile.isActive){
