@@ -40,6 +40,19 @@ body{overflow:hidden;color:#fff}
 @media (prefers-reduced-motion: reduce){
   #app::before{ animation:none; }
 }
+/* Voile sombre entre la photo de fond et le plateau : la photo seule
+   (très claire/chargée) écrasait le contraste du plateau, qui se
+   voyait mal par-dessus. Un peu plus sombre sur les bords qu'au
+   centre, façon vignette cinéma, pour que le plateau ressorte nettement
+   sans pour autant cacher la photo. */
+#app::after{
+  content:"";
+  position:absolute;
+  inset:-9%;
+  background:radial-gradient(ellipse at center, rgba(4,7,18,.32) 0%, rgba(4,7,18,.32) 45%, rgba(4,7,18,.6) 100%);
+  z-index:0;
+  pointer-events:none;
+}
 
 /* HUD haut : petit fil d'Ariane doré en haut, puis une bannière de
    destination bien plus grande et clairement séparée en dessous
@@ -128,7 +141,7 @@ body{overflow:hidden;color:#fff}
 
 /* Nuages blancs qui dérivent lentement en arrière-plan, façon nuage
    volant façon Nimbus — décor seulement, jamais devant le plateau. */
-.bg-clouds{display:none}
+.bg-clouds{}
 .cloud{
   position:absolute;width:180px;opacity:.5;
   filter:drop-shadow(0 0 7px rgba(255,226,122,.5));
