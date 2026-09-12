@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/three/OrbitControls.js';
+import { GLTFLoader } from './vendor/three/examples/jsm/loaders/GLTFLoader.js';
 
 /* =========================================================================
    PIKAJACKPOT — plateau 40 cases en vraie 3D (WebGL / three.js)
@@ -1256,144 +1257,77 @@ function toonGradient(){
    Rendu "toon" avec dégradé doux (au lieu du rendu plastique/PBR
    d'avant), sans contour noir — retiré après essai, jugé trop
    "autocollant" pour le rendu recherché. */
-function buildToken(){
+/* Pion du joueur : vrai modèle 3D animé (licence CC0, Kenney/Kay
+   Lousberg — "Animated Characters"), plutôt que des formes géométriques
+   assemblées à la main. Visage, cheveux, mains et vêtements sont
+   sculptés ; la marche utilise la vraie animation du modèle (pilotée
+   par un AnimationMixer), plus une transition douce vers l'animation
+   "idle" à l'arrêt. */
+const PLAYER_TARGET_HEIGHT = 0.82; // hauteur visée sur le plateau (mêmes proportions que l'ancien pion)
+async function loadPlayerModel(){
+  const gltf = await new Promise((resolve, reject)=>{
+    new GLTFLoader().load('./assets/character/player.glb', resolve, undefined, reject);
+  });
+  const model = gltf.scene;
+
+  // Redimensionne le modèle (unités d'export arbitraires) pour qu'il
+  // occupe la même hauteur que l'ancien pion, et pose ses pieds
+  // exactement sur y=0 (le reste du code positionne `root` au sol).
+  const box = new THREE.Box3().setFromObject(model);
+  const rawHeight = box.max.y - box.min.y;
+  const scale = rawHeight>0 ? PLAYER_TARGET_HEIGHT/rawHeight : 1;
+  model.scale.setScalar(scale);
+  model.position.y = -box.min.y*scale;
+  model.traverse(o=>{ if(o.isMesh){ o.castShadow = true; } });
+
   const root = new THREE.Group();
+  root.add(model);
 
-  const grad = toonGradient();
-  const skin = new THREE.MeshToonMaterial({color:0xf3c39c, gradientMap:grad});
-  const jacket = new THREE.MeshToonMaterial({color:0x2a5fc4, gradientMap:grad});
-  const jacketLight = new THREE.MeshToonMaterial({color:0xf3f7fb, gradientMap:grad});
-  const jeans = new THREE.MeshToonMaterial({color:0x3f63a8, gradientMap:grad});
-  const cap = new THREE.MeshToonMaterial({color:0xe23b3f, gradientMap:grad});
-  const capDark = new THREE.MeshToonMaterial({color:0xb32a2e, gradientMap:grad});
-  const hair = new THREE.MeshToonMaterial({color:0x3b2a1e, gradientMap:grad});
-  const shoe = new THREE.MeshToonMaterial({color:0x6b4226, gradientMap:grad});
-  const bag = new THREE.MeshToonMaterial({color:0xb23a3a, gradientMap:grad});
-  const strap = new THREE.MeshToonMaterial({color:0x5a2020, gradientMap:grad});
+  const mixer = new THREE.AnimationMixer(model);
+  const clip = name => THREE.AnimationClip.findByName(gltf.animations, name);
 
-  function limb(mat,r,len){
-    const g = new THREE.Group();
-    const geo = new THREE.CapsuleGeometry(r,len,8,16);
-    const mesh = new THREE.Mesh(geo,mat);
-    mesh.position.y = -len/2 - r;
-    mesh.castShadow = true;
-    g.add(mesh);
-    return g;
+  // La pose de repos d'origine ("idle") garde les bras à l'horizontale
+  // (pose de liaison du squelette) : on corrige juste cette animation,
+  // bras le long du corps, sans toucher à la marche/saut qui sont déjà
+  // naturelles.
+  const idleClip = clip('idle');
+  if(idleClip){
+    const armFix = { RightArm: 78, LeftArm: -78 };
+    idleClip.tracks.forEach(track=>{
+      const boneName = track.name.split('.')[0];
+      const deg = armFix[boneName];
+      if(!deg || !track.name.endsWith('.quaternion')) return;
+      const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1), THREE.MathUtils.degToRad(deg));
+      for(let i=0;i<track.values.length;i+=4){
+        const v = track.values;
+        const orig = new THREE.Quaternion(v[i],v[i+1],v[i+2],v[i+3]).multiply(q);
+        v[i]=orig.x; v[i+1]=orig.y; v[i+2]=orig.z; v[i+3]=orig.w;
+      }
+    });
   }
 
-  // Jambe en deux segments (short bleu + peau nue en dessous) plutôt
-  // qu'une seule capsule bleue du bassin à la chaussure : lit beaucoup
-  // mieux comme "short + jambe", au lieu d'un pantalon plein.
-  function leg(){
-    const g = new THREE.Group();
-    const shortsR = 0.062, shortsLen = 0.04;
-    const shorts = new THREE.Mesh(new THREE.CapsuleGeometry(shortsR,shortsLen,8,16), jeans);
-    shorts.position.y = -shortsLen/2 - shortsR;
-    shorts.castShadow = true;
-    g.add(shorts);
-    const shinR = 0.05, shinLen = 0.1;
-    const shin = new THREE.Mesh(new THREE.CapsuleGeometry(shinR,shinLen,8,16), skin);
-    shin.position.y = -(shortsLen+2*shortsR) - shinLen/2 - shinR;
-    shin.castShadow = true;
-    g.add(shin);
-    return g;
+  const actions = {
+    idle: idleClip && mixer.clipAction(idleClip),
+    walk: clip('walk') && mixer.clipAction(clip('walk')),
+  };
+  Object.values(actions).forEach(a=>{ if(a) a.play(); });
+  if(actions.idle) actions.idle.setEffectiveWeight(1);
+  if(actions.walk) actions.walk.setEffectiveWeight(0);
+  let activeAction = actions.idle || actions.walk;
+  function setWalking(isWalking, speedScale){
+    const target = isWalking ? actions.walk : actions.idle;
+    if(target && target!==activeAction){
+      activeAction.fadeOut(0.15);
+      target.reset().fadeIn(0.15);
+      activeAction = target;
+    }
+    if(isWalking && actions.walk) actions.walk.timeScale = Math.max(0.2, speedScale||1);
   }
 
-  const hipY = 0.3;
-  const legL = leg(); legL.position.set(-0.085,hipY,0); root.add(legL);
-  const legR = leg(); legR.position.set(0.085,hipY,0); root.add(legR);
-
-  const shoulderY = 0.53;
-  const armL = limb(jacket,0.05,0.19); armL.position.set(-0.165,shoulderY,0); root.add(armL);
-  const armR = limb(jacket,0.05,0.19); armR.position.set(0.165,shoulderY,0); root.add(armR);
-
-  const torso = new THREE.Group();
-  torso.position.y = hipY;
-  root.add(torso);
-  const torsoMesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.145,0.19,8,18), jacket);
-  torsoMesh.position.y = 0.23;
-  torsoMesh.castShadow = true;
-  torso.add(torsoMesh);
-
-  const chestPanel = new THREE.Mesh(new THREE.SphereGeometry(0.1,16,12,0,Math.PI*2,0,Math.PI*0.5), jacketLight);
-  chestPanel.rotation.x = Math.PI;
-  chestPanel.position.set(0,0.29,0.1);
-  chestPanel.scale.set(1,1,0.6);
-  torso.add(chestPanel);
-
-  const strapL = new THREE.Mesh(new THREE.BoxGeometry(0.035,0.24,0.03), strap);
-  strapL.position.set(-0.07,0.28,0.09); strapL.rotation.z = 0.18;
-  torso.add(strapL);
-  const strapR = new THREE.Mesh(new THREE.BoxGeometry(0.035,0.24,0.03), strap);
-  strapR.position.set(0.07,0.28,0.09); strapR.rotation.z = -0.18;
-  torso.add(strapR);
-
-  const backpack = new THREE.Mesh(new THREE.BoxGeometry(0.17,0.2,0.12), bag);
-  backpack.position.set(0,0.25,-0.15);
-  backpack.castShadow = true;
-  torso.add(backpack);
-  const backpackFlap = new THREE.Mesh(new THREE.BoxGeometry(0.13,0.09,0.03), strap);
-  backpackFlap.position.set(0,0.31,-0.09);
-  torso.add(backpackFlap);
-
-  const headGroup = new THREE.Group();
-  headGroup.position.y = 0.5;
-  headGroup.scale.setScalar(1.18); // tête plus grosse, façon chibi : se lit mieux vue d'en haut
-  torso.add(headGroup);
-
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.155,24,20), skin);
-  head.castShadow = true;
-  headGroup.add(head);
-
-  [-1,1].forEach(side=>{
-    const tuft = new THREE.Mesh(new THREE.SphereGeometry(0.05,10,8), hair);
-    tuft.position.set(side*0.135,0.01,0.03);
-    tuft.scale.set(0.7,1,1);
-    headGroup.add(tuft);
-  });
-  const fringe = new THREE.Mesh(new THREE.SphereGeometry(0.09,16,10,0,Math.PI*2,0,Math.PI*0.4), hair);
-  fringe.position.set(0,0.09,0.07);
-  fringe.rotation.x = Math.PI*0.05;
-  headGroup.add(fringe);
-
-  const capMesh = new THREE.Mesh(new THREE.SphereGeometry(0.168,22,16,0,Math.PI*2,0,Math.PI*0.56), cap);
-  capMesh.position.y = 0.045;
-  capMesh.castShadow = true;
-  headGroup.add(capMesh);
-  const capBand = new THREE.Mesh(new THREE.TorusGeometry(0.147,0.014,8,20,Math.PI),capDark);
-  capBand.position.y = 0.02; capBand.rotation.x = Math.PI/2; capBand.rotation.z = Math.PI;
-  headGroup.add(capBand);
-  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.11,0.115,0.018,20,1,false,0,Math.PI), cap);
-  brim.position.set(0,0,0.1);
-  brim.rotation.x = -0.08;
-  headGroup.add(brim);
-  const buttonTop = new THREE.Mesh(new THREE.SphereGeometry(0.018,8,8), capDark);
-  buttonTop.position.set(0,0.165,0);
-  headGroup.add(buttonTop);
-
-  const eyeGeo = new THREE.SphereGeometry(0.016,8,8);
-  const eyeMat = new THREE.MeshBasicMaterial({color:0x18304f});
-  const eyeL = new THREE.Mesh(eyeGeo,eyeMat); eyeL.position.set(-0.05,0,0.145); headGroup.add(eyeL);
-  const eyeR = new THREE.Mesh(eyeGeo,eyeMat); eyeR.position.set(0.05,0,0.145); headGroup.add(eyeR);
-  const blushGeo = new THREE.CircleGeometry(0.018,10);
-  const blushMat = new THREE.MeshBasicMaterial({color:0xff9a8a,transparent:true,opacity:.55});
-  const blushL = new THREE.Mesh(blushGeo,blushMat); blushL.position.set(-0.09,-0.03,0.125); blushL.rotation.y=-0.6; headGroup.add(blushL);
-  const blushR = new THREE.Mesh(blushGeo,blushMat); blushR.position.set(0.09,-0.03,0.125); blushR.rotation.y=0.6; headGroup.add(blushR);
-
-  [legL,legR].forEach(g=>{
-    const s = new THREE.Mesh(new THREE.BoxGeometry(0.095,0.06,0.15), shoe);
-    s.position.set(0,-0.22,0.025);
-    s.castShadow = true;
-    g.add(s);
-  });
-
-  // Contour retiré : trop "autocollant" pour le rendu lisse et doux
-  // recherché (façon jeu mobile), plutôt qu'un cel-shading BD marqué.
-
-  return { root, legL, legR, armL, armR, torso };
+  return { root, mixer, setWalking };
 }
 
-const player = buildToken();
+const player = await loadPlayerModel();
 scene.add(player.root);
 
 /* ---------- État de jeu ---------- */
@@ -1575,16 +1509,10 @@ function animate(){
     }
 
     if(!reduceMotion){
-      const swing = Math.sin(dist*Math.PI*2)*0.5*gaitAmp;
-      player.legL.rotation.x = swing;
-      player.legR.rotation.x = -swing;
-      player.armL.rotation.x = -swing;
-      player.armR.rotation.x = swing;
-      player.torso.position.y = 0.3 + Math.abs(Math.sin(dist*Math.PI*2))*0.016*gaitAmp;
       const leanTarget = -0.09*gaitAmp;
       player.root.rotation.x += (leanTarget - player.root.rotation.x)*Math.min(1,dt*10);
-      player.torso.rotation.z = Math.sin(dist*Math.PI*2 + Math.PI/2)*0.05*gaitAmp;
     }
+    player.setWalking(true, gaitAmp);
 
     if(walk.done){
       currentIndex = walk.indices[walk.indices.length-1];
@@ -1592,19 +1520,12 @@ function animate(){
       walk = null;
     }
   } else if(!reduceMotion){
-    // au repos : les restes de la marche reviennent doucement en
-    // position neutre...
-    player.legL.rotation.x *= 0.8; player.legR.rotation.x *= 0.8;
-    player.armL.rotation.x *= 0.8; player.armR.rotation.x *= 0.8;
+    // au repos : la marche revient doucement en position neutre,
+    // l'animation "idle" du modèle prend le relais.
     player.root.rotation.x *= 0.8;
-    player.torso.rotation.z *= 0.8;
-    // ...pendant qu'une légère respiration + un regard qui balaie
-    // doucement les alentours empêchent le pion de paraître figé
-    // en attendant le prochain tirage.
-    player.torso.position.y = 0.3 + Math.sin(t*1.1)*0.006;
-    const idleYaw = Math.sin(t*0.35)*0.16;
-    player.torso.rotation.y += (idleYaw - player.torso.rotation.y)*0.04;
+    player.setWalking(false);
   }
+  player.mixer.update(dt);
 
   // Séisme puis éclatement du plateau (effet "Carte Darkrai")
   if(shakeUntil>0 && t<shakeUntil){
@@ -2333,8 +2254,7 @@ function restart(){
   currentIndex = -1;
   player.root.scale.set(1,1,1);
   player.root.rotation.x = 0;
-  player.torso.rotation.z = 0;
-  player.legL.rotation.x = player.legR.rotation.x = player.armL.rotation.x = player.armR.rotation.x = 0;
+  player.setWalking(false);
   placeTokenInstant(-1);
   setActive(-1);
   statusEl.textContent = 'Le joueur est prêt sur Départ.';
