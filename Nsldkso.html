@@ -3,517 +3,639 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<title>Plateau Live — 40 cases</title>
+<title>PikaJackpot — Plateau Live 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;900&display=swap" rel="stylesheet">
 <style>
 :root{
-  --cyan:#19d6ff; --blue:#0d66ff; --navy:#06142c; --navy2:#0b2852;
-  --yellow:#ffd83c; --white:#f7fbff; --ink:#102949;
+  --gold:#e9c34a; --gold-bright:#ffe27a; --black:#0a0a0a; --black2:#161208;
+  --blue:#1a56db; --red:#e0323f; --white:#f7fbff; --ink:#1a1204;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;width:100%;height:100%;background:#020714;font-family:Arial,Helvetica,sans-serif}
+html,body{margin:0;width:100%;height:100%;background:#000;font-family:Arial,Helvetica,sans-serif}
 body{overflow:hidden;color:#fff}
 #app{
   width:100vw;height:100dvh;overflow:hidden;
   display:flex;flex-direction:column;
-  background:
-    radial-gradient(circle at 50% 38%,rgba(20,118,255,.22),transparent 34%),
-    linear-gradient(#041126 0 16%,#061733 44%,#020817 100%);
+  position:relative;
+}
+#app::before{
+  content:"";
+  position:absolute;
+  inset:-9%;
+  background-image:url("./assets/bg/dragon_sky.jpg");
+  background-repeat:no-repeat;
+  background-size:cover;
+  background-position:85% center;
+  z-index:0;
+  pointer-events:none;
+  animation:bgDrift 30s ease-in-out infinite alternate;
+}
+@keyframes bgDrift{
+  0%{ transform:translate(-2.5%,-1.5%) scale(1.02); }
+  50%{ transform:translate(2.5%,1.5%) scale(1.04); }
+  100%{ transform:translate(-2.5%,-1.5%) scale(1.02); }
+}
+@media (prefers-reduced-motion: reduce){
+  #app::before{ animation:none; }
 }
 
-/* HUD haut */
+/* HUD haut : petit fil d'Ariane doré en haut, puis une bannière de
+   destination bien plus grande et clairement séparée en dessous
+   (avant, les deux se chevauchaient visuellement, illisibles). */
 .top-hud{
   flex:0 0 auto;
-  display:flex;align-items:center;justify-content:space-between;gap:10px;
-  padding:max(10px,env(safe-area-inset-top)) 12px 6px;
+  display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+  padding:max(10px,calc(env(safe-area-inset-top) + 6px)) 12px 4px;
   position:relative;z-index:5;
 }
-.player-card,.next-card{
-  border:2px solid #37caff;
-  background:linear-gradient(180deg,#0e4792,#08275b);
-  box-shadow:0 0 10px rgba(0,125,255,.6);
-  border-radius:12px;
-}
-.player-card{
-  width:132px;height:52px;display:grid;grid-template-columns:43px 1fr;align-items:center;
-  padding:4px 7px 4px 3px;
-}
-.avatar-mini{width:39px;height:39px;border-radius:7px;background:#dcefff;overflow:hidden;border:1px solid #7fe5ff}
-.player-card b{display:block;font-size:12px}.coins{font-size:12px;color:#ffd84a;font-weight:900}
-.next-card{
-  width:160px;height:58px;text-align:center;padding-top:5px;
-}
-.next-card small{font-weight:800}
-.next-num{
-  margin:4px auto 0;width:48px;height:29px;line-height:25px;border-radius:6px;
-  background:#0d4b99;border:2px solid #50cfff;font-size:22px;font-weight:900
+.brand{
+  font-size:10px;font-weight:900;letter-spacing:.14em;color:var(--gold-bright);
+  opacity:.8;
+  text-shadow:0 0 8px rgba(255,226,122,.5),0 1px 3px rgba(0,0,0,.8);pointer-events:none;
 }
 
-/* zone principale = décor + plateau */
-.game-zone{
+/* zone principale = décor de stade + plateau 3D + panneau latéral */
+.main-row{
   flex:1 1 auto;min-height:0;position:relative;
-  display:flex;align-items:center;justify-content:center;
+  display:flex;flex-direction:column;align-items:stretch;
   padding:2px 10px 4px;
   overflow:hidden;
 }
-/* décor d'arène derrière le plateau, façon stade */
-.game-zone::before{
-  content:"";position:absolute;inset:-4% -8% -2%;pointer-events:none;z-index:0;
-  background:
-    radial-gradient(ellipse 90px 60px at 9% 10%,rgba(255,255,255,.55),transparent 60%),
-    radial-gradient(ellipse 90px 60px at 91% 10%,rgba(255,255,255,.5),transparent 60%),
-    radial-gradient(ellipse 70% 40% at 50% 6%,rgba(255,150,90,.18),transparent 70%),
-    radial-gradient(ellipse 60% 30% at 50% 0%,rgba(120,190,255,.16),transparent 70%);
-  filter:blur(1px);
-}
-.game-zone::after{
-  content:"";position:absolute;left:0;right:0;top:6%;height:16%;pointer-events:none;z-index:0;
-  background:
-    linear-gradient(rgba(255,225,170,.16),transparent),
-    repeating-linear-gradient(90deg,rgba(20,40,70,.55) 0 4%,transparent 4% 9%);
-  -webkit-mask-image:linear-gradient(#000,transparent);
-  mask-image:linear-gradient(#000,transparent);
-  opacity:.7;
+.board-row{
+  flex:1 1 auto;min-height:0;position:relative;z-index:1;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
 }
 
+/* ---------- décor d'arène (bâtiment, montagnes, projecteurs), tout
+   dessiné en CSS pure — un décor original, pas une image reprise
+   ailleurs, et sans logo ou signe de marque. ---------- */
+.stadium{display:none}
+.stad-haze{
+  position:absolute;left:0;right:0;top:8%;height:30%;
+  background:linear-gradient(180deg,rgba(140,190,255,.16),rgba(140,190,255,0));
+}
+.stad-mountain{
+  position:absolute;bottom:34%;width:62%;height:26%;
+  background:linear-gradient(180deg,#33547f,#152a4c);
+  clip-path:polygon(0% 100%,8% 55%,20% 78%,32% 40%,46% 68%,58% 30%,72% 62%,86% 45%,100% 100%);
+  opacity:.55;
+}
+.stad-mountain.m1{left:-12%}
+.stad-mountain.m2{right:-14%;bottom:33%;height:20%;opacity:.4;filter:hue-rotate(10deg)}
+.stad-mountain.m3{left:22%;bottom:37%;width:40%;height:15%;opacity:.28;filter:blur(.5px)}
+
+.stad-light{position:absolute;top:4%;width:6px;height:34%;background:linear-gradient(180deg,#0e2c52,#04101f);border-radius:3px}
+.stad-light.left{left:4%}
+.stad-light.right{right:4%}
+.stad-light .beam{
+  position:absolute;top:-2px;left:50%;transform:translateX(-50%);width:2px;height:0;
+  border-left:60px solid transparent;border-right:60px solid transparent;border-bottom:150px solid rgba(190,225,255,.14);
+  transform-origin:top center;
+}
+.stad-light.left .beam{transform:translateX(-50%) rotate(18deg)}
+.stad-light.right .beam{transform:translateX(-50%) rotate(-18deg)}
+.stad-light .glow{
+  position:absolute;top:-15px;left:50%;transform:translateX(-50%);width:34px;height:34px;border-radius:50%;
+  background:radial-gradient(circle,rgba(255,255,255,.95),rgba(190,225,255,.5) 45%,transparent 75%);
+  box-shadow:0 0 46px 16px rgba(180,225,255,.35);
+}
+
+/* Étoiles scintillantes qui tombent en continu dans les marges de
+   gauche/droite (jamais au-dessus du plateau, qui a un z-index
+   supérieur) — décor léger assorti au ciel de fond. */
+.bg-fall{}
+.fall-star{
+  position:absolute;top:-12%;opacity:0;
+  background:radial-gradient(circle,#fff 0%,var(--gold-bright) 45%,var(--gold) 75%,transparent 100%);
+  clip-path:polygon(50% 0%,63% 37%,100% 50%,63% 63%,50% 100%,37% 63%,0% 50%,37% 37%);
+  filter:drop-shadow(0 0 4px rgba(255,226,122,.75));
+  animation-name:fallDrift;animation-timing-function:linear;animation-iteration-count:infinite;
+}
+@keyframes fallDrift{
+  0%{transform:translateY(0) rotate(0deg) scale(1);opacity:0}
+  8%{opacity:.85}
+  20%{transform:translateY(23vh) rotate(64deg) scale(.65)}
+  35%{transform:translateY(40vh) rotate(112deg) scale(1)}
+  50%{transform:translateY(57vh) rotate(160deg) scale(.65)}
+  65%{transform:translateY(75vh) rotate(208deg) scale(1)}
+  80%{transform:translateY(92vh) rotate(256deg) scale(.65)}
+  92%{opacity:.85}
+  100%{transform:translateY(115vh) rotate(320deg) scale(1);opacity:0}
+}
+@media (prefers-reduced-motion: reduce){ .fall-star{ display:none; } }
+
+/* Nuages blancs qui dérivent lentement en arrière-plan, façon nuage
+   volant façon Nimbus — décor seulement, jamais devant le plateau. */
+.bg-clouds{display:none}
+.cloud{
+  position:absolute;width:180px;opacity:.5;
+  filter:drop-shadow(0 0 7px rgba(255,226,122,.5));
+  animation-name:cloudDrift;animation-timing-function:linear;animation-iteration-count:infinite;
+}
+.cloud.c1{ top:6%;  width:220px; animation-duration:30s; animation-delay:-4s; }
+.cloud.c2{ top:20%; width:150px; opacity:.4; animation-duration:38s; animation-delay:-16s; }
+.cloud.c3{ top:3%;  width:170px; opacity:.46; animation-duration:34s; animation-delay:-24s; }
+@keyframes cloudDrift{
+  0%{ transform:translateX(-30vw); }
+  100%{ transform:translateX(130vw); }
+}
+@media (prefers-reduced-motion: reduce){ .cloud{ display:none; } }
+
+.board-col{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;flex:1 1 auto;min-height:0}
 .board-wrap{
-  width:min(95vw,680px);
+  width:min(97vw,88vh,900px);
   aspect-ratio:1/1;
   position:relative;z-index:1;
-  perspective:1250px;
   filter:drop-shadow(0 22px 26px rgba(0,0,0,.55));
 }
-.board-stage{
-  position:absolute;inset:0;
-  transform:rotateX(22deg);
-  transform-origin:50% 100%;
-  transform-style:preserve-3d;
+#gl{
+  position:absolute;inset:0;width:100%;height:100%;display:block;
+  border-radius:14px;
+  cursor:grab;
+  touch-action:none;
 }
-.board{
-  position:absolute;inset:2%;
-  display:grid;grid-template-columns:repeat(11,1fr);grid-template-rows:repeat(11,1fr);
-  gap:2px;padding:2px;
-  background:#0b66aa;border:3px solid #9af4ff;border-radius:10px;
-  box-shadow:0 0 7px #39deff,0 0 20px #007eff,inset 0 0 22px rgba(26,208,255,.55);
+#gl:active{cursor:grabbing}
+.gl-fallback{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  text-align:center;padding:20px;font-size:13px;color:#cfe6ff;
+  background:radial-gradient(circle at 50% 40%,#0b2852,#040d1f);border-radius:14px;
 }
-.center{
-  grid-column:2/11;grid-row:2/11;position:relative;z-index:0;
-  background:
-    radial-gradient(circle at 50% 52%,rgba(132,247,255,.22),transparent 33%),
-    linear-gradient(145deg,#13a7db,#0b88ce 55%,#0571b6);
-  border:2px solid rgba(115,239,255,.7);
-  box-shadow:inset 0 0 25px rgba(255,255,255,.18);
+.hint3d{
+  position:absolute;left:50%;bottom:6px;transform:translateX(-50%);
+  font-size:9px;letter-spacing:.03em;color:rgba(210,235,255,.55);
+  background:rgba(4,16,36,.45);border:1px solid rgba(90,190,255,.3);
+  border-radius:20px;padding:3px 10px;pointer-events:none;white-space:nowrap;
+  transition:opacity .6s ease;z-index:2;
 }
-.center:after{
-  content:"";position:absolute;left:35%;top:35%;width:30%;aspect-ratio:1;border-radius:50%;
-  background:
-    radial-gradient(circle at 32% 24%,rgba(255,255,255,.85) 0 7%,transparent 19%),
-    linear-gradient(#f3474e 0 45%,#17395b 46% 54%,#f5fbff 55%);
-  border:6px solid #17395b;
-  box-shadow:0 9px 14px rgba(0,0,0,.3),inset -6px -8px 12px rgba(0,0,0,.16)
-}
-.cell{
-  z-index:2;min-width:0;min-height:0;border:1.5px solid #d5f4ff;border-radius:4px;
-  display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;
-  box-shadow:inset 0 -6px 8px rgba(0,0,0,.11),0 1px 2px rgba(0,0,0,.4);
-  transition:box-shadow .25s ease;
-  animation:cellBreathe 3.2s ease-in-out infinite;
-  animation-delay:var(--d,0s);
-}
-/* Le plateau "respire" : chaque case oscille légèrement, avec un
-   décalage propre à sa position, pour donner l'effet vivant/dynamique
-   demandé — sans jamais déplacer les pistes de la grille (donc sans
-   jamais désynchroniser le pion, qui se cale sur la mise en page, pas
-   sur ce rendu visuel). */
-@keyframes cellBreathe{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-4%) scale(1.03)}}
-.cell .ico{
-  font-size:clamp(9px,2.2vw,18px);font-weight:900;text-shadow:0 1px 1px rgba(0,0,0,.28);
-  display:inline-block;animation:iconFloat 2.6s ease-in-out infinite;
-}
-@keyframes iconFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-10%)}}
-.cell .n{position:absolute;right:2px;bottom:0;font-size:clamp(5px,1vw,8px);font-weight:900;color:rgba(255,255,255,.78)}
-.c-white{background:linear-gradient(145deg,#eaf5ff,#9dbbd2)}
-.c-yellow{background:linear-gradient(145deg,#ffe154,#f1a714)}
-.c-green{background:linear-gradient(145deg,#55e58c,#07965e)}
-.c-pink{background:linear-gradient(145deg,#ee7db0,#cf3f81)}
-.c-purple{background:linear-gradient(145deg,#c976eb,#8245c8)}
-.c-red{background:linear-gradient(145deg,#ff686e,#dc2946)}
-.c-blue{background:linear-gradient(145deg,#74aaff,#4266cb)}
-.c-orange{background:linear-gradient(145deg,#ffad63,#ef6434)}
 
-/* case où se trouve le pion : halo animé, comme sur la référence */
-.cell.active{
-  box-shadow:0 0 0 3px #ffe873,0 0 16px 5px rgba(255,232,115,.9),inset 0 -6px 8px rgba(0,0,0,.11);
-  animation:activePulse 1.15s ease-in-out infinite;
-  z-index:3;
-}
-@keyframes activePulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.3)}}
-
-.token-shadow,.token{
-  position:absolute;z-index:20;pointer-events:none;
-  left:0;top:0;
-  transition:left .40s linear,top .40s linear;
-}
-.token-shadow{
-  width:6.4%;height:2%;border-radius:50%;background:rgba(0,0,0,.5);
-  transform:translate(-50%,-30%);filter:blur(1.5px)
-}
-.token{
-  width:7.4%;aspect-ratio:.68;transform:translate(-50%,-78%);
-  filter:drop-shadow(0 6px 4px rgba(0,0,0,.4));
-}
-/* Cycle de marche : le corps rebondit, jambes et bras pivotent en
-   alternance depuis la hanche/épaule (transform-origin défini en unités
-   du viewBox directement sur chaque groupe SVG). Ce cycle tourne en
-   continu pendant le déplacement, indépendamment du glissement
-   left/top, ce qui donne une vraie marche et non un flottement. */
-.token .g-body{transform-origin:40px 70px}
-.token .g-leg-l{transform-origin:33px 91px}
-.token .g-leg-r{transform-origin:47px 89px}
-.token .g-arm-l{transform-origin:24px 70px}
-.token .g-arm-r{transform-origin:56px 69px}
-.token.walk .g-body{animation:walkBob .34s ease-in-out infinite}
-.token.walk .g-leg-l{animation:legL .34s ease-in-out infinite}
-.token.walk .g-leg-r{animation:legR .34s ease-in-out infinite}
-.token.walk .g-arm-l{animation:legR .34s ease-in-out infinite}
-.token.walk .g-arm-r{animation:legL .34s ease-in-out infinite}
-@keyframes walkBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6%)}}
-@keyframes legL{0%,100%{transform:rotate(-22deg)}50%{transform:rotate(22deg)}}
-@keyframes legR{0%,100%{transform:rotate(22deg)}50%{transform:rotate(-22deg)}}
-
-/* commandes SOUS le plateau */
-.controls-zone{
-  flex:0 0 auto;position:relative;z-index:5;
-  padding:6px 10px 4px;
-}
+/* panneau latéral : Interface Animateur + légende — masqué : tout se
+   pilote désormais au clavier (A/B/C/D/E), le plateau prend toute la
+   place. Les boutons restent dans la page (juste invisibles) car le
+   jeu s'appuie dessus en interne — les raccourcis clavier cliquent
+   dessus par le code, pas besoin qu'ils soient affichés. */
+.side-panel{ display:none; }
 .controls-panel{
   display:grid;grid-template-columns:1fr auto;gap:8px;
-  background:linear-gradient(180deg,#092d63,#051a3d);
-  border:2px solid #23a9ff;border-radius:12px;padding:9px;
-  box-shadow:0 0 12px rgba(0,127,255,.55);
+  background:linear-gradient(180deg,#1e1706,#0e0a02);
+  border:2px solid var(--gold);border-radius:12px;padding:9px;
+  box-shadow:0 0 12px rgba(233,195,74,.4);
 }
 .control-copy{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.side-title{font-size:13px;font-weight:900}
-.side-label{font-size:10px;color:#d6eeff;margin-top:2px}
+.side-title{font-size:13px;font-weight:900;color:var(--gold-bright)}
+.side-label{font-size:10px;color:#e8d8ae;margin-top:2px}
 .selector{display:grid;grid-template-columns:34px 48px 34px;gap:5px;align-items:center}
 .arrow{
-  height:36px;border:0;border-radius:8px;background:#0c4b94;color:#fff;font-size:24px;font-weight:900;
-  border:1px solid rgba(82,215,255,.55)
+  height:36px;border:0;border-radius:8px;background:#241a06;color:var(--gold-bright);font-size:24px;font-weight:900;
+  border:1px solid rgba(233,195,74,.55)
 }
 .sel-value{
   height:38px;display:flex;align-items:center;justify-content:center;border-radius:7px;
-  background:#0b4389;border:2px solid #4ed3ff;font-size:24px;font-weight:900
+  background:#241a06;border:2px solid var(--gold-bright);font-size:24px;font-weight:900;color:var(--gold-bright)
 }
 .validate{
   min-width:105px;border:0;border-radius:10px;
-  background:linear-gradient(#ffe55c,#f4ba12);color:#18304f;font-weight:900;font-size:14px;
+  background:linear-gradient(var(--gold-bright),var(--gold));color:#1a1204;font-weight:900;font-size:14px;
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.6)
 }
+.startbtn{
+  border:0;border-radius:10px;padding:12px;font-weight:900;font-size:14px;letter-spacing:.02em;
+  background:linear-gradient(180deg,#33b46a,#1e7a48);color:#fff;
+  box-shadow:0 0 12px rgba(51,180,106,.5);
+}
+.startbtn[hidden]{display:none}
+.resetbank{
+  border:1px solid var(--gold);border-radius:8px;padding:6px;font-weight:800;font-size:10.5px;
+  background:#1a1406;color:#c9bd97;
+}
+.resetbank[hidden]{display:none}
+.winbtn{
+  grid-column:1/3;border:0;border-radius:10px;padding:10px;font-weight:900;font-size:14px;
+  background:linear-gradient(180deg,#ffe27a,#e0323f);color:#1a1204;
+  box-shadow:0 0 14px rgba(224,50,63,.55);animation:winPulse 1.1s ease-in-out infinite;
+}
+.winbtn[hidden]{display:none}
+@keyframes winPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.035)}}
+.undobtn{
+  grid-column:1/3;border:1px solid var(--gold);border-radius:8px;padding:8px;font-weight:800;font-size:12px;
+  background:#2a2210;color:#e8dcb0;
+}
+.undobtn[hidden]{display:none}
 button:disabled{opacity:.48;filter:grayscale(.7)}
 button:active:not(:disabled){transform:translateY(1px)}
 
-/* légende séparée, sous les commandes */
-.legend{
-  margin-top:6px;
-  display:grid;grid-template-columns:repeat(5,1fr);gap:5px;
-  background:linear-gradient(180deg,#092a5a,#061833);
-  border:1px solid #299fff;border-radius:10px;padding:7px;
-  font-size:9px;
+.place-banner-wrap{
+  flex:0 0 auto;width:100%;height:clamp(38px,9vw,58px);margin:6px 0 2px;
+  display:flex;align-items:center;justify-content:center;overflow:hidden;pointer-events:none;
 }
-.legend-row{display:flex;align-items:center;justify-content:center;gap:4px;text-align:center}
-.sw{width:9px;height:9px;border-radius:2px;flex:none}
+.place-banner{
+  font-family:'Cinzel',Georgia,'Times New Roman',serif;font-weight:900;
+  font-size:clamp(19px,6.2vw,32px);letter-spacing:.05em;text-transform:uppercase;
+  text-align:center;white-space:nowrap;
+  background:linear-gradient(180deg,#fff6d8 10%,var(--gold-bright) 55%,var(--gold) 100%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:var(--gold-bright);
+  filter:drop-shadow(0 0 14px rgba(255,226,122,.6)) drop-shadow(0 2px 3px rgba(0,0,0,.75));
+  opacity:0;transform:translateY(10px) scale(.94);
+  transition:opacity .45s cubic-bezier(.22,.9,.32,1), transform .45s cubic-bezier(.22,.9,.32,1);
+}
+.place-banner::before, .place-banner::after{
+  content:'✦';font-size:.5em;vertical-align:middle;margin:0 .4em;opacity:.85;
+}
+/* Le nom du lieu reste affiché tant que le pion y est — il ne
+   glisse/disparaît que lors du changement de case suivant. */
+.place-banner.show{ opacity:1; transform:translateY(0) scale(1); }
 
-.statusbar{
-  margin-top:6px;min-height:42px;border:2px solid #1f98ff;border-radius:10px;
-  background:linear-gradient(180deg,#0c3977,#071d44);
-  box-shadow:0 0 10px rgba(0,117,255,.42);
-  display:flex;align-items:center;justify-content:center;position:relative;
-  font-size:12px;font-weight:800;padding:7px 78px 7px 42px
+.lots-gallery{
+  background:linear-gradient(180deg,#1a1406,#0d0a03);
+  border:1px solid var(--gold);border-radius:10px;padding:8px 9px;
 }
+.lots-gallery-title{
+  font-size:11px;font-weight:900;color:var(--gold-bright);letter-spacing:.02em;margin-bottom:6px;
+}
+.lots-gallery-strip{
+  display:flex;gap:7px;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch;
+}
+.lot-thumb{
+  flex:0 0 auto;width:48px;display:flex;flex-direction:column;align-items:center;gap:3px;
+}
+.lot-thumb img{
+  width:44px;height:60px;object-fit:cover;border-radius:5px;
+  border:2px solid var(--gold-bright);box-shadow:0 2px 6px rgba(0,0,0,.5);
+}
+.lot-thumb span{
+  font-size:7.5px;font-weight:800;color:#e8d8ae;text-align:center;line-height:1.15;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:48px;
+}
+
+/* Masquée pour laisser toute la place au plateau (pilotage 100% au
+   clavier) — reste dans la page, juste invisible : "recommencer" (C)
+   passe par ce bouton en interne. */
+.statusbar{ display:none; }
 .ball{
   position:absolute;left:10px;top:5px;width:30px;height:30px;border-radius:50%;
   background:linear-gradient(#f64249 0 43%,#153657 44% 56%,#f4f9ff 57%);border:3px solid #153657
 }
 .ball:after{content:"";position:absolute;left:35%;top:35%;width:30%;height:30%;border-radius:50%;background:#fff;border:2px solid #153657}
 .reset{
-  position:absolute;right:7px;top:5px;height:30px;padding:0 8px;border-radius:8px;border:1px solid #3c9ee7;
-  background:#082757;color:#cceaff;font-size:9px;font-weight:900
+  position:absolute;right:7px;top:5px;height:30px;padding:0 8px;border-radius:8px;border:1px solid var(--gold);
+  background:#1a1406;color:var(--gold-bright);font-size:9px;font-weight:900
+}
+
+/* ---------- Écran public (?view=display) : masque toute l'interface
+   de contrôle, ne laisse que le plateau, l'annonce et le statut. ---------- */
+html.display-mode .side-panel,
+html.display-mode .reset{ display:none!important; }
+.display-badge{
+  display:none;position:fixed;right:14px;bottom:14px;z-index:60;
+  background:rgba(10,8,2,.8);border:1px solid var(--gold);color:var(--gold-bright);
+  font-size:10px;font-weight:800;letter-spacing:.05em;padding:4px 10px;border-radius:20px;
+  pointer-events:none;
+}
+html.display-mode .display-badge{ display:block; }
+
+/* ---------- Overlay de tirage de cartes (remplace les dés) ---------- */
+.card-draw-overlay{
+  position:fixed;inset:0;z-index:55;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
+  background:rgba(6,4,1,.86);opacity:0;visibility:hidden;transition:opacity .25s ease;padding:20px;
+}
+.card-draw-overlay.show{opacity:1;visibility:visible}
+.card-draw-title{
+  font-family:'Cinzel',Georgia,serif;font-weight:900;color:var(--gold-bright);
+  font-size:clamp(16px,4vw,22px);letter-spacing:.08em;text-transform:uppercase;
+}
+.card-grid{
+  display:grid;grid-template-columns:repeat(6,1fr);gap:9px;width:min(92vw,560px);
+  perspective:800px;
+}
+.mini-card{
+  aspect-ratio:5/7;position:relative;transform-style:preserve-3d;
+  transition:transform .65s cubic-bezier(.22,.9,.32,1);
+}
+.mini-card.flipped{transform:rotateY(180deg)}
+.mini-card.suspense .back{ animation:suspensePulse .5s ease-in-out infinite; }
+@keyframes suspensePulse{
+  0%,100%{ box-shadow:0 0 8px rgba(233,195,74,.35); filter:brightness(1); }
+  50%{ box-shadow:0 0 26px rgba(255,226,122,.95); filter:brightness(1.25); }
+}
+.impact-flash{
+  position:fixed;inset:0;z-index:90;background:#fff8e0;opacity:0;pointer-events:none;
+  transition:opacity .08s ease-out;
+}
+.impact-flash.hit{ opacity:.55; transition:opacity .04s ease-out; }
+
+/* Éclair qui zèbre l'écran sur les gros lots, en plus des confettis. */
+.lightning-bolt{
+  position:fixed;top:6%;left:50%;width:min(38vw,180px);z-index:91;
+  transform:translateX(-50%) scale(.7);opacity:0;pointer-events:none;
+  filter:drop-shadow(0 0 18px rgba(255,226,122,.9));
+}
+.lightning-bolt.strike{ animation:boltStrike .8s ease-out; }
+@keyframes boltStrike{
+  0%{ opacity:0; transform:translateX(-50%) scale(.6); }
+  15%{ opacity:1; transform:translateX(-50%) scale(1.05); }
+  30%{ opacity:.25; }
+  40%{ opacity:1; }
+  65%{ opacity:1; transform:translateX(-50%) scale(1.1); }
+  100%{ opacity:0; transform:translateX(-50%) scale(1.2); }
+}
+.mini-card .face{
+  position:absolute;inset:0;border-radius:8px;backface-visibility:hidden;
+  display:flex;align-items:center;justify-content:center;
+}
+.mini-card .back{
+  background:#0a1740 url('./assets/ui/card_back.jpg') center/94% 94% no-repeat;
+  border:2px solid var(--gold-bright);
+  box-shadow:0 0 8px rgba(233,195,74,.35);
+}
+.mini-card .front{
+  background:linear-gradient(180deg,#fff6d8,var(--gold-bright));color:#1a1204;
+  font-family:'Cinzel',Georgia,serif;font-weight:900;font-size:clamp(18px,4.5vw,28px);
+  transform:rotateY(180deg);border:2px solid var(--gold);
+}
+.card-draw-total{
+  font-family:'Cinzel',Georgia,serif;font-weight:900;color:var(--gold-bright);
+  font-size:clamp(22px,6vw,36px);text-align:center;text-shadow:0 0 12px rgba(255,226,122,.5);
+  min-height:1.4em;
+}
+
+/* ---------- Overlay de célébration "Lot remporté" ---------- */
+.celebration{
+  position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
+  pointer-events:none;opacity:0;visibility:hidden;transition:opacity .25s ease;
+}
+.celebration.show{opacity:1;visibility:visible}
+.celebration.shake{animation:celebShake .5s ease}
+@keyframes celebShake{
+  0%,100%{transform:translate(0,0)} 20%{transform:translate(-8px,4px)} 40%{transform:translate(7px,-5px)}
+  60%{transform:translate(-6px,-3px)} 80%{transform:translate(5px,5px)}
+}
+#celebCanvas{position:absolute;inset:0;width:100%;height:100%}
+.celeb-text{
+  position:relative;z-index:1;font-size:clamp(20px,6vw,40px);font-weight:900;text-align:center;
+  color:var(--gold-bright);text-shadow:0 0 18px rgba(255,226,122,.9),0 2px 4px rgba(0,0,0,.8);
+  background:rgba(10,8,2,.55);border:2px solid var(--gold);border-radius:16px;padding:12px 18px;
+  animation:celebPop .4s cubic-bezier(.2,1.6,.4,1);
+  display:flex;flex-direction:column;align-items:center;gap:10px;max-width:min(96vw,540px);
+  max-height:96vh;overflow-y:auto;
+}
+/* Le lot doit être bien visible même filmé en portrait sur téléphone :
+   l'illustration domine tout l'écran plutôt qu'une vignette discrète. */
+.celeb-photo{
+  width:min(88vw,480px);height:auto;max-height:74vh;border-radius:10px;object-fit:contain;
+  border:3px solid var(--gold-bright);display:block;
+  box-shadow:0 12px 28px rgba(0,0,0,.6),0 0 26px rgba(255,226,122,.55);
+}
+.celeb-photo[hidden]{display:none}
+/* Fin de partie (case Prison) : un traitement à part, plus sombre et
+   dramatique, pour qu'on ne le confonde jamais avec un lot gagné. */
+.celebration[data-level="0"]::before{
+  content:"";position:absolute;inset:0;
+  background:radial-gradient(ellipse at center, rgba(120,10,10,.35), rgba(0,0,0,.75) 70%);
+  animation:prisonPulse 1.8s ease-in-out infinite;
+}
+@keyframes prisonPulse{
+  0%,100%{opacity:.7} 50%{opacity:1}
+}
+.celebration[data-level="0"] .celeb-text{
+  color:#ff8a8a;border:2px solid #b31414;border-radius:18px;
+  background:radial-gradient(ellipse at 50% 30%, rgba(70,6,6,.92), rgba(8,2,2,.96));
+  box-shadow:0 0 50px rgba(220,20,20,.55),inset 0 0 40px rgba(0,0,0,.7);
+  text-shadow:0 0 22px rgba(255,60,60,.85),0 2px 4px rgba(0,0,0,.9);
+}
+.celebration[data-level="0"] #celebMain{
+  font-family:'Cinzel',Georgia,serif;font-size:clamp(28px,8vw,52px);letter-spacing:.03em;
+}
+.celebration[data-level="0"] .celeb-sub{color:#ffd9d9}
+.celebration[data-level="0"] .celeb-photo{border-color:#b31414;box-shadow:0 12px 28px rgba(0,0,0,.7),0 0 26px rgba(220,20,20,.5)}
+.celeb-sub{
+  margin-top:8px;font-size:clamp(13px,3.2vw,17px);font-weight:700;color:#fff;
+  text-shadow:0 2px 3px rgba(0,0,0,.8);
+}
+.celeb-sub[hidden]{display:none}
+
+/* Jeton de confirmation "Démarrage cagnotte" (touche E) : un simple
+   flash au centre du PLATEAU (pas de l'écran entier, sinon la bande
+   du haut décale le centrage) pour confirmer que la commande a bien
+   été prise en compte, sans texte ni interaction — disparaît seul.
+   Positionné à l'intérieur de .board-wrap (qui est en position
+   relative et contient le canvas #gl en inset:0), donc inset:0 ici
+   retombe pile sur le centre visuel du plateau. */
+.bank-reset-flash{
+  position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;
+  pointer-events:none;opacity:0;visibility:hidden;transition:opacity .3s ease;
+}
+.bank-reset-flash.show{opacity:1;visibility:visible;animation:bankFlashPop .5s cubic-bezier(.2,1.6,.4,1)}
+.bank-reset-flash img{
+  width:min(30vw,150px);height:auto;
+  filter:drop-shadow(0 10px 24px rgba(0,0,0,.6)) drop-shadow(0 0 30px rgba(255,110,40,.65));
+}
+@keyframes bankFlashPop{from{transform:scale(.5) rotate(-8deg);opacity:0}to{transform:scale(1) rotate(0);opacity:1}}
+@keyframes celebPop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+
+/* écrans larges (tablette/paysage, comme la maquette de référence) :
+   panneau à droite du plateau plutôt qu'en dessous */
+@media (min-width:760px) and (min-aspect-ratio: 1/1){
+  .board-row{flex-direction:row;align-items:stretch;justify-content:center;gap:12px}
+  .board-col{flex:1 1 auto;justify-content:center;height:100%}
+  /* le plateau occupe toute la hauteur disponible (utile quand
+     l'écran est filmé en plan large lors d'un live) plutôt qu'une
+     estimation en vh qui laissait de grandes zones vides. */
+  .board-wrap{width:auto;height:100%;max-height:900px;aspect-ratio:1/1;flex:0 0 auto;align-self:center}
+  .side-panel{width:190px;max-width:190px;justify-content:flex-start;align-self:center}
 }
 
 @media(max-height:760px){
-  .top-hud{padding-top:6px}.player-card{height:46px}.next-card{height:50px}.next-num{height:24px;line-height:20px;font-size:18px}
-  .game-zone{padding-top:0}.board-wrap{width:min(88vw,610px)}
-  .controls-zone{padding-top:2px}
-  .controls-panel{padding:6px}
-  .legend{padding:5px;margin-top:4px}
+  .top-hud{padding-top:max(18px,calc(env(safe-area-inset-top) + 10px))}
+  .main-row{padding-top:0}.board-wrap{width:min(92vw,84vh,640px)}
   .statusbar{margin-top:4px;min-height:38px}
 }
-@media(prefers-reduced-motion:reduce){
-  .cell .ico,.cell.active,.token.walk svg{animation:none}
+
+/* ---------- Téléphone : le plateau doit dominer l'écran, les
+   commandes restent compactes pour lui laisser toute la place. ---------- */
+@media(max-width:480px){
+  .main-row{padding:2px 6px 4px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  /* les commandes sont masquées (pilotage 100% au clavier) : le
+     cadre peut être plus haut que large — board3d.js ne recule plus
+     la caméra à fond pour ce ratio, donc le plateau grandit vraiment
+     au lieu de laisser du vide en haut/bas. */
+  .board-wrap{width:min(99vw,94vh,760px);aspect-ratio:2/3}
+  .startbtn{padding:8px;font-size:12px}
+  .controls-panel{padding:6px}
+  .validate{font-size:12px;padding:8px}
+  .winbtn{font-size:12px;padding:7px}
+  .lots-gallery{padding:6px 7px}
+  .lots-gallery-title{font-size:10px}
+  .lot-thumb{width:40px}
+  .lot-thumb img{width:36px;height:50px}
 }
+
+/* ---------- Boutons/commandes toujours compacts : tout l'espace
+   gagné va au plateau, qui reste l'élément dominant à l'écran. ---------- */
+.startbtn{ padding:9px;font-size:13px }
+.controls-panel{ padding:8px }
+.validate{ font-size:13px;padding:9px }
+.winbtn{ font-size:12.5px;padding:8px }
+.lots-gallery{ padding:8px 9px }
+
+/* ---------- Bandeau "derniers gains" sur l'écran public : compact,
+   juste des vignettes des lots remportés récemment, pour que le
+   plateau reste l'élément dominant à l'écran. ---------- */
+.results-ticker{
+  display:none;position:absolute;left:8px;right:8px;bottom:8px;z-index:3;
+  align-items:center;justify-content:center;gap:7px;pointer-events:none;
+}
+html.display-mode .results-ticker{ display:flex }
+.results-ticker .ticker-item{
+  width:36px;height:36px;border-radius:8px;overflow:hidden;flex:none;
+  border:2px solid var(--gold-bright);background:#0c0c0c;
+  box-shadow:0 2px 8px rgba(0,0,0,.65),0 0 8px rgba(255,226,122,.35);
+}
+.results-ticker .ticker-item img{ width:100%;height:100%;object-fit:cover;display:block }
+.results-ticker .ticker-item.new{ animation:tickerPop .5s cubic-bezier(.2,1.6,.4,1) }
+@keyframes tickerPop{ from{transform:scale(.3);opacity:0} to{transform:scale(1);opacity:1} }
 </style>
 </head>
 <body>
+<script>
+if(new URLSearchParams(location.search).get('view')==='display'){
+  document.documentElement.classList.add('display-mode');
+}
+</script>
 <div id="app">
   <div class="top-hud">
-    <div class="player-card">
-      <div class="avatar-mini">
-        <svg viewBox="0 0 70 70" width="100%" height="100%">
-          <rect width="70" height="70" fill="#8fd9ff"/>
-          <circle cx="35" cy="29" r="14" fill="#efb887"/>
-          <path d="M19 29Q22 13 40 14Q51 15 53 29Q35 22 19 29Z" fill="#df303b"/>
-          <path d="M17 27Q32 22 50 25L58 30Q36 31 18 31Z" fill="#f04249"/>
-          <path d="M24 46Q35 39 47 46L53 70H15Z" fill="#1674cf"/>
-          <circle cx="30" cy="29" r="2" fill="#183452"/><circle cx="41" cy="29" r="2" fill="#183452"/>
-        </svg>
-      </div>
-      <div><b>Joueur 1</b><span class="coins">● 1000</span></div>
-    </div>
-    <div class="next-card"><small>Prochaine case :</small><div class="next-num" id="topNum">1</div></div>
+    <div class="brand">★ PIKAJACKPOT ★</div>
+    <div class="place-banner-wrap"><div class="place-banner" id="placeBanner">Départ</div></div>
+    <span id="topNum" hidden></span>
   </div>
 
-  <div class="game-zone">
-    <div class="board-wrap">
-      <div class="board-stage">
-        <div class="board" id="board">
-          <div class="center"></div>
-          <div id="cells"></div>
+  <div class="main-row">
+    <div class="stadium" aria-hidden="true">
+      <div class="stad-haze"></div>
+      <div class="stad-mountain m1"></div>
+      <div class="stad-mountain m3"></div>
+      <div class="stad-mountain m2"></div>
+      <div class="stad-light left"><span class="beam"></span><span class="glow"></span></div>
+      <div class="stad-light right"><span class="beam"></span><span class="glow"></span></div>
+    </div>
 
-          <div class="token-shadow" id="shadow"></div>
-          <div class="token" id="token">
-            <svg viewBox="0 0 80 125" width="100%" height="100%">
-              <defs>
-                <linearGradient id="skin" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0" stop-color="#ffd3a8"/>
-                  <stop offset="1" stop-color="#e9a976"/>
-                </linearGradient>
-                <linearGradient id="cap" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0" stop-color="#ff5b5f"/>
-                  <stop offset="1" stop-color="#c81f2c"/>
-                </linearGradient>
-                <linearGradient id="jacket" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0" stop-color="#2f8dff"/>
-                  <stop offset="1" stop-color="#0e4fb0"/>
-                </linearGradient>
-                <linearGradient id="pants" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0" stop-color="#3a5878"/>
-                  <stop offset="1" stop-color="#1c2e44"/>
-                </linearGradient>
-              </defs>
-              <ellipse cx="40" cy="118" rx="20" ry="4" fill="#000" opacity=".18"/>
+    <!-- Pokéballs et cartes mystères qui tombent doucement dans les
+         marges de gauche/droite, façon teaser TikTok — jamais devant
+         le plateau (z-index sous .board-row, et confinées aux bords
+         pour ne jamais passer devant lui). -->
+    <div class="bg-fall" aria-hidden="true">
+      <div class="fall-star" style="left:4%;width:22px;height:22px;animation-duration:14s;animation-delay:-2s"></div>
+      <div class="fall-star" style="left:9%;width:14px;height:14px;animation-duration:17s;animation-delay:-8s"></div>
+      <div class="fall-star" style="left:3%;width:17px;height:17px;animation-duration:11s;animation-delay:-5s"></div>
+      <div class="fall-star" style="left:6%;width:12px;height:12px;animation-duration:19s;animation-delay:-1s"></div>
+      <div class="fall-star" style="right:5%;width:24px;height:24px;animation-duration:16s;animation-delay:-9s"></div>
+      <div class="fall-star" style="right:10%;width:13px;height:13px;animation-duration:13s;animation-delay:-4s"></div>
+      <div class="fall-star" style="right:9%;width:16px;height:16px;animation-duration:20s;animation-delay:-12s"></div>
+      <div class="fall-star" style="right:3%;width:11px;height:11px;animation-duration:15s;animation-delay:-6s"></div>
+    </div>
 
-              <!-- jambe gauche : pivote depuis la hanche -->
-              <g class="g-leg-l">
-                <path d="M29 92L39 92L37 114L25 114Z" fill="url(#pants)"/>
-                <path d="M25 112L39 112L38 118L23 118Z" fill="#172537"/>
-              </g>
-              <!-- jambe droite : pivote depuis la hanche, en opposition de phase -->
-              <g class="g-leg-r">
-                <path d="M43 92L53 90L60 110L49 115Z" fill="url(#pants)"/>
-                <path d="M49 112L61 109L63 116L48 119Z" fill="#172537"/>
-              </g>
+    <!-- Nuages blancs façon "nuage volant" qui traversent lentement
+         l'arrière-plan, toujours derrière le plateau. -->
+    <div class="bg-clouds" aria-hidden="true">
+      <svg class="cloud c1" viewBox="0 0 200 100"><use href="#cloudShape"/></svg>
+      <svg class="cloud c2" viewBox="0 0 200 100"><use href="#cloudShape"/></svg>
+      <svg class="cloud c3" viewBox="0 0 200 100"><use href="#cloudShape"/></svg>
+      <svg width="0" height="0" style="position:absolute">
+        <defs>
+          <g id="cloudShape">
+            <path d="M20,70 Q5,70 5,55 Q5,40 22,40 Q24,20 46,20 Q64,20 70,36
+                     Q90,32 96,50 Q112,48 112,64 Q112,76 98,76 L28,76
+                     Q20,76 20,70 Z
+                     M96,56 Q140,52 160,58 Q150,64 130,62 Q108,64 96,60 Z"
+                  fill="#ffffff"/>
+          </g>
+        </defs>
+      </svg>
+    </div>
 
-              <!-- buste + tête : rebondit légèrement à chaque pas -->
-              <g class="g-body">
-                <path d="M23 65Q40 52 57 66L55 92Q40 98 25 92Z" fill="url(#jacket)"/>
-                <path d="M23 65Q40 52 57 66L56 74Q40 63 24 74Z" fill="#7fbcff" opacity=".55"/>
-                <circle cx="40" cy="44" r="18" fill="url(#skin)"/>
-                <path d="M23 40Q27 23 46 24Q58 27 59 40Q44 33 23 40Z" fill="url(#cap)"/>
-                <path d="M20 36Q34 28 54 34L62 40Q40 41 21 41Z" fill="#ff6d72"/>
-                <path d="M31 28Q40 22 51 30L47 35L35 34Z" fill="#f7fbff"/>
-                <circle cx="34" cy="44" r="2.2" fill="#17304a"/><circle cx="48" cy="44" r="2.2" fill="#17304a"/>
-                <path d="M33 52Q40 57 47 52" fill="none" stroke="#a85f43" stroke-width="2" stroke-linecap="round"/>
-                <ellipse cx="40" cy="58" rx="9" ry="3" fill="#000" opacity=".08"/>
-              </g>
+    <div class="board-row">
+      <div class="board-col">
+        <div class="board-wrap" id="boardWrap">
+          <canvas id="gl"></canvas>
+          <div class="hint3d" id="hint3d">🖱️ glisser pour tourner la vue</div>
+          <div class="results-ticker" id="resultsTicker" aria-hidden="true"></div>
+          <div class="bank-reset-flash" id="bankResetFlash" aria-hidden="true">
+            <img src="./assets/ui/jeton_confirm.png" alt="">
+          </div>
+        </div>
+      </div>
 
-              <!-- bras gauche : balancier opposé à la jambe gauche -->
-              <g class="g-arm-l">
-                <path d="M21 69L10 82L15 88L29 78Z" fill="#155ea7"/>
-              </g>
-              <!-- bras droit : balancier opposé à la jambe droite -->
-              <g class="g-arm-r">
-                <path d="M57 68L70 80L66 87L51 78Z" fill="#155ea7"/>
-              </g>
-            </svg>
+      <div class="side-panel">
+        <button class="resetbank" id="resetBankBtn" type="button">🔄 Démarrage cagnotte (remise à 0€)</button>
+        <button class="startbtn" id="startBtn" type="button">▶ DÉMARRER LA PARTIE</button>
+        <div class="controls-panel">
+          <div class="control-copy">
+            <div>
+              <div class="side-title">Interface Animateur</div>
+              <div class="side-label">Tirage de 2 cartes (remplace les dés)</div>
+            </div>
+          </div>
+          <button class="validate" id="validate" type="button">🃏 TIRER LES CARTES</button>
+          <button class="winbtn" id="winBtn" type="button" hidden>🎉 LOT REMPORTÉ</button>
+          <button class="undobtn" id="undoBtn" type="button" hidden>↩ ANNULER LE DERNIER LOT</button>
+        </div>
+
+        <div class="lots-gallery">
+          <div class="lots-gallery-title">🎁 Lots à gagner</div>
+          <div class="lots-gallery-strip">
+            <div class="lot-thumb"><img src="./assets/lots/commune.jpg" alt=""><span>Carte commune</span></div>
+            <div class="lot-thumb"><img src="./assets/lots/booster8.jpg" alt=""><span>Booster</span></div>
+            <div class="lot-thumb"><img src="./assets/lots/alternative.jpg" alt=""><span>Alternative</span></div>
+            <div class="lot-thumb"><img src="./assets/lots/gradee.jpg" alt=""><span>★ Gradée</span></div>
+            <div class="lot-thumb"><img src="./assets/lots/booster50.jpg" alt=""><span>Gros booster</span></div>
+            <div class="lot-thumb"><img src="./assets/lots/etb150.jpg" alt=""><span>ETB</span></div>
+            <div class="lot-thumb"><img src="./assets/lots/jackpot300.jpg" alt=""><span>JACKPOT</span></div>
           </div>
         </div>
       </div>
     </div>
   </div>
 
-  <div class="controls-zone">
-    <div class="controls-panel">
-      <div class="control-copy">
-        <div>
-          <div class="side-title">Interface Animateur</div>
-          <div class="side-label">Choisissez le nombre de cases</div>
-        </div>
-        <div class="selector">
-          <button class="arrow" id="minus" type="button">‹</button>
-          <div class="sel-value" id="sel">1</div>
-          <button class="arrow" id="plus" type="button">›</button>
-        </div>
-      </div>
-      <button class="validate" id="validate" type="button">VALIDER</button>
-    </div>
+  <div class="statusbar">
+    <span class="ball"></span>
+    <span id="status">Le joueur est prêt sur Départ.</span>
+    <button class="reset" id="reset" type="button">RECOMMENCER</button>
+  </div>
 
-    <div class="legend">
-      <div class="legend-row"><span class="sw c-white"></span>Classique</div>
-      <div class="legend-row"><span class="sw c-yellow"></span>Gain</div>
-      <div class="legend-row"><span class="sw c-red"></span>Perte</div>
-      <div class="legend-row"><span class="sw c-green"></span>Cadeau</div>
-      <div class="legend-row"><span class="sw c-purple"></span>Événement</div>
-    </div>
+  <div class="display-badge">🖥️ Écran public — lecture seule</div>
+  <div class="impact-flash" id="impactFlash" aria-hidden="true"></div>
+  <div class="lightning-bolt" id="lightningBolt" aria-hidden="true">
+    <svg viewBox="0 0 100 160" preserveAspectRatio="xMidYMid meet">
+      <polygon points="58,0 18,90 46,90 32,160 88,60 56,60" fill="url(#boltGrad)"/>
+      <defs>
+        <linearGradient id="boltGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#fff6d8"/>
+          <stop offset=".5" stop-color="#ffe27a"/>
+          <stop offset="1" stop-color="#e9c34a"/>
+        </linearGradient>
+      </defs>
+    </svg>
+  </div>
 
-    <div class="statusbar">
-      <span class="ball"></span>
-      <span id="status">Le joueur est prêt sur Départ.</span>
-      <button class="reset" id="reset" type="button">RECOMMENCER</button>
+  <div class="card-draw-overlay" id="cardDrawOverlay" aria-hidden="true">
+    <div class="card-draw-title">Tirage en cours…</div>
+    <div class="card-grid" id="cardGrid"></div>
+    <div class="card-draw-total" id="cardDrawTotal"></div>
+  </div>
+
+  <div class="celebration" id="celebration" aria-hidden="true">
+    <canvas id="celebCanvas"></canvas>
+    <div class="celeb-text" id="celebText">
+      <img class="celeb-photo" id="celebPhoto" alt="" hidden>
+      <span id="celebMain">🎉 Lot remporté !</span>
+      <div class="celeb-sub" id="celebSub" hidden></div>
     </div>
   </div>
 </div>
 
-<script>
-(function(){
-  const board = document.getElementById('board');
-  const cellsHolder = document.getElementById('cells');
-  const token = document.getElementById('token');
-  const shadow = document.getElementById('shadow');
-  const minus = document.getElementById('minus');
-  const plus = document.getElementById('plus');
-  const validate = document.getElementById('validate');
-  const reset = document.getElementById('reset');
-  const sel = document.getElementById('sel');
-  const topNum = document.getElementById('topNum');
-  const status = document.getElementById('status');
-
-  let selected = 1;
-  let current = 0;
-  let moving = false;
-  let generation = 0;
-
-  const styles = [
-    ['c-orange','★'],['c-white','?'],['c-yellow','●'],['c-green','🎁'],['c-pink','🎁'],
-    ['c-purple','?'],['c-white',''],['c-yellow','●'],['c-red','◉'],['c-green','🎁'],
-    ['c-purple','?'],['c-blue','♜']
-  ];
-
-  function pos(i){
-    if(i===0) return {r:11,c:11};
-    if(i<=10) return {r:11,c:11-i};
-    if(i<=20) return {r:21-i,c:1};
-    if(i<=30) return {r:1,c:i-19};
-    return {r:i-29,c:11};
-  }
-
-  const cellEls = [];
-  for(let i=0;i<40;i++){
-    const p = pos(i), st = styles[i % styles.length];
-    const el = document.createElement('div');
-    el.className = 'cell ' + (i===0 ? 'c-orange' : st[0]);
-    el.style.gridRow = p.r;
-    el.style.gridColumn = p.c;
-    el.innerHTML = '<span class="ico">' + (i===0?'★':st[1]) + '</span><span class="n">' + (i===0?'D':i) + '</span>';
-    el.dataset.index = i;
-    el.style.setProperty('--d', (((p.r+p.c)%8)*0.14)+'s');
-    el.querySelector('.ico').style.animationDelay = ((i%6)*0.18)+'s';
-    cellsHolder.appendChild(el);
-    cellEls.push(el);
-  }
-  cellsHolder.style.display='contents';
-  cellEls[0].classList.add('active');
-
-  // Mesure en coordonnées LOCALES (offset*), donc valable même avec la
-  // perspective 3D appliquée sur .board-stage : on ne lit jamais de
-  // coordonnées écran (getBoundingClientRect), seulement la position de
-  // mise en page brute, ce qui évite tout décalage du pion.
-  function getCellCenter(index){
-    const cell = cellEls[index];
-    return {
-      x: cell.offsetLeft + cell.offsetWidth / 2,
-      y: cell.offsetTop + cell.offsetHeight / 2
-    };
-  }
-
-  function place(index,instant){
-    const q=getCellCenter(index);
-    if(instant){
-      token.style.transition='none';
-      shadow.style.transition='none';
-    }
-    token.style.left=q.x+'px'; token.style.top=q.y+'px';
-    shadow.style.left=q.x+'px'; shadow.style.top=q.y+'px';
-    if(instant){
-      token.getBoundingClientRect();
-      token.style.transition='left .40s linear,top .40s linear';
-      shadow.style.transition='left .40s linear,top .40s linear';
-    }
-  }
-
-  function setActiveCell(index){
-    cellEls.forEach(el=>el.classList.remove('active'));
-    cellEls[index].classList.add('active');
-  }
-
-  function setSelected(v){
-    selected=v<1?12:(v>12?1:v);
-    sel.textContent=selected;
-    topNum.textContent=selected;
-  }
-
-  const wait=ms=>new Promise(r=>setTimeout(r,ms));
-
-  async function move(){
-    if(moving) return;
-    moving=true;
-    const myGen=++generation;
-    validate.disabled=minus.disabled=plus.disabled=true;
-    token.classList.add('walk');
-    status.textContent='Le joueur avance de '+selected+' case'+(selected>1?'s':'')+'…';
-
-    for(let n=0;n<selected;n++){
-      if(myGen!==generation) return;
-      current=(current+1)%40;
-      place(current,false);
-      setActiveCell(current);
-      await wait(410);
-    }
-
-    if(myGen!==generation) return;
-    token.classList.remove('walk');
-    status.textContent=current===0?'Le joueur est arrivé sur Départ !':'Le joueur est arrivé sur la case '+current+' !';
-    moving=false;
-    validate.disabled=minus.disabled=plus.disabled=false;
-  }
-
-  function restart(){
-    generation++;
-    moving=false;
-    current=0;
-    token.classList.remove('walk');
-    place(0,true);
-    setActiveCell(0);
-    status.textContent='Le joueur est prêt sur Départ.';
-    validate.disabled=minus.disabled=plus.disabled=false;
-  }
-
-  minus.addEventListener('click',()=>setSelected(selected-1));
-  plus.addEventListener('click',()=>setSelected(selected+1));
-  validate.addEventListener('click',move);
-  reset.addEventListener('click',restart);
-
-  [minus,plus,validate,reset].forEach(btn=>{
-    btn.addEventListener('touchend',e=>{e.preventDefault();btn.click();},{passive:false});
-  });
-
-  function sync(){ requestAnimationFrame(()=>place(current,true)); }
-  window.addEventListener('load',sync);
-  window.addEventListener('resize',sync,{passive:true});
-  window.addEventListener('orientationchange',()=>setTimeout(sync,150),{passive:true});
-  if(window.ResizeObserver){ new ResizeObserver(sync).observe(board); }
-
-  setSelected(1);
-  requestAnimationFrame(()=>requestAnimationFrame(()=>place(0,true)));
-})();
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js" } }
 </script>
+<script type="module" src="./board3d.js"></script>
 </body>
 </html>
