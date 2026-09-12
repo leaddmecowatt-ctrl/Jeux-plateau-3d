@@ -56,10 +56,10 @@ const CATS = {
   commune:     { label:'Pioche du Prof. Chen',        value:'~0,68€',  tier:'flat',  swatch:'bronze' },
   booster8:    { label:'Booster du Marchand',         value:'8€',      tier:'float', swatch:'blue'   },
   alternative: { label:'Zone Safari',                 value:'~7,20€',  tier:'flat',  swatch:'red'    },
-  gradee:      { label:'Duopack 30 ans',              value:'20-80€',  tier:'float', swatch:'gold'   },
-  booster50:   { label:'Tripack 30 ans',              value:'50€',     tier:'float', swatch:'gold'   },
-  etb:         { label:'Coffret 30 ans',              value:'150€',    tier:'float', swatch:'gold'   },
-  jackpot300:  { label:'ETB 30 ans',                  value:'300€',    tier:'float', swatch:'gold'   },
+  gradee:      { label:'Duopack 30 ans',              value:'20-80€',  tier:'float', swatch:'teal'   },
+  booster50:   { label:'Tripack 30 ans',              value:'50€',     tier:'float', swatch:'rose'   },
+  etb:         { label:'Coffret 30 ans',              value:'150€',    tier:'float', swatch:'orange' },
+  jackpot300:  { label:'ETB 30 ans',                  value:'300€',    tier:'float', swatch:'jackpot'},
   chance:      { label:'Chance',                     value:'tirage',  tier:'glyph', swatch:'purple' },
   chest:       { label:'Caisse Communautaire',       value:'tirage',  tier:'glyph', swatch:'green'  },
   prison:      { label:'Prison',                     value:'0€',      tier:'glyph', swatch:'danger' },
@@ -185,6 +185,11 @@ const GOLD_BRIGHT = '#ffe27a';
 const SWATCH_COLORS = {
   bronze:'#a9793a', blue:'#2f6fdc', red:'#e0323f', purple:'#9a5fe0',
   green:'#33b46a', gold:'#e9c34a', danger:'#d62b2b',
+  // 4 teintes dédiées pour dissocier clairement les 4 gros lots
+  // (Duopack/Tripack/Coffret/ETB 30 ans) qui partageaient tous le
+  // même "gold" auparavant, sur la légende ET sur les cases du
+  // plateau (même swatch = même couleur partout).
+  jackpot:'#ffd700', orange:'#e8863c', rose:'#d6549c', teal:'#2fb8b0',
 };
 
 /* Éclaircit (percent>0) ou assombrit (percent<0) une couleur hex,
@@ -974,13 +979,26 @@ function perimeterPosAt(u){ // u in [0,1)
    panneau est volontairement opaque (contrairement au reste du sol
    resté transparent) pour que la liste reste lisible par-dessus
    n'importe quelle photo de fond. */
+// Les 7 vrais lots du plateau, triés du plus gros au plus petit (les
+// tirages Chance/Caisse Communautaire n'en font pas partie : ce sont
+// des cases spéciales, pas des lots, elles ont leur propre badge
+// compact plus bas). catKey pointe vers CATS pour réutiliser le vrai
+// libellé et la vraie photo de chaque lot, sans jamais les retaper.
 const CENTER_LEGEND_ROWS = [
-  {swatch:'bronze', catKey:'commune',     icon:'card',     title:'Pioche du Prof. Chen'},
-  {swatch:'blue',   catKey:'booster8',    icon:'box',      title:'Booster du Marchand'},
-  {swatch:'red',    catKey:'alternative', icon:'compass',  title:'Zone Safari'},
-  {swatch:'gold',   catKey:'jackpot300',  icon:'star',     title:'Duopack → ETB 30 ans'},
-  {swatch:'purple', catKey:null,          icon:'question', title:'Chance'},
-  {swatch:'green',  catKey:null,          icon:'gift',     title:'Caisse Communautaire'},
+  {swatch:'jackpot', catKey:'jackpot300'},
+  {swatch:'orange',  catKey:'etb'},
+  {swatch:'rose',    catKey:'booster50'},
+  {swatch:'teal',    catKey:'gradee'},
+  {swatch:'blue',    catKey:'booster8'},
+  {swatch:'red',     catKey:'alternative'},
+  {swatch:'bronze',  catKey:'commune'},
+];
+// Chance / Caisse Communautaire : pas des lots, juste deux petits
+// badges compacts (icône + nom) sous l'en-tête, bien visibles sans
+// prendre la place d'une ligne de lot.
+const CENTER_LEGEND_BADGES = [
+  {swatch:'purple', icon:'question', title:'Chance'},
+  {swatch:'green',  icon:'gift',     title:'Caisse'},
 ];
 function makeCenterPlateTexture(){
   const size = 900;
@@ -1017,17 +1035,46 @@ function makeCenterPlateTexture(){
   ctx.shadowBlur = 0;
 
   // liseré tricolore (clin d'oeil Pokémon)
-  const stripeY = size*0.265, stripeW = size*0.3, stripeH = size*0.012;
+  const stripeY = size*0.25, stripeW = size*0.3, stripeH = size*0.011;
   [[-1,'#1a56db'],[0,'#ffffff'],[1,'#e0323f']].forEach(([d,c])=>{
     ctx.fillStyle = c;
     ctx.fillRect(size/2 - stripeW/2, stripeY + d*stripeH, stripeW, stripeH);
   });
 
-  // une ligne par catégorie réelle du plateau : bandeau teinté + barre
-  // d'accent + médaillon (vraie photo du lot quand on en a une) +
-  // lueur colorée — pour retrouver le côté vif/coloré du visuel de
-  // référence au lieu de lignes uniformément grises.
-  const rowsTop = size*0.318, rowH = size*0.097, rowW = size*0.85, rowX = size*0.075;
+  // Chance / Caisse : deux petits badges compacts côte à côte (pas
+  // des lots, pas de ligne dédiée) — icône dans un rond + nom court.
+  const badgeY = size*0.29, badgeR = size*0.024, badgeGap = size*0.22;
+  CENTER_LEGEND_BADGES.forEach((b,i)=>{
+    const bx = size/2 + (i===0 ? -1 : 1)*badgeGap/2;
+    const color = SWATCH_COLORS[b.swatch];
+    ctx.save();
+    ctx.shadowColor = color; ctx.shadowBlur = size*0.016;
+    ctx.beginPath(); ctx.arc(bx,badgeY,badgeR,0,Math.PI*2);
+    ctx.fillStyle = '#0c0f16'; ctx.fill();
+    ctx.restore();
+    if(b.icon==='question'){
+      ctx.font = '900 '+(badgeR*1.3)+'px Arial,Helvetica,sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillStyle = '#fff9e6';
+      ctx.fillText('?', bx, badgeY+badgeR*0.05);
+    } else {
+      drawVectorIcon(ctx, b.icon, bx, badgeY, badgeR*0.85, '#fff9e6');
+    }
+    ctx.lineWidth = size*0.0045; ctx.strokeStyle = color;
+    ctx.beginPath(); ctx.arc(bx,badgeY,badgeR,0,Math.PI*2); ctx.stroke();
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.shadowColor = 'rgba(0,0,0,.9)'; ctx.shadowBlur = size*0.008;
+    ctx.fillStyle = '#fff';
+    ctx.font='800 '+(size*0.024)+'px Arial,Helvetica,sans-serif';
+    ctx.fillText(b.title, bx+badgeR*1.5, badgeY+size*0.001);
+    ctx.shadowBlur = 0;
+  });
+
+  // une ligne par vrai lot, du plus gros au plus petit : bandeau
+  // teinté + barre d'accent + médaillon (vraie photo du lot) — pour
+  // retrouver le côté vif/coloré du visuel de référence au lieu de
+  // lignes uniformément grises, avec une couleur dédiée par lot.
+  const rowsTop = size*0.335, rowH = (0.93-0.335)*size/CENTER_LEGEND_ROWS.length, rowW = size*0.85, rowX = size*0.075;
   CENTER_LEGEND_ROWS.forEach((r,i)=>{
     const y = rowsTop + i*rowH;
     const rh = rowH*0.82;
@@ -1065,13 +1112,10 @@ function makeCenterPlateTexture(){
       const iw=img.width, ih=img.height, side=Math.min(iw,ih);
       ctx.drawImage(img,(iw-side)/2,(ih-side)/2,side,side, dotX-dotR*0.88,dotY-dotR*0.88,dotR*1.76,dotR*1.76);
       ctx.restore();
-    } else if(r.icon==='question'){
-      ctx.font = '900 '+(dotR*1.3)+'px Arial,Helvetica,sans-serif';
-      ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillStyle = '#fff9e6';
-      ctx.fillText('?', dotX, dotY+dotR*0.05);
     } else {
-      drawVectorIcon(ctx, r.icon, dotX, dotY, dotR*0.85, '#fff9e6');
+      // secours si jamais la photo n'a pas pu charger : une étoile
+      // plutôt qu'un médaillon vide
+      drawVectorIcon(ctx, 'star', dotX, dotY, dotR*0.85, '#fff9e6');
     }
     ctx.lineWidth = size*0.0055; ctx.strokeStyle = color;
     ctx.beginPath(); ctx.arc(dotX,dotY,dotR,0,Math.PI*2); ctx.stroke();
@@ -1083,8 +1127,8 @@ function makeCenterPlateTexture(){
     ctx.textAlign='left'; ctx.textBaseline='middle';
     ctx.shadowColor = 'rgba(0,0,0,.9)'; ctx.shadowBlur = size*0.012;
     ctx.fillStyle = '#fff';
-    ctx.font='800 '+(rh*0.34)+'px Arial,Helvetica,sans-serif';
-    ctx.fillText(r.title, textX, y+rh*0.52);
+    ctx.font='800 '+(rh*0.32)+'px Arial,Helvetica,sans-serif';
+    ctx.fillText(CATS[r.catKey].label, textX, y+rh*0.52);
     ctx.shadowBlur = 0;
     ctx.textBaseline='alphabetic';
   });
