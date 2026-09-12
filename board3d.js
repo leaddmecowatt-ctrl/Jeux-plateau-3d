@@ -1228,14 +1228,9 @@ function startBoardShatter(){
 
 /* Le "Départ" n'est pas une case à part hors plateau : le joueur
    démarre directement sur la case 1 elle-même (pas de lot réclamé
-   tant qu'aucun lancer n'a eu lieu), avec juste un anneau doré au
-   sol pour marquer visuellement ce point de départ. */
+   tant qu'aucun lancer n'a eu lieu). Pas de décor supplémentaire sur
+   cette case : rien ne doit apparaître au-dessus. */
 const START_NODE = tiles[0];
-{
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.56,0.03,8,28), new THREE.MeshBasicMaterial({color:0xffe27a}));
-  ring.rotation.x = Math.PI/2; ring.position.copy(START_NODE.world); ring.position.y = 0.03;
-  boardGroup.add(ring);
-}
 
 /* Dégradé doux à 4 paliers (plutôt que le noir/blanc tranché par
    défaut de MeshToonMaterial) : un ombrage plus proche d'un rendu de
