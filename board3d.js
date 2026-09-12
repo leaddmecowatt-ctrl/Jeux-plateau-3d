@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/three/OrbitControls.js';
 import { GLTFLoader } from './vendor/three/examples/jsm/loaders/GLTFLoader.js';
+import { EffectComposer } from './vendor/three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from './vendor/three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from './vendor/three/examples/jsm/postprocessing/UnrealBloomPass.js';
 
 /* =========================================================================
    PIKAJACKPOT — plateau 40 cases en vraie 3D (WebGL / three.js)
@@ -697,6 +700,17 @@ const BASE_FOV = 40;
 const camera = new THREE.PerspectiveCamera(BASE_FOV,1,0.1,100);
 camera.position.set(0,13.5,11);
 scene.add(camera);
+
+/* Post-traitement bloom : fait "exploser" en halo lumineux tout ce qui
+   dépasse le seuil de luminosité (or émissif, sprites de gain, effets
+   additifs de célébration) sans toucher au reste de la scène — c'est
+   ce qui donne le rendu "jeu télévisé haut de gamme" au lieu d'un
+   rendu plat. Seuil assez haut pour ne pas baver sur les textures
+   photo/couleurs normales. */
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(1,1), 0.55, 0.4, 0.82);
+composer.addPass(bloomPass);
 
 /* Garde-fou anti-rognage des coins : au lieu d'un recul de caméra
    fixe (qui rapetissait tout le plateau en permanence, y compris de
@@ -1710,7 +1724,7 @@ function animate(){
     shakeUntil = 0; shatterUntil = 0; shatterActive = false;
   }
 
-  renderer.render(scene, camera);
+  composer.render();
 }
 animate();
 
@@ -1719,6 +1733,7 @@ function resize(){
   const w = wrap.clientWidth, h = wrap.clientHeight;
   if(w===0||h===0) return;
   renderer.setSize(w,h,false);
+  composer.setSize(w,h);
   camera.aspect = w/h;
   camera.updateProjectionMatrix();
 }

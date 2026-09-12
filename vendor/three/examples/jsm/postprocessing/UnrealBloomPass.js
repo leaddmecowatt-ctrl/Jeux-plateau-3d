@@ -141,6 +141,15 @@ class UnrealBloomPass extends Pass {
 		this.oldClearAlpha = 1;
 
 		this.basic = new MeshBasicMaterial();
+		// PATCH (PikaJackpot): avec transparent=false (par défaut), three.js
+		// force l'alpha de sortie à 1 partout (macro OPAQUE), quel que soit
+		// l'alpha réel de la texture recopiée — ça rendait tout le canvas
+		// opaque et cachait la photo de fond derrière le plateau sur un
+		// renderer alpha:true. En mettant transparent=true, l'alpha de la
+		// texture (celui de la vraie scène) est correctement recopié ; le
+		// rendu RGB reste identique puisqu'on dessine sur un buffer qui
+		// vient d'être vidé à (0,0,0,0).
+		this.basic.transparent = true;
 
 		this.fsQuad = new FullScreenQuad( null );
 
@@ -277,6 +286,17 @@ class UnrealBloomPass extends Pass {
 
 		if ( maskActive ) renderer.state.buffers.stencil.setTest( true );
 
+		// PATCH (PikaJackpot): ce blend additif écrit aussi dans le canal
+		// alpha (il finit saturé à ~1 quasiment partout, même loin des
+		// zones lumineuses), ce qui rend tout le canvas opaque et cache
+		// le fond photo derrière le plateau quand on rend sur un canvas
+		// transparent. On verrouille l'écriture de l'alpha pour ce
+		// dessin précis : seul le RGB (l'ajout de lumière) est modifié,
+		// l'alpha réel de la scène (posé par le rendu précédent) reste
+		// intact.
+		const gl = renderer.getContext();
+		gl.colorMask( true, true, true, false );
+
 		if ( this.renderToScreen ) {
 
 			renderer.setRenderTarget( null );
@@ -288,6 +308,8 @@ class UnrealBloomPass extends Pass {
 			this.fsQuad.render( renderer );
 
 		}
+
+		gl.colorMask( true, true, true, true );
 
 		// Restore renderer settings
 
