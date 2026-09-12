@@ -914,12 +914,12 @@ function perimeterPosAt(u){ // u in [0,1)
    resté transparent) pour que la liste reste lisible par-dessus
    n'importe quelle photo de fond. */
 const CENTER_LEGEND_ROWS = [
-  {swatch:'bronze', catKey:'commune',     icon:'🎴', title:'Pioche du Prof. Chen', sub:'~0,68€ garanti'},
-  {swatch:'blue',   catKey:'booster8',    icon:'📦', title:'Booster du Marchand',  sub:'8€'},
-  {swatch:'red',    catKey:'alternative', icon:'🧭', title:'Zone Safari',          sub:'~7,20€'},
-  {swatch:'gold',   catKey:'jackpot300',  icon:'⭐', title:'Duopack → ETB 30 ans', sub:'20€ à 300€'},
-  {swatch:'purple', catKey:null,          icon:'❓', title:'Chance',               sub:'Tirage surprise'},
-  {swatch:'green',  catKey:null,          icon:'🎁', title:'Caisse Communautaire', sub:'Tirage surprise'},
+  {swatch:'bronze', catKey:'commune',     icon:'🎴', title:'Pioche du Prof. Chen'},
+  {swatch:'blue',   catKey:'booster8',    icon:'📦', title:'Booster du Marchand'},
+  {swatch:'red',    catKey:'alternative', icon:'🧭', title:'Zone Safari'},
+  {swatch:'gold',   catKey:'jackpot300',  icon:'⭐', title:'Duopack → ETB 30 ans'},
+  {swatch:'purple', catKey:null,          icon:'❓', title:'Chance'},
+  {swatch:'green',  catKey:null,          icon:'🎁', title:'Caisse Communautaire'},
 ];
 function makeCenterPlateTexture(){
   const size = 900;
@@ -1023,22 +1023,13 @@ function makeCenterPlateTexture(){
     ctx.lineWidth = size*0.0055; ctx.strokeStyle = color;
     ctx.beginPath(); ctx.arc(dotX,dotY,dotR,0,Math.PI*2); ctx.stroke();
 
-    // titre + valeur (badge coloré) à droite du médaillon
+    // titre du lot à droite du médaillon (pas de prix affiché : le
+    // plateau doit rester une carte "quoi gagner", pas un tarif)
     const textX = dotX + dotR*1.5;
-    ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+    ctx.textAlign='left'; ctx.textBaseline='middle';
     ctx.fillStyle = '#fff';
-    ctx.font='800 '+(rh*0.32)+'px Arial,Helvetica,sans-serif';
-    ctx.fillText(r.title, textX, y+rh*0.4);
-
-    ctx.font='800 '+(rh*0.24)+'px Arial,Helvetica,sans-serif';
-    const subW = ctx.measureText(r.sub).width;
-    const badgePad = rh*0.14;
-    roundRectPath(ctx, textX, y+rh*0.5, subW+badgePad*2, rh*0.36, rh*0.12);
-    ctx.fillStyle = color;
-    ctx.fill();
-    ctx.fillStyle = '#0a0d14';
-    ctx.textBaseline='middle';
-    ctx.fillText(r.sub, textX+badgePad, y+rh*0.5+rh*0.18);
+    ctx.font='800 '+(rh*0.34)+'px Arial,Helvetica,sans-serif';
+    ctx.fillText(r.title, textX, y+rh*0.52);
     ctx.textBaseline='alphabetic';
   });
 
@@ -1650,6 +1641,52 @@ function startWalk(fromIdx, count, stepDuration){
   return walk;
 }
 
+/* ---------- Éclats dorés à chaque case franchie ----------
+   Petite pluie de particules à chaque case passée pendant le
+   déplacement, et une pluie plus large + micro-punch caméra à
+   l'arrivée finale : le jeu doit "réagir" visuellement à chaque coup
+   de dé, pas seulement au gros gain final. Pool de sprites réutilisés
+   pour ne rien allouer en boucle pendant l'animation. */
+const SPARKLE_POOL_SIZE = 48;
+const sparklePool = Array.from({length:SPARKLE_POOL_SIZE}, ()=>{
+  const mat = new THREE.SpriteMaterial({map:brightGoldTex, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:0});
+  const spr = new THREE.Sprite(mat);
+  spr.visible = false;
+  scene.add(spr);
+  return { spr, vx:0, vy:0, vz:0, life:0, maxLife:1 };
+});
+let sparkleCursor = 0;
+function spawnSparkles(x,y,z,count,spread,upSpeed){
+  for(let i=0;i<count;i++){
+    const p = sparklePool[sparkleCursor];
+    sparkleCursor = (sparkleCursor+1)%sparklePool.length;
+    const ang = Math.random()*Math.PI*2;
+    const r = spread*(0.4+Math.random()*0.8);
+    p.vx = Math.cos(ang)*r;
+    p.vz = Math.sin(ang)*r;
+    p.vy = upSpeed*(0.6+Math.random()*0.7);
+    p.life = 0;
+    p.maxLife = 0.45+Math.random()*0.3;
+    p.spr.position.set(x, y, z);
+    const s = 0.13+Math.random()*0.1;
+    p.spr.scale.set(s,s,s);
+    p.spr.material.opacity = 1;
+    p.spr.visible = true;
+  }
+}
+function updateSparkles(dt){
+  for(const p of sparklePool){
+    if(!p.spr.visible) continue;
+    p.life += dt;
+    if(p.life >= p.maxLife){ p.spr.visible = false; continue; }
+    p.vy -= dt*1.8;
+    p.spr.position.x += p.vx*dt;
+    p.spr.position.y += p.vy*dt;
+    p.spr.position.z += p.vz*dt;
+    p.spr.material.opacity = 1 - p.life/p.maxLife;
+  }
+}
+
 function animate(){
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);
@@ -1657,6 +1694,7 @@ function animate(){
 
   controls.update();
   updateCornerSafety(dt);
+  updateSparkles(dt);
 
   trimLights.forEach(tl=>{
     tl.spr.material.opacity = reduceMotion ? 0.5 : 0.28 + 0.45*Math.max(0, Math.sin(t*2.2 - tl.idx*0.5));
@@ -1739,7 +1777,10 @@ function animate(){
     }
 
     if(segIdx !== walk.lastSeg){
-      if(walk.lastSeg >= 0) playHop();
+      if(walk.lastSeg >= 0){
+        playHop();
+        if(!reduceMotion) spawnSparkles(aTile.world.x, aTile.tileTopY+0.35, aTile.world.z, 7, 1.1, 2.4);
+      }
       walk.lastSeg = segIdx;
       currentIndex = walk.indices[segIdx];
       setActive(currentIndex);
@@ -1754,6 +1795,11 @@ function animate(){
     if(walk.done){
       currentIndex = walk.indices[walk.indices.length-1];
       setActive(currentIndex);
+      const landedTile = walk.path[walk.path.length-1];
+      if(!reduceMotion){
+        spawnSparkles(landedTile.world.x, landedTile.tileTopY+0.4, landedTile.world.z, 22, 1.8, 3.4);
+        cameraPunch();
+      }
       walk = null;
     }
   } else if(!reduceMotion){
