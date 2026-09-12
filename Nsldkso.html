@@ -706,24 +706,24 @@ function initDragonSmoke(canvasId, dirAngle, spawnDelayMs){
   var dirX = Math.cos(dirAngle), dirY = Math.sin(dirAngle);
   var particles = [];
   function spawn(){
-    var speed = 70 + Math.random()*55;
+    var speed = 60 + Math.random()*40;
     particles.push({
-      x: originX + (Math.random()-0.5)*8,
-      y: originY + (Math.random()-0.5)*6,
-      vx: dirX*speed + (Math.random()-0.5)*10,
-      vy: dirY*speed + (Math.random()-0.5)*10,
+      x: originX + (Math.random()-0.5)*5,
+      y: originY + (Math.random()-0.5)*4,
+      vx: dirX*speed + (Math.random()-0.5)*6,
+      vy: dirY*speed + (Math.random()-0.5)*6,
       wobble: Math.random()*Math.PI*2,
-      wobbleSpeed: 1.4 + Math.random()*1.6,
-      wobbleAmp: 14 + Math.random()*16,
-      size: 6 + Math.random()*5,
-      maxSize: 26 + Math.random()*20,
+      wobbleSpeed: 1.2 + Math.random()*1.4,
+      wobbleAmp: 5 + Math.random()*7,
+      size: 2 + Math.random()*1.6,
+      maxSize: 8 + Math.random()*6,
       life: 0,
-      maxLife: 1.6 + Math.random()*1.1,
+      maxLife: 1.5 + Math.random()*1.1,
       rot: dirAngle + Math.PI/2,
-      rotSpeed: (Math.random()-0.5)*1.2,
-      opacity: 0.7 + Math.random()*0.28,
-      lobe1: 0.25 + Math.random()*0.25,
-      lobe2: 0.2 + Math.random()*0.25
+      rotSpeed: (Math.random()-0.5)*0.7,
+      opacity: 0.34 + Math.random()*0.16,
+      lobe1: 0.2 + Math.random()*0.18,
+      lobe2: 0.16 + Math.random()*0.18
     });
   }
   var lastSpawn = 0, startAt = null;
@@ -732,7 +732,7 @@ function initDragonSmoke(canvasId, dirAngle, spawnDelayMs){
     if(startAt === null) startAt = now + spawnDelayMs;
     var dt = Math.min(0.05, (now - (frame._t || now)) / 1000);
     frame._t = now;
-    if(now > startAt && now - lastSpawn > 40 + Math.random()*40){
+    if(now > startAt && now - lastSpawn > 95 + Math.random()*85){
       spawn();
       lastSpawn = now;
     }
@@ -760,7 +760,11 @@ function initDragonSmoke(canvasId, dirAngle, spawnDelayMs){
       ctx.save();
       ctx.translate(p.x, p.y);
       ctx.rotate(p.rot);
-      var stretch = 1 + (1-t)*0.9; // volute étirée en début de vie, façon jet
+      // Volute fine et allongée (un filet qui s'étire), pas un pompon qui
+      // gonfle sur place : largeur très resserrée par rapport à la
+      // longueur, resserrée encore un peu plus avec l'âge de la particule.
+      var stretch = 1.6 + (1-t)*1.1;
+      var width = size*0.32;
       var grad = ctx.createRadialGradient(0, 0, 0, 0, 0, size*stretch);
       if(t < 0.35){
         // base incandescente : lueur braise orangée au sortir de la gueule
@@ -774,11 +778,13 @@ function initDragonSmoke(canvasId, dirAngle, spawnDelayMs){
         grad.addColorStop(1, 'rgba(70,66,70,0)');
       }
       ctx.fillStyle = grad;
-      // trois lobes décalés, étirés dans l'axe du souffle : pas un simple
-      // rond qui gonfle sur place, mais une volute qui file puis se déchire
-      ctx.beginPath(); ctx.ellipse(0, 0, size*0.55, size*stretch, 0, 0, Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(size*p.lobe1*1.1, -size*0.5, size*0.42, size*0.7, 0.4, 0, Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(-size*p.lobe2*1.0, size*0.4, size*0.38, size*0.6, -0.35, 0, Math.PI*2); ctx.fill();
+      // deux petits lobes à peine décalés (juste assez pour casser un
+      // contour parfaitement lisse) sur un filet central étroit — jamais
+      // aussi large que long, pour lire comme un fil de fumée fin plutôt
+      // qu'une boule.
+      ctx.beginPath(); ctx.ellipse(0, 0, width, size*stretch, 0, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(width*p.lobe1*1.3, -size*0.55, width*0.65, size*0.55, 0.25, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(-width*p.lobe2*1.2, size*0.45, width*0.6, size*0.5, -0.2, 0, Math.PI*2); ctx.fill();
       ctx.restore();
     }
   }
