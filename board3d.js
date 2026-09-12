@@ -1264,7 +1264,22 @@ function toonGradient(){
    par un AnimationMixer), plus une transition douce vers l'animation
    "idle" à l'arrêt. */
 const PLAYER_TARGET_HEIGHT = 0.82; // hauteur visée sur le plateau (mêmes proportions que l'ancien pion)
-async function loadPlayerModel(){
+
+/* Crée immédiatement un pion "vide" (groupe + mixer/setWalking neutres)
+   pour que le plateau puisse démarrer sa boucle de rendu tout de suite :
+   le vrai modèle 3D est ensuite chargé en tâche de fond (voir
+   loadPlayerModel ci-dessous) et vient se greffer dans `root` une fois
+   prêt, sans jamais bloquer le reste du jeu si ce chargement échoue ou
+   traîne (réseau lent, navigateur qui bute sur le GLB, etc.). */
+function createPlayer(){
+  return { root: new THREE.Group(), mixer: { update(){} }, setWalking(){} };
+}
+
+/* Charge le vrai modèle 3D animé en arrière-plan et le greffe dans le
+   pion `player` déjà présent dans la scène. Ne doit jamais être await-é
+   au niveau racine du script : une erreur ou une lenteur ici ne doit
+   jamais empêcher le plateau de s'afficher et de tourner. */
+async function loadPlayerModel(player){
   const gltf = await new Promise((resolve, reject)=>{
     new GLTFLoader().load('./assets/character/player.glb', resolve, undefined, reject);
   });
@@ -1280,8 +1295,7 @@ async function loadPlayerModel(){
   model.position.y = -box.min.y*scale;
   model.traverse(o=>{ if(o.isMesh){ o.castShadow = true; } });
 
-  const root = new THREE.Group();
-  root.add(model);
+  player.root.add(model);
 
   const mixer = new THREE.AnimationMixer(model);
   const clip = name => THREE.AnimationClip.findByName(gltf.animations, name);
@@ -1324,11 +1338,15 @@ async function loadPlayerModel(){
     if(isWalking && actions.walk) actions.walk.timeScale = Math.max(0.2, speedScale||1);
   }
 
-  return { root, mixer, setWalking };
+  player.mixer = mixer;
+  player.setWalking = setWalking;
 }
 
-const player = await loadPlayerModel();
+const player = createPlayer();
 scene.add(player.root);
+loadPlayerModel(player).catch(err=>{
+  console.error('Chargement du personnage 3D échoué, le plateau continue sans lui :', err);
+});
 
 /* ---------- État de jeu ---------- */
 let currentIndex = -1; // -1 = au départ, pas encore sur le plateau
