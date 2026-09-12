@@ -65,22 +65,30 @@ body{overflow:hidden;color:#fff}
   pointer-events:none;
 }
 
-/* Fumée qui s'échappe en continu des DEUX coins de la gueule grande
-   ouverte du dragon (repérés sur la photo brute puis ajustés
-   empiriquement sur le rendu réel, le zoom(1.05) appliqué au fond
-   décalant la position d'origine) — comme une vraie bouffée qui sort
-   des deux coins des lèvres plutôt que d'un seul point. Dessinée sur
-   deux <canvas> par un petit système de particules (voir script plus
-   bas) plutôt qu'en CSS pur : des volutes identiques qui suivent
-   toutes la même trajectoire ne lisent jamais comme de la vraie
-   fumée — il faut de l'irrégularité (taille/vitesse/dérive/rotation
-   qui varient par particule) pour un effet crédible. */
-#dragonSmokeR, #dragonSmokeL{
-  position:absolute; width:220px; height:320px; z-index:1; pointer-events:none;
+/* Épées légèrement électrifiées flottant autour du long serpent en
+   arrière-plan : silhouette acier (dégradé gris clair/blanc) + halo
+   bleu électrique qui grésille (opacité/flou du filtre qui varie de
+   façon irrégulière, jamais un simple pulse régulier). Purement
+   décoratif (au-dessus du fond, sous le plateau), donc pointer-events
+   coupé et figé si l'utilisateur préfère moins d'animations. */
+.electro-sword{
+  position:absolute; width:38px; height:auto; z-index:1; pointer-events:none;
+  filter:drop-shadow(0 0 5px rgba(120,210,255,.85)) drop-shadow(0 0 11px rgba(80,170,255,.55));
+  animation:swordFlicker 2.6s ease-in-out infinite;
 }
-#dragonSmokeR{ left:calc(90.2vw - 110px); top:calc(38.6vh - 300px); }
-#dragonSmokeL{ left:calc(85vw - 110px); top:calc(32vh - 300px); }
-@media (prefers-reduced-motion: reduce){ #dragonSmokeR, #dragonSmokeL{ display:none; } }
+.electro-sword.s1{ left:14vw;  top:9vh;  width:34px; transform:rotate(-18deg); animation-delay:0s; }
+.electro-sword.s2{ left:63vw;  top:6vh;  width:30px; transform:rotate(12deg);  animation-delay:.7s; }
+.electro-sword.s3{ left:8vw;   top:24vh; width:26px; transform:rotate(6deg);   animation-delay:1.4s; }
+.electro-sword.s4{ left:70vw;  top:20vh; width:36px; transform:rotate(-9deg);  animation-delay:.35s; }
+@keyframes swordFlicker{
+  0%, 100%{ filter:drop-shadow(0 0 5px rgba(120,210,255,.85)) drop-shadow(0 0 11px rgba(80,170,255,.55)); opacity:.92; }
+  8%{  filter:drop-shadow(0 0 2px rgba(120,210,255,.4))  drop-shadow(0 0 4px rgba(80,170,255,.25));  opacity:.7; }
+  22%{ filter:drop-shadow(0 0 8px rgba(160,225,255,1))   drop-shadow(0 0 18px rgba(90,180,255,.8));  opacity:1; }
+  45%{ filter:drop-shadow(0 0 5px rgba(120,210,255,.85)) drop-shadow(0 0 11px rgba(80,170,255,.55)); opacity:.9; }
+  61%{ filter:drop-shadow(0 0 3px rgba(120,210,255,.5))  drop-shadow(0 0 6px rgba(80,170,255,.3));   opacity:.75; }
+  78%{ filter:drop-shadow(0 0 9px rgba(160,225,255,1))   drop-shadow(0 0 20px rgba(90,180,255,.85)); opacity:1; }
+}
+@media (prefers-reduced-motion: reduce){ .electro-sword{ animation:none; opacity:.9; } }
 
 /* HUD haut : petit fil d'Ariane doré en haut, puis une bannière de
    destination bien plus grande et clairement séparée en dessous
@@ -549,8 +557,32 @@ if(new URLSearchParams(location.search).get('view')==='display'){
 }
 </script>
 <div id="app">
-  <canvas id="dragonSmokeR" width="220" height="320" aria-hidden="true"></canvas>
-  <canvas id="dragonSmokeL" width="220" height="320" aria-hidden="true"></canvas>
+  <svg class="electro-sword s1" viewBox="0 0 40 140" aria-hidden="true"><use href="#swordShape"/></svg>
+  <svg class="electro-sword s2" viewBox="0 0 40 140" aria-hidden="true"><use href="#swordShape"/></svg>
+  <svg class="electro-sword s3" viewBox="0 0 40 140" aria-hidden="true"><use href="#swordShape"/></svg>
+  <svg class="electro-sword s4" viewBox="0 0 40 140" aria-hidden="true"><use href="#swordShape"/></svg>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <linearGradient id="swordSteel" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#7c8a96"/>
+        <stop offset=".22" stop-color="#f3fbff"/>
+        <stop offset=".5" stop-color="#c8d8e2"/>
+        <stop offset=".78" stop-color="#f3fbff"/>
+        <stop offset="1" stop-color="#7c8a96"/>
+      </linearGradient>
+      <linearGradient id="swordGold" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#ffe9a8"/>
+        <stop offset="1" stop-color="#c99a2e"/>
+      </linearGradient>
+      <g id="swordShape">
+        <polygon points="20,0 27,88 13,88" fill="url(#swordSteel)"/>
+        <rect x="19" y="6" width="2" height="80" fill="#eaf6ff" opacity=".8"/>
+        <rect x="6" y="88" width="28" height="7" rx="3" fill="url(#swordGold)"/>
+        <rect x="17" y="95" width="6" height="24" rx="2" fill="#5b3d1c"/>
+        <circle cx="20" cy="126" r="7" fill="url(#swordGold)"/>
+      </g>
+    </defs>
+  </svg>
   <div class="top-hud">
     <div class="brand">★ PIKAJACKPOT ★</div>
     <div class="place-banner-wrap"><div class="place-banner" id="placeBanner">Départ</div></div>
@@ -684,120 +716,6 @@ if(new URLSearchParams(location.search).get('view')==='display'){
   </div>
 </div>
 
-<script>
-/* Fumée du dragon : petit système de particules sur canvas 2D, un
-   par coin de la gueule (grande ouverte sur cette photo, pas une bouche
-   fermée façon humaine — les deux "coins" sont donc les bords gauche et
-   droit de l'ouverture). Chaque volute est indépendante (taille, vitesse
-   de montée, dérive latérale, rotation, durée de vie tous randomisés) et
-   se déforme légèrement au fil de sa vie — c'est cette irrégularité qui
-   fait la différence avec des blobs CSS identiques, qui ne lisent jamais
-   comme de la fumée. */
-function initDragonSmoke(canvasId, dirAngle, spawnDelayMs){
-  var canvas = document.getElementById(canvasId);
-  if(!canvas || !canvas.getContext) return;
-  if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  var ctx = canvas.getContext('2d');
-  var W = canvas.width, H = canvas.height;
-  var originX = W/2, originY = H - 24;
-  // Direction générale du souffle : vers le haut et légèrement de côté,
-  // façon jet qui jaillit du coin de la gueule plutôt qu'un nuage qui
-  // stagne sur place.
-  var dirX = Math.cos(dirAngle), dirY = Math.sin(dirAngle);
-  var particles = [];
-  function spawn(){
-    var speed = 60 + Math.random()*40;
-    particles.push({
-      x: originX + (Math.random()-0.5)*5,
-      y: originY + (Math.random()-0.5)*4,
-      vx: dirX*speed + (Math.random()-0.5)*6,
-      vy: dirY*speed + (Math.random()-0.5)*6,
-      wobble: Math.random()*Math.PI*2,
-      wobbleSpeed: 1.2 + Math.random()*1.4,
-      wobbleAmp: 5 + Math.random()*7,
-      size: 2 + Math.random()*1.6,
-      maxSize: 8 + Math.random()*6,
-      life: 0,
-      maxLife: 1.5 + Math.random()*1.1,
-      rot: dirAngle + Math.PI/2,
-      rotSpeed: (Math.random()-0.5)*0.7,
-      opacity: 0.34 + Math.random()*0.16,
-      lobe1: 0.2 + Math.random()*0.18,
-      lobe2: 0.16 + Math.random()*0.18
-    });
-  }
-  var lastSpawn = 0, startAt = null;
-  function frame(now){
-    requestAnimationFrame(frame);
-    if(startAt === null) startAt = now + spawnDelayMs;
-    var dt = Math.min(0.05, (now - (frame._t || now)) / 1000);
-    frame._t = now;
-    if(now > startAt && now - lastSpawn > 95 + Math.random()*85){
-      spawn();
-      lastSpawn = now;
-    }
-    ctx.clearRect(0, 0, W, H);
-    for(var i = particles.length - 1; i >= 0; i--){
-      var p = particles[i];
-      p.life += dt;
-      if(p.life >= p.maxLife){ particles.splice(i, 1); continue; }
-      var t = p.life / p.maxLife;
-      p.wobble += p.wobbleSpeed * dt;
-      var lateral = Math.sin(p.wobble) * p.wobbleAmp * dt;
-      p.x += p.vx * dt - dirY*lateral;
-      p.y += p.vy * dt + dirX*lateral;
-      // décélération franche : le jet part vite puis s'essouffle, comme
-      // un vrai souffle qui perd sa pression en se dispersant dans l'air
-      // (0.9 => vitesse divisée par ~2 en 0.8s, tout en parcourant une
-      // vraie distance visible avant de se disperser)
-      var decay = 1 - dt * 0.9;
-      p.vx *= decay; p.vy *= decay;
-      p.rot += p.rotSpeed * dt;
-      var size = p.size + (p.maxSize - p.size) * Math.min(1, t*1.4);
-      var fadeIn = t < 0.1 ? t / 0.1 : 1;
-      var alpha = p.opacity * fadeIn * (1 - t) * (1 - t*0.4);
-      if(alpha <= 0.01) continue;
-      ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.rotate(p.rot);
-      // Volute fine et allongée (un filet qui s'étire), pas un pompon qui
-      // gonfle sur place : largeur très resserrée par rapport à la
-      // longueur, resserrée encore un peu plus avec l'âge de la particule.
-      var stretch = 1.6 + (1-t)*1.1;
-      var width = size*0.32;
-      var grad = ctx.createRadialGradient(0, 0, 0, 0, 0, size*stretch);
-      if(t < 0.35){
-        // base incandescente : lueur braise orangée au sortir de la gueule
-        var e = 1 - t/0.35;
-        grad.addColorStop(0, 'rgba(255,150,70,' + (alpha*0.8*e + alpha*0.55*(1-e)) + ')');
-        grad.addColorStop(0.5, 'rgba(180,110,90,' + (alpha*0.5) + ')');
-        grad.addColorStop(1, 'rgba(90,80,82,0)');
-      } else {
-        grad.addColorStop(0, 'rgba(96,90,94,' + (alpha*0.85) + ')');
-        grad.addColorStop(0.55, 'rgba(78,74,78,' + (alpha*0.45) + ')');
-        grad.addColorStop(1, 'rgba(70,66,70,0)');
-      }
-      ctx.fillStyle = grad;
-      // deux petits lobes à peine décalés (juste assez pour casser un
-      // contour parfaitement lisse) sur un filet central étroit — jamais
-      // aussi large que long, pour lire comme un fil de fumée fin plutôt
-      // qu'une boule.
-      ctx.beginPath(); ctx.ellipse(0, 0, width, size*stretch, 0, 0, Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(width*p.lobe1*1.3, -size*0.55, width*0.65, size*0.55, 0.25, 0, Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(-width*p.lobe2*1.2, size*0.45, width*0.6, size*0.5, -0.2, 0, Math.PI*2); ctx.fill();
-      ctx.restore();
-    }
-  }
-  requestAnimationFrame(frame);
-}
-// Coin droit (existant, réglé empiriquement) + coin gauche de la gueule
-// grande ouverte — angles proches (les deux volutes montent dans le même
-// sens général, cohérent avec la tête inclinée sur cette photo) mais pas
-// identiques, et décalées dans le temps pour ne jamais paraître
-// synchronisées entre les deux côtés.
-initDragonSmoke('dragonSmokeR', -1.95, 0);   // ~-112°, haut + vers la gauche
-initDragonSmoke('dragonSmokeL', -1.70, 260); // ~-97°, plus vertical
-</script>
 <script type="importmap">
 { "imports": { "three": "./vendor/three/three.module.min.js" } }
 </script>
