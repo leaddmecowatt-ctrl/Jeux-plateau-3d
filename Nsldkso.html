@@ -23,19 +23,30 @@ body{overflow:hidden;color:#fff}
 #app::before{
   content:"";
   position:absolute;
-  inset:-9%;
+  inset:0;
   background-image:url("./assets/bg/dragon_sky.jpg");
   background-repeat:no-repeat;
+  /* L'image est en portrait (plus haute que large) et le format du
+     téléphone aussi : "cover" ici ne rogne quasiment que les bords
+     gauche/droite (les volutes extérieures), jamais le haut/bas — le
+     dragon reste visible de la tête à la queue. */
   background-size:cover;
   background-position:center center;
   z-index:0;
   pointer-events:none;
-  animation:bgDrift 22s ease-in-out infinite alternate;
+  animation:bgDrift 26s ease-in-out infinite;
+  transform-origin:center center;
 }
+/* Balayage large (zoom + translation + très léger roulis) façon
+   travelling caméra lent qui suit le dragon tout autour du plateau,
+   plutôt qu'une dérive à peine perceptible — #app garde overflow:hidden
+   donc jamais de bord qui dépasse pendant le mouvement. */
 @keyframes bgDrift{
-  0%{ transform:translate(-3.5%,-2%) scale(1.03); }
-  50%{ transform:translate(3.5%,2%) scale(1.07); }
-  100%{ transform:translate(-3.5%,-2%) scale(1.03); }
+  0%{   transform:scale(1.02) translate(0%,0%)      rotate(0deg); }
+  25%{  transform:scale(1.06) translate(-2.5%,2%)   rotate(0.6deg); }
+  50%{  transform:scale(1.1)  translate(2%,-1.5%)   rotate(-0.5deg); }
+  75%{  transform:scale(1.05) translate(2.8%,1.2%)  rotate(0.55deg); }
+  100%{ transform:scale(1.02) translate(0%,0%)      rotate(0deg); }
 }
 @media (prefers-reduced-motion: reduce){
   #app::before{ animation:none; }
@@ -48,7 +59,7 @@ body{overflow:hidden;color:#fff}
 #app::after{
   content:"";
   position:absolute;
-  inset:-9%;
+  inset:0;
   background:radial-gradient(ellipse at center, rgba(4,7,18,.32) 0%, rgba(4,7,18,.32) 45%, rgba(4,7,18,.6) 100%);
   z-index:0;
   pointer-events:none;
@@ -150,6 +161,9 @@ body{overflow:hidden;color:#fff}
 .cloud.c1{ top:6%;  width:220px; animation-duration:30s; animation-delay:-4s; }
 .cloud.c2{ top:20%; width:150px; opacity:.4; animation-duration:38s; animation-delay:-16s; }
 .cloud.c3{ top:3%;  width:170px; opacity:.46; animation-duration:34s; animation-delay:-24s; }
+.cloud.c4{ top:34%; width:130px; opacity:.35; animation-duration:26s; animation-delay:-9s; }
+.cloud.c5{ top:82%; width:240px; opacity:.4;  animation-duration:42s; animation-delay:-30s; }
+.cloud.c6{ top:70%; width:160px; opacity:.32; animation-duration:33s; animation-delay:-18s; }
 @keyframes cloudDrift{
   0%{ transform:translateX(-30vw); }
   100%{ transform:translateX(130vw); }
@@ -553,6 +567,9 @@ if(new URLSearchParams(location.search).get('view')==='display'){
       <svg class="cloud c1" viewBox="0 0 200 100"><use href="#cloudShape"/></svg>
       <svg class="cloud c2" viewBox="0 0 200 100"><use href="#cloudShape"/></svg>
       <svg class="cloud c3" viewBox="0 0 200 100"><use href="#cloudShape"/></svg>
+      <svg class="cloud c4" viewBox="0 0 200 100"><use href="#cloudShape"/></svg>
+      <svg class="cloud c5" viewBox="0 0 200 100"><use href="#cloudShape"/></svg>
+      <svg class="cloud c6" viewBox="0 0 200 100"><use href="#cloudShape"/></svg>
       <svg width="0" height="0" style="position:absolute">
         <defs>
           <g id="cloudShape">
