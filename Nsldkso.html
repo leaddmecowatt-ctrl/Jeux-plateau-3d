@@ -65,19 +65,22 @@ body{overflow:hidden;color:#fff}
   pointer-events:none;
 }
 
-/* Fumée qui s'échappe en continu du coin de la gueule du dragon
-   (repérée empiriquement sur le rendu réel, pas sur la photo brute —
-   le zoom(1.05) appliqué au fond décale la position d'origine).
-   Dessinée sur un <canvas> par un petit système de particules (voir
-   script plus bas) plutôt qu'en CSS pur : des volutes identiques qui
-   suivent toutes la même trajectoire ne lisent jamais comme de la
-   vraie fumée — il faut de l'irrégularité (taille/vitesse/dérive/
-   rotation qui varient par particule) pour un effet crédible. */
-#dragonSmoke{
-  position:absolute; left:calc(90.2vw - 110px); top:calc(38.6vh - 300px);
-  width:220px; height:320px; z-index:1; pointer-events:none;
+/* Fumée qui s'échappe en continu des DEUX coins de la gueule grande
+   ouverte du dragon (repérés sur la photo brute puis ajustés
+   empiriquement sur le rendu réel, le zoom(1.05) appliqué au fond
+   décalant la position d'origine) — comme une vraie bouffée qui sort
+   des deux coins des lèvres plutôt que d'un seul point. Dessinée sur
+   deux <canvas> par un petit système de particules (voir script plus
+   bas) plutôt qu'en CSS pur : des volutes identiques qui suivent
+   toutes la même trajectoire ne lisent jamais comme de la vraie
+   fumée — il faut de l'irrégularité (taille/vitesse/dérive/rotation
+   qui varient par particule) pour un effet crédible. */
+#dragonSmokeR, #dragonSmokeL{
+  position:absolute; width:220px; height:320px; z-index:1; pointer-events:none;
 }
-@media (prefers-reduced-motion: reduce){ #dragonSmoke{ display:none; } }
+#dragonSmokeR{ left:calc(90.2vw - 110px); top:calc(38.6vh - 300px); }
+#dragonSmokeL{ left:calc(85vw - 110px); top:calc(32vh - 300px); }
+@media (prefers-reduced-motion: reduce){ #dragonSmokeR, #dragonSmokeL{ display:none; } }
 
 /* HUD haut : petit fil d'Ariane doré en haut, puis une bannière de
    destination bien plus grande et clairement séparée en dessous
@@ -546,7 +549,8 @@ if(new URLSearchParams(location.search).get('view')==='display'){
 }
 </script>
 <div id="app">
-  <canvas id="dragonSmoke" width="220" height="320" aria-hidden="true"></canvas>
+  <canvas id="dragonSmokeR" width="220" height="320" aria-hidden="true"></canvas>
+  <canvas id="dragonSmokeL" width="220" height="320" aria-hidden="true"></canvas>
   <div class="top-hud">
     <div class="brand">★ PIKAJACKPOT ★</div>
     <div class="place-banner-wrap"><div class="place-banner" id="placeBanner">Départ</div></div>
@@ -681,13 +685,16 @@ if(new URLSearchParams(location.search).get('view')==='display'){
 </div>
 
 <script>
-/* Fumée du dragon : petit système de particules sur canvas 2D. Chaque
-   volute est indépendante (taille, vitesse de montée, dérive latérale,
-   rotation, durée de vie tous randomisés) et se déforme légèrement au
-   fil de sa vie — c'est cette irrégularité qui fait la différence avec
-   des blobs CSS identiques, qui ne lisent jamais comme de la fumée. */
-(function(){
-  var canvas = document.getElementById('dragonSmoke');
+/* Fumée du dragon : petit système de particules sur canvas 2D, un
+   par coin de la gueule (grande ouverte sur cette photo, pas une bouche
+   fermée façon humaine — les deux "coins" sont donc les bords gauche et
+   droit de l'ouverture). Chaque volute est indépendante (taille, vitesse
+   de montée, dérive latérale, rotation, durée de vie tous randomisés) et
+   se déforme légèrement au fil de sa vie — c'est cette irrégularité qui
+   fait la différence avec des blobs CSS identiques, qui ne lisent jamais
+   comme de la fumée. */
+function initDragonSmoke(canvasId, dirAngle, spawnDelayMs){
+  var canvas = document.getElementById(canvasId);
   if(!canvas || !canvas.getContext) return;
   if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   var ctx = canvas.getContext('2d');
@@ -696,7 +703,6 @@ if(new URLSearchParams(location.search).get('view')==='display'){
   // Direction générale du souffle : vers le haut et légèrement de côté,
   // façon jet qui jaillit du coin de la gueule plutôt qu'un nuage qui
   // stagne sur place.
-  var dirAngle = -1.95; // radians (~ -112°, haut + vers la gauche)
   var dirX = Math.cos(dirAngle), dirY = Math.sin(dirAngle);
   var particles = [];
   function spawn(){
@@ -720,12 +726,13 @@ if(new URLSearchParams(location.search).get('view')==='display'){
       lobe2: 0.2 + Math.random()*0.25
     });
   }
-  var lastSpawn = 0;
+  var lastSpawn = 0, startAt = null;
   function frame(now){
     requestAnimationFrame(frame);
+    if(startAt === null) startAt = now + spawnDelayMs;
     var dt = Math.min(0.05, (now - (frame._t || now)) / 1000);
     frame._t = now;
-    if(now - lastSpawn > 40 + Math.random()*40){
+    if(now > startAt && now - lastSpawn > 40 + Math.random()*40){
       spawn();
       lastSpawn = now;
     }
@@ -776,7 +783,14 @@ if(new URLSearchParams(location.search).get('view')==='display'){
     }
   }
   requestAnimationFrame(frame);
-})();
+}
+// Coin droit (existant, réglé empiriquement) + coin gauche de la gueule
+// grande ouverte — angles proches (les deux volutes montent dans le même
+// sens général, cohérent avec la tête inclinée sur cette photo) mais pas
+// identiques, et décalées dans le temps pour ne jamais paraître
+// synchronisées entre les deux côtés.
+initDragonSmoke('dragonSmokeR', -1.95, 0);   // ~-112°, haut + vers la gauche
+initDragonSmoke('dragonSmokeL', -1.70, 260); // ~-97°, plus vertical
 </script>
 <script type="importmap">
 { "imports": { "three": "./vendor/three/three.module.min.js" } }
