@@ -69,6 +69,18 @@ body{overflow:hidden;color:#fff}
   pointer-events:none;
 }
 
+/* Souffle incandescent qui s'échappe du coin de la gueule du dragon :
+   des braises/volutes fines, teintées feu (orange -> or) du début à la
+   fin de leur vie — jamais un panache de fumée grise, un vrai souffle
+   qui reste chaud tant qu'il est visible. Un seul point d'origine (le
+   coin repéré sur la photo), pas les deux : un souffle vient d'un seul
+   côté de la gueule, pas des deux à la fois. */
+#dragonBreath{
+  position:absolute; left:calc(90.2vw - 110px); top:calc(38.6vh - 300px);
+  width:220px; height:320px; z-index:1; pointer-events:none;
+}
+@media (prefers-reduced-motion: reduce){ #dragonBreath{ display:none; } }
+
 /* HUD haut : petit fil d'Ariane doré en haut, puis une bannière de
    destination bien plus grande et clairement séparée en dessous
    (avant, les deux se chevauchaient visuellement, illisibles). */
@@ -551,6 +563,7 @@ if(new URLSearchParams(location.search).get('view')==='display'){
   </defs>
 </svg>
 <div id="app">
+  <canvas id="dragonBreath" width="220" height="320" aria-hidden="true"></canvas>
   <div class="top-hud">
     <div class="brand">★ PIKAJACKPOT ★</div>
     <div class="place-banner-wrap"><div class="place-banner" id="placeBanner">Départ</div></div>
@@ -684,6 +697,96 @@ if(new URLSearchParams(location.search).get('view')==='display'){
   </div>
 </div>
 
+<script>
+/* Souffle incandescent du dragon : petit système de particules sur
+   canvas 2D, un seul point d'origine (le coin de la gueule). Teinte
+   feu du début à la fin de la vie de chaque particule (jamais de
+   virage vers le gris façon fumée froide) — volutes fines et
+   allongées, pas des pompons qui gonflent sur place. */
+(function(){
+  var canvas = document.getElementById('dragonBreath');
+  if(!canvas || !canvas.getContext) return;
+  if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  var ctx = canvas.getContext('2d');
+  var W = canvas.width, H = canvas.height;
+  var originX = W/2, originY = H - 24;
+  // Souffle vers le haut, légèrement de côté — façon jet qui jaillit
+  // du coin de la gueule plutôt qu'un nuage qui stagne sur place.
+  var dirAngle = -1.95; // ~-112°, haut + vers la gauche
+  var dirX = Math.cos(dirAngle), dirY = Math.sin(dirAngle);
+  var particles = [];
+  function spawn(){
+    var speed = 55 + Math.random()*35;
+    particles.push({
+      x: originX + (Math.random()-0.5)*5,
+      y: originY + (Math.random()-0.5)*4,
+      vx: dirX*speed + (Math.random()-0.5)*6,
+      vy: dirY*speed + (Math.random()-0.5)*6,
+      wobble: Math.random()*Math.PI*2,
+      wobbleSpeed: 1.2 + Math.random()*1.4,
+      wobbleAmp: 5 + Math.random()*7,
+      size: 2.2 + Math.random()*1.8,
+      maxSize: 7 + Math.random()*5,
+      life: 0,
+      maxLife: 1.1 + Math.random()*0.7,
+      rot: dirAngle + Math.PI/2,
+      rotSpeed: (Math.random()-0.5)*0.7,
+      opacity: 0.55 + Math.random()*0.25,
+      lobe1: 0.2 + Math.random()*0.18,
+      lobe2: 0.16 + Math.random()*0.18
+    });
+  }
+  var lastSpawn = 0;
+  function frame(now){
+    requestAnimationFrame(frame);
+    var dt = Math.min(0.05, (now - (frame._t || now)) / 1000);
+    frame._t = now;
+    if(now - lastSpawn > 70 + Math.random()*60){
+      spawn();
+      lastSpawn = now;
+    }
+    ctx.clearRect(0, 0, W, H);
+    for(var i = particles.length - 1; i >= 0; i--){
+      var p = particles[i];
+      p.life += dt;
+      if(p.life >= p.maxLife){ particles.splice(i, 1); continue; }
+      var t = p.life / p.maxLife;
+      p.wobble += p.wobbleSpeed * dt;
+      var lateral = Math.sin(p.wobble) * p.wobbleAmp * dt;
+      p.x += p.vx * dt - dirY*lateral;
+      p.y += p.vy * dt + dirX*lateral;
+      var decay = 1 - dt * 1.0;
+      p.vx *= decay; p.vy *= decay;
+      p.rot += p.rotSpeed * dt;
+      var size = p.size + (p.maxSize - p.size) * Math.min(1, t*1.5);
+      var fadeIn = t < 0.12 ? t / 0.12 : 1;
+      var alpha = p.opacity * fadeIn * (1 - t*t);
+      if(alpha <= 0.01) continue;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      var stretch = 1.5 + (1-t)*1.0;
+      var width = size*0.34;
+      // Braise qui refroidit légèrement en vieillissant (jaune-blanc
+      // vif à la sortie -> orange -> rouge braise), mais reste TOUJOURS
+      // dans la gamme du feu, jamais grise.
+      var core = 'rgba(' + Math.round(255) + ',' + Math.round(235-90*t) + ',' + Math.round(150-110*t) + ',' + alpha + ')';
+      var mid  = 'rgba(255,' + Math.round(120-40*t) + ',' + Math.round(40) + ',' + (alpha*0.65) + ')';
+      var edge = 'rgba(180,' + Math.round(50-30*t) + ',20,0)';
+      var grad = ctx.createRadialGradient(0, 0, 0, 0, 0, size*stretch);
+      grad.addColorStop(0, core);
+      grad.addColorStop(0.5, mid);
+      grad.addColorStop(1, edge);
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.ellipse(0, 0, width, size*stretch, 0, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(width*p.lobe1*1.3, -size*0.55, width*0.65, size*0.55, 0.25, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(-width*p.lobe2*1.2, size*0.45, width*0.6, size*0.5, -0.2, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
 <script type="importmap">
 { "imports": { "three": "./vendor/three/three.module.min.js" } }
 </script>
