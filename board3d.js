@@ -1094,7 +1094,10 @@ for(let i=0;i<40;i++){
   group.add(halo);
 
   let floatObj = null, shadowDisc = null, floatBaseScale = 0.34;
-  if(catDef.tier === 'float'){
+  // Case 1 (Départ) : aucune décoration flottante, même si sa catégorie
+  // de fond ('booster8') en aurait normalement une — voir getDepartFace
+  // plus haut, la case n'est thématiquement pas un vrai lot.
+  if(i !== 0 && catDef.tier === 'float'){
     const { tex, aspect } = getFramedPhotoTexture(catKey);
     const scaleByCat = { gradee:0.5, booster50:0.6, etb:0.7, jackpot300:0.8 }[catKey] || 0.5;
     const h = scaleByCat, w = h*aspect;
@@ -1107,7 +1110,7 @@ for(let i=0;i<40;i++){
     floatObj.position.y = tileTopY + 0.32 + h*0.5;
     group.add(floatObj);
     floatBaseScale = h;
-  } else if(catDef.tier === 'glyph'){
+  } else if(i !== 0 && catDef.tier === 'glyph'){
     const glyphKind = data.isVisite ? 'visite' : catKey;
     floatObj = makeSprite(getGlyphTexture(glyphKind, accentColor), data.isVisite ? 0.3 : 0.6);
     floatObj.position.y = tileTopY + 0.3;
