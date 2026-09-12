@@ -790,6 +790,12 @@ const rim = new THREE.DirectionalLight(0xffcf6b, 0.55);
 rim.position.set(-5,4,-4);
 scene.add(rim);
 
+/* Fill light froide, opposée à la key light : débouche les zones
+   sombres du personnage (toon shading) sans les aplatir. */
+const fill = new THREE.DirectionalLight(0x9db8ff, 0.4);
+fill.position.set(-4,2.5,3.2);
+scene.add(fill);
+
 /* projecteurs de studio dorés aux quatre coins */
 function addFloodlight(x,z){
   const glowTex = (function(){
@@ -1362,7 +1368,39 @@ async function loadPlayerModel(player){
   const scale = rawHeight>0 ? PLAYER_TARGET_HEIGHT/rawHeight : 1;
   model.scale.setScalar(scale);
   model.position.y = -box.min.y*scale;
-  model.traverse(o=>{ if(o.isMesh){ o.castShadow = true; } });
+
+  // Look "manga shonen" : shader toon (bandes d'ombre nettes, pas de
+  // dégradé PBR lisse) + contour noir épais par mesh inversé (technique
+  // classique du "inverted hull" : une copie de la géométrie, normales
+  // vues de l'intérieur (BackSide), légèrement agrandie, en noir plat —
+  // elle ne dépasse que sur le pourtour de la silhouette).
+  const toonGradientMap = (()=>{
+    const n = 4;
+    const data = new Uint8Array(n);
+    for(let i=0;i<n;i++) data[i] = Math.round(255*((i+0.6)/n));
+    const tex = new THREE.DataTexture(data, n, 1, THREE.RedFormat);
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    tex.needsUpdate = true;
+    return tex;
+  })();
+  const outlineMat = new THREE.MeshBasicMaterial({color:0x0a0805, side:THREE.BackSide});
+  const outlineMeshes = [];
+  model.traverse(o=>{
+    if(!o.isMesh) return;
+    o.castShadow = true;
+    const oldMat = o.material;
+    o.material = new THREE.MeshToonMaterial({
+      map: oldMat.map || null,
+      gradientMap: toonGradientMap,
+      color: oldMat.color ? oldMat.color.clone() : new THREE.Color(0xffffff),
+    });
+    const outline = o.isSkinnedMesh ? new THREE.SkinnedMesh(o.geometry, outlineMat) : new THREE.Mesh(o.geometry, outlineMat);
+    if(o.isSkinnedMesh) outline.bind(o.skeleton, o.bindMatrix);
+    outline.scale.setScalar(1.045);
+    outlineMeshes.push([o.parent, outline]);
+  });
+  outlineMeshes.forEach(([parent, o])=>parent.add(o));
 
   player.root.add(model);
 
@@ -1413,12 +1451,9 @@ async function loadPlayerModel(player){
 
 const player = createPlayer();
 scene.add(player.root);
-// Génération du personnage 3D désactivée sur demande : le pion reste
-// un groupe vide (aucun modèle chargé), le reste du jeu continue de
-// fonctionner normalement sans lui.
-// loadPlayerModel(player).catch(err=>{
-//   console.error('Chargement du personnage 3D échoué, le plateau continue sans lui :', err);
-// });
+loadPlayerModel(player).catch(err=>{
+  console.error('Chargement du personnage 3D échoué, le plateau continue sans lui :', err);
+});
 
 /* ---------- État de jeu ---------- */
 let currentIndex = -1; // -1 = au départ, pas encore sur le plateau
