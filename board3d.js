@@ -1297,11 +1297,14 @@ for(let i=0;i<40;i++){
     color:new THREE.Color(accentColor),roughness:.7,metalness:.12,
     emissive:new THREE.Color(accentColor),emissiveIntensity:.32
   });
-  // Corps de la case bien épaissi (0.30 au lieu de 0.08 à l'origine) :
-  // un vrai bloc massif avec des flancs colorés visibles, façon jeton
-  // de casino/case de plateau premium, plutôt qu'une carte plate.
+  // Corps de la case légèrement épaissi (0.14 au lieu de 0.08 à
+  // l'origine) : un vrai relief avec des flancs colorés visibles,
+  // façon jeton de casino, sans pour autant faire une case si haute
+  // qu'elle cache la photo de la case juste derrière elle dans la
+  // même rangée (vu la caméra en plongée, une case trop épaisse
+  // masque celle qui la suit — testé à 0.30, beaucoup trop).
   // Posé directement sur la collerette (qui culmine à 0.135).
-  const BODY_H = 0.30, BODY_BOTTOM = 0.135;
+  const BODY_H = 0.14, BODY_BOTTOM = 0.135;
   const bodyTile = new THREE.Mesh(new THREE.BoxGeometry(TILE,BODY_H,TILE), sideMat);
   bodyTile.position.y = BODY_BOTTOM + BODY_H/2;
   bodyTile.castShadow = true;
