@@ -2478,7 +2478,12 @@ async function claimCurrentLot(){
   // Le lot réellement remporté est celui décidé d'avance pour cette
   // mise — si le pion n'est pas déjà sur une case correspondante, il y
   // est amené visuellement avant l'annonce, pour ne jamais réafficher
-  // une photo qui ne correspond pas à sa case.
+  // une photo qui ne correspond pas à sa case. Diffusé à l'écran public
+  // AVANT d'attendre l'animation : sinon son propre pion resterait sur
+  // l'ancienne case pendant que le message "celebrate" lui dirait déjà
+  // d'afficher la photo du nouveau lot — retour du bug photo/case qui
+  // ne correspondent pas, mais cette fois sur l'écran secondaire.
+  broadcastSync({type:'forceArrival', targetCat:outcomeToAward});
   await forceOutcomeArrival(outcomeToAward);
   const realCat = tiles[currentIndex].catKey;
   // Le plafond de reversement continue de calculer et suivre le
@@ -2540,6 +2545,7 @@ if(syncChannel && isDisplay){
     const m = e.data || {};
     if(m.type==='draw'){ topNum.textContent = m.draw.total; playCardDrawAnimation(m.draw); }
     else if(m.type==='move') move(m.count, m.card);
+    else if(m.type==='forceArrival') forceOutcomeArrival(m.targetCat);
     else if(m.type==='celebrate') celebrate(m.catKey);
     else if(m.type==='restart') restart();
     else if(m.type==='start') startGame();
