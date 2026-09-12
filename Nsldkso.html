@@ -34,22 +34,16 @@ body{overflow:hidden;color:#fff}
   background-position:center center;
   z-index:0;
   pointer-events:none;
-  animation:bgDrift 26s ease-in-out infinite;
+  /* Cadrage fixe (pas de travelling/zoom/pan cette fois : on ne
+     "balade" plus la caméra dans la photo) — la vie vient uniquement
+     de la distorsion animée ci-dessous, qui fait onduler le dragon et
+     les nuages sur place, comme un vrai reptile qui respire/ondule. */
+  transform:scale(1.05);
   transform-origin:center center;
-}
-/* Balayage large (zoom + translation + très léger roulis) façon
-   travelling caméra lent qui suit le dragon tout autour du plateau,
-   plutôt qu'une dérive à peine perceptible — #app garde overflow:hidden
-   donc jamais de bord qui dépasse pendant le mouvement. */
-@keyframes bgDrift{
-  0%{   transform:scale(1.02) translate(0%,0%)      rotate(0deg); }
-  25%{  transform:scale(1.06) translate(-2.5%,2%)   rotate(0.6deg); }
-  50%{  transform:scale(1.1)  translate(2%,-1.5%)   rotate(-0.5deg); }
-  75%{  transform:scale(1.05) translate(2.8%,1.2%)  rotate(0.55deg); }
-  100%{ transform:scale(1.02) translate(0%,0%)      rotate(0deg); }
+  filter:url(#dragonLive);
 }
 @media (prefers-reduced-motion: reduce){
-  #app::before{ animation:none; }
+  #app::before{ filter:none; }
 }
 /* Voile sombre entre la photo de fond et le plateau : la photo seule
    (très claire/chargée) écrasait le contraste du plateau, qui se
@@ -531,6 +525,20 @@ if(new URLSearchParams(location.search).get('view')==='display'){
   document.documentElement.classList.add('display-mode');
 }
 </script>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- Fait "onduler" la photo de fond sur place (comme un reptile qui
+         respire/se tord légèrement), sans jamais déplacer le cadrage :
+         un bruit fractal qui varie lentement déforme localement
+         l'image via feDisplacementMap. -->
+    <filter id="dragonLive" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.006 0.011" numOctaves="2" seed="7" result="noise">
+        <animate attributeName="baseFrequency" dur="16s" values="0.006 0.011;0.011 0.017;0.006 0.011" repeatCount="indefinite"/>
+      </feTurbulence>
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="22" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+  </defs>
+</svg>
 <div id="app">
   <div class="top-hud">
     <div class="brand">★ PIKAJACKPOT ★</div>
