@@ -150,9 +150,11 @@ body{overflow:hidden;color:#fff}
 }
 @media (prefers-reduced-motion: reduce){ .fall-star{ display:none; } }
 
-/* Nuages blancs qui dérivent lentement en arrière-plan, façon nuage
-   volant façon Nimbus — décor seulement, jamais devant le plateau. */
-.bg-clouds{}
+/* Nuages blancs dessinés en CSS : désactivés à la demande — l'utilisateur
+   veut que ce soient les vrais nuages peints DANS la photo de fond qui
+   bougent (via le travelling bgDrift ci-dessus), pas des nuages en plus
+   qui ne collent pas au style de l'illustration. */
+.bg-clouds{display:none}
 .cloud{
   position:absolute;width:180px;opacity:.5;
   filter:drop-shadow(0 0 7px rgba(255,226,122,.5));
