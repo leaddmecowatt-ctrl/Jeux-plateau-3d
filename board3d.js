@@ -1153,6 +1153,14 @@ tileCollarInst.instanceMatrix.needsUpdate = true;
 tileBezelInst.instanceMatrix.needsUpdate = true;
 tileRivetInst.instanceMatrix.needsUpdate = true;
 
+/* Index catégorie -> liste des cases correspondantes, utilisé par le
+   système de lot prédéterminé (voir plus bas) pour amener visuellement
+   le pion sur une case qui correspond exactement au lot déjà décidé
+   d'avance, sans jamais afficher une photo qui ne correspond pas à la
+   case où il est posé. */
+const TILES_BY_CAT = {};
+tiles.forEach((t,i)=>{ (TILES_BY_CAT[t.catKey] = TILES_BY_CAT[t.catKey] || []).push(i); });
+
 /* ---------- Effet spécial "Carte Darkrai" (jackpot final) : le
    plateau tremble comme un petit séisme puis vole en éclats, avant
    de se reformer pile au moment où la carte apparaît avec les
@@ -1400,6 +1408,9 @@ let finished = false;
 // illimités sur une seule mise.
 let rollsUsed = 0;
 let rollsAllowed = 3;
+// Lot déjà décidé d'avance pour la partie en cours (voir le système de
+// lot prédéterminé plus bas) : null tant qu'aucune mise n'a démarré.
+let pendingOutcome = null;
 
 function tileAt(idx){ return idx===-1 ? START_NODE : tiles[idx]; }
 
@@ -1723,6 +1734,7 @@ if(resetBankBtn) resetBankBtn.addEventListener('click', ()=>{
   totalMise = 0;
   totalPaid = 0;
   saveTotals();
+  resetOutcomeBatch();
   resetBankBtn.hidden = true;
   flashBankResetToken();
   clearWinUndo();
@@ -1756,6 +1768,126 @@ function fundedCategory(catKey){
     }
   }
   return catKey;
+}
+
+/* ---------- Lot prédéterminé (façon carte à gratter / machine à sous)
+   ----------
+   Les dés, les lancers et l'animation du pion restent un vrai spectacle
+   (rien n'est truqué visuellement), mais le lot réellement remporté à
+   chaque mise ne dépend plus de la case où le hasard des dés amène le
+   pion : il est tiré à l'avance, dans un LOT (batch) de résultats déjà
+   calculé et mélangé pour respecter exactement le taux de reversement
+   cible (CEILING_RATIO), plutôt que de dépendre d'une moyenne sur le
+   long terme qui peut dériver (cf. simulation : ~130% de reversement
+   moyen avec des dés honnêtes sur ce plateau, très au-dessus des 50%
+   visés, à cause des cases ETB/jackpot final à elles seules). À la fin
+   de la partie, le pion est amené sur une case qui correspond VRAIMENT
+   au lot déjà décidé, pour que la photo affichée corresponde toujours
+   exactement à la case sur laquelle il est posé. */
+const OUTCOME_BATCH_KEY = 'pika_outcome_batch';
+const OUTCOME_BATCH_SIZE = 1000;
+// Proportions calibrées (vérifiées par simulation) pour que la moyenne
+// du lot sur l'ensemble du batch tombe autour de CEILING_RATIO (50%) de
+// la mise moyenne (9€) : gros lots très rares, lots moyens raisonnables,
+// une case "prison" (aucun lot) et le reste en commune.
+const OUTCOME_RECIPE = [
+  { cat:'jackpot300',  p:0.001 },
+  { cat:'etb',         p:0.004 },
+  { cat:'booster50',   p:0.01  },
+  { cat:'gradee',      p:0.038 },
+  { cat:'booster8',    p:0.095 },
+  { cat:'alternative', p:0.13  },
+  { cat:'prison',      p:0.15  },
+  // le reste (~57%) part en commune, calculé plus bas
+];
+
+// Coût réel de chaque catégorie (PAYOUT_LADDER + prison, qui n'y
+// figure pas puisqu'il ne coûte jamais rien).
+const OUTCOME_COST = { prison: 0 };
+PAYOUT_LADDER.forEach(t=>{ OUTCOME_COST[t.cat] = t.cost; });
+
+function buildOutcomeBatch(size){
+  const counts = {};
+  let assigned = 0;
+  OUTCOME_RECIPE.forEach(r=>{
+    const n = Math.round(r.p*size);
+    counts[r.cat] = n;
+    assigned += n;
+  });
+  counts.commune = Math.max(0, size-assigned);
+  const remaining = [];
+  Object.keys(counts).forEach(cat=>{
+    for(let i=0;i<counts[cat];i++) remaining.push(cat);
+  });
+
+  // Séquencement sous contrainte de solvabilité : un mélange au hasard
+  // pur ne garantit le taux de reversement que sur l'ENSEMBLE du lot —
+  // rien n'empêcherait alors un gros lot (ETB, jackpot final) de
+  // tomber dès la 10e partie, quand seulement ~90€ de mises sont
+  // encaissées. Ici, à chaque position du lot, on ne tire au hasard
+  // que parmi les résultats restants qui tiennent ENCORE sous le
+  // plafond de reversement calculé sur les mises déjà "encaissées"
+  // jusqu'à cette position précise : impossible qu'un gros lot sorte
+  // avant d'avoir été effectivement couvert par assez de mises.
+  const arr = [];
+  let cumMise = 0, cumPaid = 0;
+  for(let pos=0; pos<size; pos++){
+    cumMise += AVG_MISE;
+    const headroom = cumMise*CEILING_RATIO - cumPaid;
+    const eligible = [];
+    for(let i=0;i<remaining.length;i++){
+      if(OUTCOME_COST[remaining[i]] <= headroom) eligible.push(i);
+    }
+    let pickAt;
+    if(eligible.length){
+      pickAt = eligible[Math.floor(Math.random()*eligible.length)];
+    } else {
+      // Filet de sécurité (ne devrait jamais arriver avec la recette
+      // calibrée) : on place le moins cher restant plutôt que de
+      // risquer de dépasser le plafond.
+      pickAt = 0;
+      for(let i=1;i<remaining.length;i++){
+        if(OUTCOME_COST[remaining[i]] < OUTCOME_COST[remaining[pickAt]]) pickAt = i;
+      }
+    }
+    const cat = remaining.splice(pickAt,1)[0];
+    cumPaid += OUTCOME_COST[cat];
+    arr.push(cat);
+  }
+  return arr;
+}
+
+function loadOutcomeState(){
+  try{
+    const raw = safeGetItem(OUTCOME_BATCH_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      if(parsed && Array.isArray(parsed.batch) && typeof parsed.pos==='number' && parsed.pos < parsed.batch.length){
+        return parsed;
+      }
+    }
+  }catch(e){}
+  return { batch: buildOutcomeBatch(OUTCOME_BATCH_SIZE), pos: 0 };
+}
+let outcomeState = loadOutcomeState();
+function saveOutcomeState(){
+  try{ localStorage.setItem(OUTCOME_BATCH_KEY, JSON.stringify(outcomeState)); }catch(e){}
+}
+// Un nouveau lot de résultats est régénéré automatiquement à
+// l'épuisement du précédent (jamais de rupture de stock) et à chaque
+// remise à zéro de la cagnotte (nouveau direct = nouveau lot).
+function nextPredeterminedOutcome(){
+  if(outcomeState.pos >= outcomeState.batch.length){
+    outcomeState = { batch: buildOutcomeBatch(OUTCOME_BATCH_SIZE), pos: 0 };
+  }
+  const cat = outcomeState.batch[outcomeState.pos];
+  outcomeState.pos++;
+  saveOutcomeState();
+  return cat;
+}
+function resetOutcomeBatch(){
+  outcomeState = { batch: buildOutcomeBatch(OUTCOME_BATCH_SIZE), pos: 0 };
+  saveOutcomeState();
 }
 
 /* ---------- Mise en scène du tirage : suspense sonore/visuel autour
@@ -2146,7 +2278,7 @@ async function move(forcedCount, forcedCard){
     // sur lequel il est resté — validé automatiquement, sans action
     // de l'animateur.
     statusEl.textContent = 'Plus de lancer disponible (3 lancers, +1 par double) — le lot est automatiquement remporté.';
-    claimCurrentLot();
+    await claimCurrentLot();
   } else {
     validate.disabled = finished || rollsExhausted;
   }
@@ -2196,6 +2328,7 @@ function restart(){
   finished = false;
   rollsUsed = 0;
   rollsAllowed = 3;
+  pendingOutcome = null;
   walk = null;
   currentIndex = -1;
   player.root.scale.set(1,1,1);
@@ -2230,7 +2363,14 @@ async function drawAndMove(){
   // Premier lancer d'une partie (le pion est encore sur Départ) : une
   // partie complète = une mise, créditée automatiquement à la
   // cagnotte interne, sans aucune saisie manuelle.
-  if(currentIndex===-1){ totalMise += AVG_MISE; saveTotals(); }
+  if(currentIndex===-1){
+    totalMise += AVG_MISE;
+    saveTotals();
+    // Le lot de cette mise est décidé maintenant, tiré du lot
+    // pré-calculé — les dés qui vont suivre restent honnêtes à
+    // l'écran, mais ne décident plus du lot réellement remporté.
+    pendingOutcome = nextPredeterminedOutcome();
+  }
   // On continue plutôt que de garder le lot affiché : l'aperçu (ou le
   // lot validé) de la case précédente s'efface avant le nouveau tirage.
   clearCelebration();
@@ -2268,9 +2408,78 @@ function clearWinUndo(){
    joueur pourrait valider un lot puis continuer à lancer et en
    valider un second sur la même mise, ce qui double la rentabilité
    attendue par mise. */
-function claimCurrentLot(){
+/* Amène visuellement le pion sur une case qui correspond VRAIMENT au
+   lot déjà décidé d'avance (pendingOutcome), quand la case sur
+   laquelle les dés l'ont posé ne correspond pas. La case la plus
+   proche en avançant (avec bouclage case 40 -> case 1, comme un tour
+   de plateau normal) est choisie, puis le pion y marche visuellement
+   à vitesse accélérée — jamais de téléportation silencieuse — pour
+   que la photo affichée corresponde toujours exactement à la case sur
+   laquelle il est posé. */
+async function forceOutcomeArrival(targetCat){
+  if(!targetCat || currentIndex<0) return;
+  if(tiles[currentIndex].catKey === targetCat) return;
+  const candidates = TILES_BY_CAT[targetCat];
+  if(!candidates || !candidates.length) return;
+  let best = candidates[0], bestDist = Infinity;
+  candidates.forEach(idx=>{
+    const dist = ((idx - currentIndex) % 40 + 40) % 40;
+    const d = dist===0 ? 40 : dist;
+    if(d < bestDist){ bestDist = d; best = idx; }
+  });
+  moving = true;
+  const myGen = ++generation;
+  if(winBtn) winBtn.hidden = true;
+  statusEl.textContent = 'Le pion termine sa course vers '+placeLabel(best)+'…';
+  updatePlaceBanner(best, true);
+  // Distance variable (1 à 39 cases) ramenée à une durée totale à peu
+  // près constante : une simple correction de fin de partie ne doit
+  // jamais sembler plus longue qu'un lancer de dés normal.
+  const targetTotal = 1.4;
+  const stepDuration = Math.min(HOP_DURATION, Math.max(0.045, targetTotal/bestDist));
+  const w = startWalk(currentIndex, bestDist, stepDuration);
+  await wait(w.totalTime*1000 + 30);
+  if(myGen!==generation) return;
+  currentIndex = best;
+  walk = null;
+  placeTokenInstant(best);
+  setActive(best);
+  updatePlaceBanner(best, false);
+  if(targetCat==='jackpot300'){
+    statusEl.textContent = '🏆 Arrivé à '+placeLabel(39)+' — JACKPOT FINAL !';
+    finished = true;
+  } else {
+    statusEl.textContent = 'Le joueur est arrivé à '+placeLabel(currentIndex)+' !';
+  }
+  moving = false;
+  if(winBtn) winBtn.hidden = false;
+}
+
+async function claimCurrentLot(){
   if(currentIndex<0 || (winBtn && winBtn.disabled)) return;
   if(winBtn) winBtn.disabled = true;
+  if(validate) validate.disabled = true;
+  // Filet de sécurité EN DIRECT, en plus de la construction du lot déjà
+  // sûre par elle-même : si la cagnotte réelle n'a pas encore
+  // effectivement encaissé assez pour couvrir ce lot précis (petits
+  // lots Chance/Caisse déjà distribués entre-temps, partie
+  // recommencée sans avoir validé, etc.), ce lot est reporté à plus
+  // tard dans la file et remplacé par un lot sûr pour cette mise —
+  // jamais un lot qui ferait dépasser le plafond de reversement en vrai.
+  let outcomeToAward = pendingOutcome;
+  if(pendingOutcome && OUTCOME_COST[pendingOutcome]!==undefined){
+    const projected = totalMise>0 ? (totalPaid+OUTCOME_COST[pendingOutcome])/totalMise : 0;
+    if(projected > CEILING_RATIO){
+      outcomeState.batch.splice(outcomeState.pos, 0, pendingOutcome);
+      saveOutcomeState();
+      outcomeToAward = 'commune';
+    }
+  }
+  // Le lot réellement remporté est celui décidé d'avance pour cette
+  // mise — si le pion n'est pas déjà sur une case correspondante, il y
+  // est amené visuellement avant l'annonce, pour ne jamais réafficher
+  // une photo qui ne correspond pas à sa case.
+  await forceOutcomeArrival(outcomeToAward);
   const realCat = tiles[currentIndex].catKey;
   // Le plafond de reversement continue de calculer et suivre le
   // pourcentage payé exactement comme avant (mêmes 50%, même formule),
@@ -2285,6 +2494,7 @@ function claimCurrentLot(){
   if(undoBtn) undoBtn.hidden = false;
   // Un lot gardé épuise le tour : plus aucun lancer sur cette mise.
   rollsUsed = rollsAllowed;
+  if(winBtn) winBtn.disabled = true;
   validate.disabled = true;
 }
 
