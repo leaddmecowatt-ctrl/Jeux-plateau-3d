@@ -694,7 +694,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
    plateau "terne" à côté de la photo vive qui l'entoure maintenant.
    Exposure remontée pour que le plateau garde du punch. */
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.35;
+renderer.toneMappingExposure = 1.45;
 
 const scene = new THREE.Scene();
 
@@ -867,9 +867,16 @@ controls.addEventListener('end', ()=>{
 if(hint3d){ setTimeout(()=>{ hint3d.style.opacity = '0'; }, 5000); }
 
 /* ---------- Lumières : ambiance "roue de la fortune" dorée ---------- */
-scene.add(new THREE.HemisphereLight(0xffdca0, 0x0a0805, 0.55));
+scene.add(new THREE.HemisphereLight(0xffdca0, 0x0a0805, 0.68));
 
-const key = new THREE.DirectionalLight(0xfff2df, 1.05);
+/* Petit projecteur chaud au-dessus du centre du plateau : la légende
+   des lots (photos + texte) doit rester bien lisible, pas juste
+   éclairée par la lumière ambiante générale. */
+const centerSpot = new THREE.PointLight(0xffe9c2, 0.7, 9, 2);
+centerSpot.position.set(0, 3.2, 0);
+scene.add(centerSpot);
+
+const key = new THREE.DirectionalLight(0xfff2df, 1.15);
 key.position.set(4.2,7,3.4);
 key.castShadow = true;
 key.shadow.mapSize.set(1024,1024);
@@ -1030,7 +1037,7 @@ function makeCenterPlateTexture(){
   // n'importe quel fond de photo, sans panneau derrière
   ctx.font='700 '+(size*0.028)+'px Arial,Helvetica,sans-serif';
   ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = size*0.012;
-  ctx.fillStyle = '#fff';
+  ctx.fillStyle = GOLD_BRIGHT;
   ctx.fillText('★ TOUS LES LOTS À GAGNER ★', size/2, size*0.235);
   ctx.shadowBlur = 0;
 
@@ -1064,7 +1071,7 @@ function makeCenterPlateTexture(){
     ctx.beginPath(); ctx.arc(bx,badgeY,badgeR,0,Math.PI*2); ctx.stroke();
     ctx.textAlign='left'; ctx.textBaseline='middle';
     ctx.shadowColor = 'rgba(0,0,0,.9)'; ctx.shadowBlur = size*0.008;
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = GOLD_BRIGHT;
     ctx.font='800 '+(size*0.024)+'px Arial,Helvetica,sans-serif';
     ctx.fillText(b.title, bx+badgeR*1.5, badgeY+size*0.001);
     ctx.shadowBlur = 0;
@@ -1125,8 +1132,8 @@ function makeCenterPlateTexture(){
     // ombre sombre pour rester lisible sans fond plein derrière
     const textX = dotX + dotR*1.5;
     ctx.textAlign='left'; ctx.textBaseline='middle';
-    ctx.shadowColor = 'rgba(0,0,0,.9)'; ctx.shadowBlur = size*0.012;
-    ctx.fillStyle = '#fff';
+    ctx.shadowColor = 'rgba(0,0,0,.9)'; ctx.shadowBlur = size*0.014;
+    ctx.fillStyle = GOLD_BRIGHT;
     ctx.font='800 '+(rh*0.32)+'px Arial,Helvetica,sans-serif';
     ctx.fillText(CATS[r.catKey].label, textX, y+rh*0.52);
     ctx.shadowBlur = 0;
