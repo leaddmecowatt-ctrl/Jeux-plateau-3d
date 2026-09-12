@@ -914,12 +914,12 @@ function perimeterPosAt(u){ // u in [0,1)
    resté transparent) pour que la liste reste lisible par-dessus
    n'importe quelle photo de fond. */
 const CENTER_LEGEND_ROWS = [
-  {swatch:'bronze', icon:'🎴', title:'Pioche du Prof. Chen', sub:'~0,68€ garanti'},
-  {swatch:'blue',   icon:'📦', title:'Booster du Marchand',  sub:'8€'},
-  {swatch:'red',    icon:'🧭', title:'Zone Safari',          sub:'~7,20€'},
-  {swatch:'gold',   icon:'⭐', title:'Duopack → ETB 30 ans', sub:'20€ à 300€'},
-  {swatch:'purple', icon:'❓', title:'Chance',               sub:'Tirage surprise'},
-  {swatch:'green',  icon:'🎁', title:'Caisse Communautaire', sub:'Tirage surprise'},
+  {swatch:'bronze', catKey:'commune',     icon:'🎴', title:'Pioche du Prof. Chen', sub:'~0,68€ garanti'},
+  {swatch:'blue',   catKey:'booster8',    icon:'📦', title:'Booster du Marchand',  sub:'8€'},
+  {swatch:'red',    catKey:'alternative', icon:'🧭', title:'Zone Safari',          sub:'~7,20€'},
+  {swatch:'gold',   catKey:'jackpot300',  icon:'⭐', title:'Duopack → ETB 30 ans', sub:'20€ à 300€'},
+  {swatch:'purple', catKey:null,          icon:'❓', title:'Chance',               sub:'Tirage surprise'},
+  {swatch:'green',  catKey:null,          icon:'🎁', title:'Caisse Communautaire', sub:'Tirage surprise'},
 ];
 function makeCenterPlateTexture(){
   const size = 900;
@@ -969,32 +969,77 @@ function makeCenterPlateTexture(){
     ctx.fillRect(size/2 - stripeW/2, stripeY + d*stripeH, stripeW, stripeH);
   });
 
-  // une ligne par catégorie réelle du plateau (couleur / icône / nom / valeur)
-  const rowsTop = size*0.315, rowH = size*0.093, rowW = size*0.84, rowX = size*0.08;
+  // une ligne par catégorie réelle du plateau : bandeau teinté + barre
+  // d'accent + médaillon (vraie photo du lot quand on en a une) +
+  // lueur colorée — pour retrouver le côté vif/coloré du visuel de
+  // référence au lieu de lignes uniformément grises.
+  const rowsTop = size*0.318, rowH = size*0.097, rowW = size*0.85, rowX = size*0.075;
   CENTER_LEGEND_ROWS.forEach((r,i)=>{
     const y = rowsTop + i*rowH;
+    const rh = rowH*0.82;
     const color = SWATCH_COLORS[r.swatch];
 
-    roundRectPath(ctx, rowX, y, rowW, rowH*0.8, rowH*0.18);
-    ctx.fillStyle = 'rgba(255,255,255,.05)';
-    ctx.fill();
-    ctx.lineWidth = size*0.0022; ctx.strokeStyle = 'rgba(255,255,255,.1)';
+    // bandeau teinté (dégradé de la couleur de la catégorie vers le fond sombre)
+    ctx.save();
+    roundRectPath(ctx, rowX, y, rowW, rh, rh*0.22);
+    ctx.clip();
+    const rowGrad = ctx.createLinearGradient(rowX,0,rowX+rowW,0);
+    rowGrad.addColorStop(0, color+'55');
+    rowGrad.addColorStop(0.35, color+'1c');
+    rowGrad.addColorStop(1, 'rgba(255,255,255,.02)');
+    ctx.fillStyle = rowGrad;
+    ctx.fillRect(rowX, y, rowW, rh);
+    ctx.restore();
+    roundRectPath(ctx, rowX, y, rowW, rh, rh*0.22);
+    ctx.lineWidth = size*0.0028; ctx.strokeStyle = color+'99';
     ctx.stroke();
-
-    const dotR = rowH*0.3, dotX = rowX + rowH*0.42, dotY = y + rowH*0.4;
-    ctx.beginPath(); ctx.arc(dotX,dotY,dotR,0,Math.PI*2);
-    ctx.fillStyle = color; ctx.fill();
-    ctx.lineWidth = size*0.003; ctx.strokeStyle = 'rgba(0,0,0,.4)'; ctx.stroke();
-    ctx.font = (dotR*1.15)+'px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(r.icon, dotX, dotY+dotR*0.05);
-
-    ctx.textAlign='left';
-    ctx.fillStyle = '#fff';
-    ctx.font='800 '+(rowH*0.29)+'px Arial,Helvetica,sans-serif';
-    ctx.fillText(r.title, dotX+dotR*1.55, y+rowH*0.32);
-    ctx.font='600 '+(rowH*0.23)+'px Arial,Helvetica,sans-serif';
+    // barre d'accent pleine couleur sur le bord gauche
+    ctx.save();
+    roundRectPath(ctx, rowX, y, rowW, rh, rh*0.22);
+    ctx.clip();
     ctx.fillStyle = color;
-    ctx.fillText(r.sub, dotX+dotR*1.55, y+rowH*0.6);
+    ctx.fillRect(rowX, y, rh*0.16, rh);
+    ctx.restore();
+
+    // médaillon : vraie photo du lot si dispo, sinon icône dans un
+    // rond de la couleur de la catégorie — avec halo lumineux
+    const dotR = rh*0.38, dotX = rowX + rh*0.66, dotY = y + rh*0.5;
+    ctx.save();
+    ctx.shadowColor = color; ctx.shadowBlur = size*0.022;
+    ctx.beginPath(); ctx.arc(dotX,dotY,dotR,0,Math.PI*2);
+    ctx.fillStyle = '#0c0f16'; ctx.fill();
+    ctx.restore();
+    const img = r.catKey && LOT_IMAGES[r.catKey];
+    if(img){
+      ctx.save();
+      ctx.beginPath(); ctx.arc(dotX,dotY,dotR*0.88,0,Math.PI*2); ctx.clip();
+      const iw=img.width, ih=img.height, side=Math.min(iw,ih);
+      ctx.drawImage(img,(iw-side)/2,(ih-side)/2,side,side, dotX-dotR*0.88,dotY-dotR*0.88,dotR*1.76,dotR*1.76);
+      ctx.restore();
+    } else {
+      ctx.font = (dotR*1.25)+'px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(r.icon, dotX, dotY+dotR*0.05);
+    }
+    ctx.lineWidth = size*0.0055; ctx.strokeStyle = color;
+    ctx.beginPath(); ctx.arc(dotX,dotY,dotR,0,Math.PI*2); ctx.stroke();
+
+    // titre + valeur (badge coloré) à droite du médaillon
+    const textX = dotX + dotR*1.5;
+    ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+    ctx.fillStyle = '#fff';
+    ctx.font='800 '+(rh*0.32)+'px Arial,Helvetica,sans-serif';
+    ctx.fillText(r.title, textX, y+rh*0.4);
+
+    ctx.font='800 '+(rh*0.24)+'px Arial,Helvetica,sans-serif';
+    const subW = ctx.measureText(r.sub).width;
+    const badgePad = rh*0.14;
+    roundRectPath(ctx, textX, y+rh*0.5, subW+badgePad*2, rh*0.36, rh*0.12);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.fillStyle = '#0a0d14';
+    ctx.textBaseline='middle';
+    ctx.fillText(r.sub, textX+badgePad, y+rh*0.5+rh*0.18);
+    ctx.textBaseline='alphabetic';
   });
 
   ctx.textAlign='center';
