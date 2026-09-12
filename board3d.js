@@ -680,6 +680,19 @@ function makeStudioBackdrop(){
    fond de la page (photo derrière le plateau) touche directement
    les cases, sans rectangle noir tout autour. */
 
+/* Environnement de reflets pour l'or (bordures, cases, ornements) :
+   sans lui, le métal ne réagit qu'aux lumières ponctuelles et reste
+   plat/mat quel que soit son "metalness". On réutilise le dégradé
+   studio doré/noir déjà dessiné ci-dessus comme carte équirectangulaire
+   — même ambiance que le plateau, aucun fichier HDRI à charger. */
+{
+  const pmremGenerator = new THREE.PMREMGenerator(renderer);
+  pmremGenerator.compileEquirectangularShader();
+  const envRT = pmremGenerator.fromEquirectangular(makeStudioBackdrop());
+  scene.environment = envRT.texture;
+  pmremGenerator.dispose();
+}
+
 const BASE_FOV = 40;
 const camera = new THREE.PerspectiveCamera(BASE_FOV,1,0.1,100);
 camera.position.set(0,13.5,11);
@@ -1038,8 +1051,8 @@ const MOTION = {
    liseré noir en retrait, rivets aux coins) — un seul jeu d'objets
    réutilisé partout, pour rester léger malgré le surcroît de détail. */
 const tileGoldMat = new THREE.MeshStandardMaterial({
-  color:new THREE.Color(GOLD), roughness:.32, metalness:.78,
-  emissive:new THREE.Color(GOLD), emissiveIntensity:.16
+  color:new THREE.Color(GOLD), roughness:.2, metalness:.9,
+  emissive:new THREE.Color(GOLD), emissiveIntensity:.12
 });
 const tileBezelMat = new THREE.MeshStandardMaterial({color:0x0a0a0a, roughness:.5, metalness:.25});
 const tileCollarGeo = new THREE.BoxGeometry(TILE+0.09,0.04,TILE+0.09);
