@@ -906,61 +906,101 @@ function perimeterPosAt(u){ // u in [0,1)
   return [x0+(x1-x0)*lp, z0+(z1-z0)*lp];
 }
 
-/* ---------- Plaque centrale "PIKAJACKPOT" ---------- */
+/* ---------- Plaque centrale "PIKAJACKPOT" + légende des lots ----------
+   Reprend le même esprit que le visuel promotionnel "TOUS LES LOTS À
+   GAGNER" : une carte sombre à bordure dorée, listant chaque
+   catégorie réelle du plateau (couleur, icône, nom, valeur). Ce
+   panneau est volontairement opaque (contrairement au reste du sol
+   resté transparent) pour que la liste reste lisible par-dessus
+   n'importe quelle photo de fond. */
+const CENTER_LEGEND_ROWS = [
+  {swatch:'bronze', icon:'🎴', title:'Pioche du Prof. Chen', sub:'~0,68€ garanti'},
+  {swatch:'blue',   icon:'📦', title:'Booster du Marchand',  sub:'8€'},
+  {swatch:'red',    icon:'🧭', title:'Zone Safari',          sub:'~7,20€'},
+  {swatch:'gold',   icon:'⭐', title:'Duopack → ETB 30 ans', sub:'20€ à 300€'},
+  {swatch:'purple', icon:'❓', title:'Chance',               sub:'Tirage surprise'},
+  {swatch:'green',  icon:'🎁', title:'Caisse Communautaire', sub:'Tirage surprise'},
+];
 function makeCenterPlateTexture(){
-  const size = 640;
+  const size = 900;
   const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
   const ctx = cvs.getContext('2d');
-  // Pas de fond du tout, pas même un voile discret : le sol du
-  // plateau reste entièrement transparent jusqu'au centre, la photo
-  // derrière doit se voir sans aucune couche. La lisibilité du texte
-  // vient uniquement de son ombre portée (plus bas), pas d'un fond.
 
-  // anneaux dorés concentriques façon roue — ombre portée sombre pour
-  // rester lisibles quel que soit ce qui se voit derrière (photo)
-  ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = size*0.01;
-  for(let i=0;i<3;i++){
-    ctx.beginPath(); ctx.arc(size/2,size/2,size*(0.46-i*0.07),0,Math.PI*2);
-    ctx.lineWidth = size*0.012; ctx.strokeStyle = i===1?GOLD_BRIGHT:GOLD; ctx.globalAlpha=0.85-i*0.15;
-    ctx.stroke();
-  }
-  ctx.globalAlpha=1; ctx.shadowBlur=0;
+  // carte de fond sombre à bordure dorée, façon "carte des lots"
+  const pad = size*0.045;
+  roundRectPath(ctx, pad, pad, size-2*pad, size-2*pad, size*0.06);
+  const bgGrad = ctx.createLinearGradient(0,pad,0,size-pad);
+  bgGrad.addColorStop(0,'#152238'); bgGrad.addColorStop(1,'#0a1220');
+  ctx.fillStyle = bgGrad;
+  ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = size*0.03;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = size*0.008; ctx.strokeStyle = GOLD;
+  ctx.stroke();
+  roundRectPath(ctx, pad+size*0.014, pad+size*0.014, size-2*pad-size*0.028, size-2*pad-size*0.028, size*0.05);
+  ctx.lineWidth = size*0.003; ctx.strokeStyle = 'rgba(233,195,74,.5)';
+  ctx.stroke();
 
-  // mini Pokeball classique rouge/blanc au-dessus du texte — ombre
-  // sombre pour se détacher de n'importe quel fond derrière
-  const pbY = size*0.30, pbR = size*0.075;
-  ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = size*0.015;
+  // mini Pokeball + PIKAJACKPOT compact en haut de la carte
+  const pbY = size*0.115, pbR = size*0.04;
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR,Math.PI,0); ctx.fillStyle='#f5484f'; ctx.fill();
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR,0,Math.PI); ctx.fillStyle='#f6fbff'; ctx.fill();
-  ctx.shadowBlur = 0;
   ctx.fillStyle='#12283f'; ctx.fillRect(size/2-pbR,pbY-pbR*0.09,pbR*2,pbR*0.18);
   ctx.lineWidth=pbR*0.09; ctx.strokeStyle='#12283f';
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR,0,Math.PI*2); ctx.stroke();
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR*0.34,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill(); ctx.stroke();
 
-  // texte PIKAJACKPOT — contour sombre systématique (pas juste une
-  // lueur dorée) pour rester lisible même sur une photo très claire
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.font='900 '+(size*0.108)+'px Arial,Helvetica,sans-serif';
-  ctx.lineJoin='round'; ctx.lineWidth=size*0.014; ctx.strokeStyle='rgba(0,0,0,.8)';
-  ctx.save();
-  ctx.translate(size/2, size*0.53);
-  ctx.strokeText('PIKA', -size*0.001, -size*0.06);
-  ctx.strokeText('JACKPOT', 0, size*0.075);
-  ctx.shadowColor = 'rgba(255,210,110,.9)'; ctx.shadowBlur = size*0.02;
+  ctx.font='900 '+(size*0.05)+'px Arial,Helvetica,sans-serif';
+  ctx.shadowColor='rgba(255,210,110,.7)'; ctx.shadowBlur=size*0.01;
   ctx.fillStyle = GOLD_BRIGHT;
-  ctx.fillText('PIKA', -size*0.001, -size*0.06);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText('JACKPOT', 0, size*0.075);
-  ctx.restore();
+  ctx.fillText('PIKAJACKPOT', size/2, size*0.185);
   ctx.shadowBlur = 0;
 
-  // liseré tricolore (clin d'oeil Pokémon) sous le texte
-  const stripeY = size*0.66, stripeW = size*0.42, stripeH = size*0.018;
+  // en-tête de la légende
+  ctx.font='700 '+(size*0.028)+'px Arial,Helvetica,sans-serif';
+  ctx.fillStyle = '#fff';
+  ctx.fillText('★ TOUS LES LOTS À GAGNER ★', size/2, size*0.235);
+
+  // liseré tricolore (clin d'oeil Pokémon)
+  const stripeY = size*0.265, stripeW = size*0.3, stripeH = size*0.012;
   [[-1,'#1a56db'],[0,'#ffffff'],[1,'#e0323f']].forEach(([d,c])=>{
     ctx.fillStyle = c;
     ctx.fillRect(size/2 - stripeW/2, stripeY + d*stripeH, stripeW, stripeH);
   });
+
+  // une ligne par catégorie réelle du plateau (couleur / icône / nom / valeur)
+  const rowsTop = size*0.315, rowH = size*0.093, rowW = size*0.84, rowX = size*0.08;
+  CENTER_LEGEND_ROWS.forEach((r,i)=>{
+    const y = rowsTop + i*rowH;
+    const color = SWATCH_COLORS[r.swatch];
+
+    roundRectPath(ctx, rowX, y, rowW, rowH*0.8, rowH*0.18);
+    ctx.fillStyle = 'rgba(255,255,255,.05)';
+    ctx.fill();
+    ctx.lineWidth = size*0.0022; ctx.strokeStyle = 'rgba(255,255,255,.1)';
+    ctx.stroke();
+
+    const dotR = rowH*0.3, dotX = rowX + rowH*0.42, dotY = y + rowH*0.4;
+    ctx.beginPath(); ctx.arc(dotX,dotY,dotR,0,Math.PI*2);
+    ctx.fillStyle = color; ctx.fill();
+    ctx.lineWidth = size*0.003; ctx.strokeStyle = 'rgba(0,0,0,.4)'; ctx.stroke();
+    ctx.font = (dotR*1.15)+'px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(r.icon, dotX, dotY+dotR*0.05);
+
+    ctx.textAlign='left';
+    ctx.fillStyle = '#fff';
+    ctx.font='800 '+(rowH*0.29)+'px Arial,Helvetica,sans-serif';
+    ctx.fillText(r.title, dotX+dotR*1.55, y+rowH*0.32);
+    ctx.font='600 '+(rowH*0.23)+'px Arial,Helvetica,sans-serif';
+    ctx.fillStyle = color;
+    ctx.fillText(r.sub, dotX+dotR*1.55, y+rowH*0.6);
+  });
+
+  ctx.textAlign='center';
+  ctx.font='italic 700 '+(size*0.03)+'px Georgia, serif';
+  ctx.fillStyle = GOLD_BRIGHT;
+  ctx.fillText('Bonne chance !', size/2, size*0.945);
 
   const tex = new THREE.CanvasTexture(cvs);
   tex.colorSpace = THREE.SRGBColorSpace;
