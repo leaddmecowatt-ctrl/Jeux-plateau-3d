@@ -925,21 +925,11 @@ function makeCenterPlateTexture(){
   const size = 900;
   const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
   const ctx = cvs.getContext('2d');
-
-  // carte de fond sombre à bordure dorée, façon "carte des lots"
-  const pad = size*0.045;
-  roundRectPath(ctx, pad, pad, size-2*pad, size-2*pad, size*0.06);
-  const bgGrad = ctx.createLinearGradient(0,pad,0,size-pad);
-  bgGrad.addColorStop(0,'#152238'); bgGrad.addColorStop(1,'#0a1220');
-  ctx.fillStyle = bgGrad;
-  ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = size*0.03;
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.lineWidth = size*0.008; ctx.strokeStyle = GOLD;
-  ctx.stroke();
-  roundRectPath(ctx, pad+size*0.014, pad+size*0.014, size-2*pad-size*0.028, size-2*pad-size*0.028, size*0.05);
-  ctx.lineWidth = size*0.003; ctx.strokeStyle = 'rgba(233,195,74,.5)';
-  ctx.stroke();
+  // Pas de fond opaque : comme sur la version d'origine, le sol du
+  // plateau reste transparent jusqu'au centre, la photo derrière doit
+  // se voir directement. La lisibilité vient des ombres portées
+  // sombres derrière chaque élément (texte, médaillons, bandeaux),
+  // pas d'un panneau plein.
 
   // mini Pokeball + PIKAJACKPOT compact en haut de la carte
   const pbY = size*0.115, pbR = size*0.04;
@@ -957,10 +947,13 @@ function makeCenterPlateTexture(){
   ctx.fillText('PIKAJACKPOT', size/2, size*0.185);
   ctx.shadowBlur = 0;
 
-  // en-tête de la légende
+  // en-tête de la légende — ombre sombre pour rester lisible sur
+  // n'importe quel fond de photo, sans panneau derrière
   ctx.font='700 '+(size*0.028)+'px Arial,Helvetica,sans-serif';
+  ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = size*0.012;
   ctx.fillStyle = '#fff';
   ctx.fillText('★ TOUS LES LOTS À GAGNER ★', size/2, size*0.235);
+  ctx.shadowBlur = 0;
 
   // liseré tricolore (clin d'oeil Pokémon)
   const stripeY = size*0.265, stripeW = size*0.3, stripeH = size*0.012;
@@ -979,26 +972,21 @@ function makeCenterPlateTexture(){
     const rh = rowH*0.82;
     const color = SWATCH_COLORS[r.swatch];
 
-    // bandeau teinté (dégradé de la couleur de la catégorie vers le fond sombre)
+    // pas de fond plein sur la ligne : juste un contour lumineux de la
+    // couleur de la catégorie (avec une ombre sombre pour se détacher
+    // de la photo derrière) + une barre d'accent fine sur le bord
+    // gauche — le sol reste transparent jusqu'à la photo.
     ctx.save();
     roundRectPath(ctx, rowX, y, rowW, rh, rh*0.22);
-    ctx.clip();
-    const rowGrad = ctx.createLinearGradient(rowX,0,rowX+rowW,0);
-    rowGrad.addColorStop(0, color+'55');
-    rowGrad.addColorStop(0.35, color+'1c');
-    rowGrad.addColorStop(1, 'rgba(255,255,255,.02)');
-    ctx.fillStyle = rowGrad;
-    ctx.fillRect(rowX, y, rowW, rh);
-    ctx.restore();
-    roundRectPath(ctx, rowX, y, rowW, rh, rh*0.22);
-    ctx.lineWidth = size*0.0028; ctx.strokeStyle = color+'99';
+    ctx.shadowColor = 'rgba(0,0,0,.8)'; ctx.shadowBlur = size*0.014;
+    ctx.lineWidth = size*0.004; ctx.strokeStyle = color;
     ctx.stroke();
-    // barre d'accent pleine couleur sur le bord gauche
+    ctx.restore();
     ctx.save();
     roundRectPath(ctx, rowX, y, rowW, rh, rh*0.22);
     ctx.clip();
     ctx.fillStyle = color;
-    ctx.fillRect(rowX, y, rh*0.16, rh);
+    ctx.fillRect(rowX, y, rh*0.14, rh);
     ctx.restore();
 
     // médaillon : vraie photo du lot si dispo, sinon icône dans un
@@ -1024,12 +1012,15 @@ function makeCenterPlateTexture(){
     ctx.beginPath(); ctx.arc(dotX,dotY,dotR,0,Math.PI*2); ctx.stroke();
 
     // titre du lot à droite du médaillon (pas de prix affiché : le
-    // plateau doit rester une carte "quoi gagner", pas un tarif)
+    // plateau doit rester une carte "quoi gagner", pas un tarif) —
+    // ombre sombre pour rester lisible sans fond plein derrière
     const textX = dotX + dotR*1.5;
     ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.shadowColor = 'rgba(0,0,0,.9)'; ctx.shadowBlur = size*0.012;
     ctx.fillStyle = '#fff';
     ctx.font='800 '+(rh*0.34)+'px Arial,Helvetica,sans-serif';
     ctx.fillText(r.title, textX, y+rh*0.52);
+    ctx.shadowBlur = 0;
     ctx.textBaseline='alphabetic';
   });
 
