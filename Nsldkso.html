@@ -65,36 +65,19 @@ body{overflow:hidden;color:#fff}
   pointer-events:none;
 }
 
-/* Fumée qui s'échappe en continu du coin de la gueule du dragon et
-   monte droit vers le haut (repérée empiriquement sur le rendu réel,
-   pas sur la photo brute — le zoom(1.05) appliqué au fond décale la
-   position d'origine). Plusieurs volutes décalées dans le temps :
-   il y en a toujours au moins une visible, pour un vrai panache
-   continu plutôt qu'une bouffée isolée qui apparaît/disparaît. */
-.dragon-breath{
-  position:absolute; left:90.2vw; top:38.6vh;
-  width:0; height:0; z-index:1; pointer-events:none;
+/* Fumée qui s'échappe en continu du coin de la gueule du dragon
+   (repérée empiriquement sur le rendu réel, pas sur la photo brute —
+   le zoom(1.05) appliqué au fond décale la position d'origine).
+   Dessinée sur un <canvas> par un petit système de particules (voir
+   script plus bas) plutôt qu'en CSS pur : des volutes identiques qui
+   suivent toutes la même trajectoire ne lisent jamais comme de la
+   vraie fumée — il faut de l'irrégularité (taille/vitesse/dérive/
+   rotation qui varient par particule) pour un effet crédible. */
+#dragonSmoke{
+  position:absolute; left:calc(90.2vw - 110px); top:calc(38.6vh - 300px);
+  width:220px; height:320px; z-index:1; pointer-events:none;
 }
-.smoke-wisp{
-  position:absolute; left:0; top:0;
-  width:34px; height:34px; margin-left:-17px; margin-top:-17px;
-  border-radius:50%;
-  background:radial-gradient(circle, rgba(232,238,244,.92) 0%, rgba(210,222,232,.5) 55%, rgba(210,222,232,0) 80%);
-  filter:blur(3px);
-  opacity:0;
-  animation:smokeRise 4.4s ease-out infinite;
-}
-.smoke-wisp.w2{ animation-delay:1.1s; }
-.smoke-wisp.w3{ animation-delay:2.2s; }
-.smoke-wisp.w4{ animation-delay:3.3s; }
-@keyframes smokeRise{
-  0%{   opacity:0;   transform:translate(0,0)      scale(.4); }
-  10%{  opacity:.85; transform:translate(1px,-16px) scale(.65); }
-  40%{  opacity:.6;  transform:translate(-5px,-72px) scale(1.2); }
-  70%{  opacity:.3;  transform:translate(6px,-132px) scale(1.8); }
-  100%{ opacity:0;   transform:translate(2px,-190px) scale(2.3); }
-}
-@media (prefers-reduced-motion: reduce){ .dragon-breath{ display:none; } }
+@media (prefers-reduced-motion: reduce){ #dragonSmoke{ display:none; } }
 
 /* HUD haut : petit fil d'Ariane doré en haut, puis une bannière de
    destination bien plus grande et clairement séparée en dessous
@@ -563,12 +546,7 @@ if(new URLSearchParams(location.search).get('view')==='display'){
 }
 </script>
 <div id="app">
-  <div class="dragon-breath" aria-hidden="true">
-    <div class="smoke-wisp w1"></div>
-    <div class="smoke-wisp w2"></div>
-    <div class="smoke-wisp w3"></div>
-    <div class="smoke-wisp w4"></div>
-  </div>
+  <canvas id="dragonSmoke" width="220" height="320" aria-hidden="true"></canvas>
   <div class="top-hud">
     <div class="brand">★ PIKAJACKPOT ★</div>
     <div class="place-banner-wrap"><div class="place-banner" id="placeBanner">Départ</div></div>
@@ -702,6 +680,104 @@ if(new URLSearchParams(location.search).get('view')==='display'){
   </div>
 </div>
 
+<script>
+/* Fumée du dragon : petit système de particules sur canvas 2D. Chaque
+   volute est indépendante (taille, vitesse de montée, dérive latérale,
+   rotation, durée de vie tous randomisés) et se déforme légèrement au
+   fil de sa vie — c'est cette irrégularité qui fait la différence avec
+   des blobs CSS identiques, qui ne lisent jamais comme de la fumée. */
+(function(){
+  var canvas = document.getElementById('dragonSmoke');
+  if(!canvas || !canvas.getContext) return;
+  if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  var ctx = canvas.getContext('2d');
+  var W = canvas.width, H = canvas.height;
+  var originX = W/2, originY = H - 24;
+  // Direction générale du souffle : vers le haut et légèrement de côté,
+  // façon jet qui jaillit du coin de la gueule plutôt qu'un nuage qui
+  // stagne sur place.
+  var dirAngle = -1.95; // radians (~ -112°, haut + vers la gauche)
+  var dirX = Math.cos(dirAngle), dirY = Math.sin(dirAngle);
+  var particles = [];
+  function spawn(){
+    var speed = 70 + Math.random()*55;
+    particles.push({
+      x: originX + (Math.random()-0.5)*8,
+      y: originY + (Math.random()-0.5)*6,
+      vx: dirX*speed + (Math.random()-0.5)*10,
+      vy: dirY*speed + (Math.random()-0.5)*10,
+      wobble: Math.random()*Math.PI*2,
+      wobbleSpeed: 1.4 + Math.random()*1.6,
+      wobbleAmp: 14 + Math.random()*16,
+      size: 6 + Math.random()*5,
+      maxSize: 26 + Math.random()*20,
+      life: 0,
+      maxLife: 1.6 + Math.random()*1.1,
+      rot: dirAngle + Math.PI/2,
+      rotSpeed: (Math.random()-0.5)*1.2,
+      opacity: 0.7 + Math.random()*0.28,
+      lobe1: 0.25 + Math.random()*0.25,
+      lobe2: 0.2 + Math.random()*0.25
+    });
+  }
+  var lastSpawn = 0;
+  function frame(now){
+    requestAnimationFrame(frame);
+    var dt = Math.min(0.05, (now - (frame._t || now)) / 1000);
+    frame._t = now;
+    if(now - lastSpawn > 40 + Math.random()*40){
+      spawn();
+      lastSpawn = now;
+    }
+    ctx.clearRect(0, 0, W, H);
+    for(var i = particles.length - 1; i >= 0; i--){
+      var p = particles[i];
+      p.life += dt;
+      if(p.life >= p.maxLife){ particles.splice(i, 1); continue; }
+      var t = p.life / p.maxLife;
+      p.wobble += p.wobbleSpeed * dt;
+      var lateral = Math.sin(p.wobble) * p.wobbleAmp * dt;
+      p.x += p.vx * dt - dirY*lateral;
+      p.y += p.vy * dt + dirX*lateral;
+      // décélération franche : le jet part vite puis s'essouffle, comme
+      // un vrai souffle qui perd sa pression en se dispersant dans l'air
+      // (0.9 => vitesse divisée par ~2 en 0.8s, tout en parcourant une
+      // vraie distance visible avant de se disperser)
+      var decay = 1 - dt * 0.9;
+      p.vx *= decay; p.vy *= decay;
+      p.rot += p.rotSpeed * dt;
+      var size = p.size + (p.maxSize - p.size) * Math.min(1, t*1.4);
+      var fadeIn = t < 0.1 ? t / 0.1 : 1;
+      var alpha = p.opacity * fadeIn * (1 - t) * (1 - t*0.4);
+      if(alpha <= 0.01) continue;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      var stretch = 1 + (1-t)*0.9; // volute étirée en début de vie, façon jet
+      var grad = ctx.createRadialGradient(0, 0, 0, 0, 0, size*stretch);
+      if(t < 0.35){
+        // base incandescente : lueur braise orangée au sortir de la gueule
+        var e = 1 - t/0.35;
+        grad.addColorStop(0, 'rgba(255,150,70,' + (alpha*0.8*e + alpha*0.55*(1-e)) + ')');
+        grad.addColorStop(0.5, 'rgba(180,110,90,' + (alpha*0.5) + ')');
+        grad.addColorStop(1, 'rgba(90,80,82,0)');
+      } else {
+        grad.addColorStop(0, 'rgba(96,90,94,' + (alpha*0.85) + ')');
+        grad.addColorStop(0.55, 'rgba(78,74,78,' + (alpha*0.45) + ')');
+        grad.addColorStop(1, 'rgba(70,66,70,0)');
+      }
+      ctx.fillStyle = grad;
+      // trois lobes décalés, étirés dans l'axe du souffle : pas un simple
+      // rond qui gonfle sur place, mais une volute qui file puis se déchire
+      ctx.beginPath(); ctx.ellipse(0, 0, size*0.55, size*stretch, 0, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(size*p.lobe1*1.1, -size*0.5, size*0.42, size*0.7, 0.4, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(-size*p.lobe2*1.0, size*0.4, size*0.38, size*0.6, -0.35, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
 <script type="importmap">
 { "imports": { "three": "./vendor/three/three.module.min.js" } }
 </script>
