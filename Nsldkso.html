@@ -27,15 +27,15 @@ body{overflow:hidden;color:#fff}
   background-image:url("./assets/bg/dragon_sky.jpg");
   background-repeat:no-repeat;
   background-size:cover;
-  background-position:85% center;
+  background-position:center center;
   z-index:0;
   pointer-events:none;
-  animation:bgDrift 30s ease-in-out infinite alternate;
+  animation:bgDrift 22s ease-in-out infinite alternate;
 }
 @keyframes bgDrift{
-  0%{ transform:translate(-2.5%,-1.5%) scale(1.02); }
-  50%{ transform:translate(2.5%,1.5%) scale(1.04); }
-  100%{ transform:translate(-2.5%,-1.5%) scale(1.02); }
+  0%{ transform:translate(-3.5%,-2%) scale(1.03); }
+  50%{ transform:translate(3.5%,2%) scale(1.07); }
+  100%{ transform:translate(-3.5%,-2%) scale(1.03); }
 }
 @media (prefers-reduced-motion: reduce){
   #app::before{ animation:none; }
