@@ -867,7 +867,12 @@ controls.addEventListener('end', ()=>{
 if(hint3d){ setTimeout(()=>{ hint3d.style.opacity = '0'; }, 5000); }
 
 /* ---------- Lumières : ambiance "roue de la fortune" dorée ---------- */
-scene.add(new THREE.HemisphereLight(0xffdca0, 0x0a0805, 0.68));
+/* Le sol (couleur "ground") reprend une touche de bleu-violet nocturne
+   (au lieu d'un noir neutre) pour que les zones d'ombre du plateau
+   captent un peu de la teinte froide du ciel en arrière-plan — sans ça,
+   un plateau tout chaud posé sur un fond bleu-violet paraissait un peu
+   "posé par-dessus" plutôt qu'intégré à la scène. */
+scene.add(new THREE.HemisphereLight(0xffdca0, 0x141c33, 0.68));
 
 /* Petit projecteur chaud au-dessus du centre du plateau : la légende
    des lots (photos + texte) doit rester bien lisible, pas juste
@@ -891,8 +896,11 @@ rim.position.set(-5,4,-4);
 scene.add(rim);
 
 /* Fill light froide, opposée à la key light : débouche les zones
-   sombres du personnage (toon shading) sans les aplatir. */
-const fill = new THREE.DirectionalLight(0x9db8ff, 0.4);
+   sombres du personnage (toon shading) sans les aplatir, et fait aussi
+   ressortir un peu de bleu-violet sur le plateau — cohérent avec le
+   ciel nocturne de la photo de fond plutôt qu'un éclairage 100% chaud
+   qui ferait paraître le plateau posé par-dessus le décor. */
+const fill = new THREE.DirectionalLight(0x9db8ff, 0.6);
 fill.position.set(-4,2.5,3.2);
 scene.add(fill);
 

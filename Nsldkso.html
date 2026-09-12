@@ -65,29 +65,34 @@ body{overflow:hidden;color:#fff}
   pointer-events:none;
 }
 
-/* Souffle de buée qui s'échappe par bouffées de la gueule du dragon
-   (repérée empiriquement sur le rendu réel, pas sur la photo brute —
-   le zoom(1.05) appliqué au fond décale la position d'origine). Teinte
-   bleu-blanc froide (pas chaude comme le fond doré) pour bien se
-   détacher au lieu de se fondre dans les tons or de la scène. Z-index:1
-   et placé avant .main-row dans le DOM : au-dessus du voile de fond,
-   sous le plateau. */
+/* Fumée qui s'échappe en continu du coin de la gueule du dragon et
+   monte droit vers le haut (repérée empiriquement sur le rendu réel,
+   pas sur la photo brute — le zoom(1.05) appliqué au fond décale la
+   position d'origine). Plusieurs volutes décalées dans le temps :
+   il y en a toujours au moins une visible, pour un vrai panache
+   continu plutôt qu'une bouffée isolée qui apparaît/disparaît. */
 .dragon-breath{
-  position:absolute; left:91.9vw; top:34vh;
-  width:130px; height:90px; margin-left:-65px; margin-top:-45px;
-  z-index:1; pointer-events:none;
-  background:radial-gradient(ellipse at center, rgba(225,242,255,.95) 0%, rgba(200,230,255,.55) 45%, rgba(200,230,255,0) 75%);
-  filter:blur(5px);
-  opacity:0;
-  transform:scale(.4) translate(0,0);
-  animation:dragonBreath 6s ease-out infinite;
+  position:absolute; left:90.2vw; top:38.6vh;
+  width:0; height:0; z-index:1; pointer-events:none;
 }
-@keyframes dragonBreath{
-  0%,50%{ opacity:0; transform:scale(.3) translate(0,0); }
-  60%{ opacity:.85; transform:scale(.7) translate(-2%,-3%); }
-  68%{ opacity:.8;  transform:scale(.95) translate(-4%,-7%); }
-  85%{ opacity:.35; transform:scale(1.4) translate(-9%,-15%); }
-  100%{ opacity:0; transform:scale(1.9) translate(-15%,-24%); }
+.smoke-wisp{
+  position:absolute; left:0; top:0;
+  width:34px; height:34px; margin-left:-17px; margin-top:-17px;
+  border-radius:50%;
+  background:radial-gradient(circle, rgba(232,238,244,.92) 0%, rgba(210,222,232,.5) 55%, rgba(210,222,232,0) 80%);
+  filter:blur(3px);
+  opacity:0;
+  animation:smokeRise 4.4s ease-out infinite;
+}
+.smoke-wisp.w2{ animation-delay:1.1s; }
+.smoke-wisp.w3{ animation-delay:2.2s; }
+.smoke-wisp.w4{ animation-delay:3.3s; }
+@keyframes smokeRise{
+  0%{   opacity:0;   transform:translate(0,0)      scale(.4); }
+  10%{  opacity:.85; transform:translate(1px,-16px) scale(.65); }
+  40%{  opacity:.6;  transform:translate(-5px,-72px) scale(1.2); }
+  70%{  opacity:.3;  transform:translate(6px,-132px) scale(1.8); }
+  100%{ opacity:0;   transform:translate(2px,-190px) scale(2.3); }
 }
 @media (prefers-reduced-motion: reduce){ .dragon-breath{ display:none; } }
 
@@ -558,7 +563,12 @@ if(new URLSearchParams(location.search).get('view')==='display'){
 }
 </script>
 <div id="app">
-  <div class="dragon-breath" aria-hidden="true"></div>
+  <div class="dragon-breath" aria-hidden="true">
+    <div class="smoke-wisp w1"></div>
+    <div class="smoke-wisp w2"></div>
+    <div class="smoke-wisp w3"></div>
+    <div class="smoke-wisp w4"></div>
+  </div>
   <div class="top-hud">
     <div class="brand">★ PIKAJACKPOT ★</div>
     <div class="place-banner-wrap"><div class="place-banner" id="placeBanner">Départ</div></div>
