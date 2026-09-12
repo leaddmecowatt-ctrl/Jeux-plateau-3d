@@ -1413,9 +1413,12 @@ async function loadPlayerModel(player){
 
 const player = createPlayer();
 scene.add(player.root);
-loadPlayerModel(player).catch(err=>{
-  console.error('Chargement du personnage 3D échoué, le plateau continue sans lui :', err);
-});
+// Génération du personnage 3D désactivée sur demande : le pion reste
+// un groupe vide (aucun modèle chargé), le reste du jeu continue de
+// fonctionner normalement sans lui.
+// loadPlayerModel(player).catch(err=>{
+//   console.error('Chargement du personnage 3D échoué, le plateau continue sans lui :', err);
+// });
 
 /* ---------- État de jeu ---------- */
 let currentIndex = -1; // -1 = au départ, pas encore sur le plateau
