@@ -4,7 +4,6 @@ import { GLTFLoader } from './vendor/three/examples/jsm/loaders/GLTFLoader.js';
 import { EffectComposer } from './vendor/three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from './vendor/three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from './vendor/three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { BokehPass } from './vendor/three/examples/jsm/postprocessing/BokehPass.js';
 
 /* =========================================================================
    PIKAJACKPOT — plateau 40 cases en vraie 3D (WebGL / three.js)
@@ -778,17 +777,6 @@ const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(1,1), 0.55, 0.4, 0.82);
 composer.addPass(bloomPass);
-
-/* Profondeur de champ : désactivée en permanence (elle refait un rendu
-   de profondeur complet de la scène à chaque frame, un coût GPU inutile
-   tant qu'aucun flou n'est visible) et allumée seulement le temps d'un
-   "coup de projecteur" cinématique (cameraPunch ci-dessous) sur les gros
-   lots — EffectComposer route automatiquement vers l'écran la dernière
-   passe encore active, donc l'activer/désactiver à la volée ne demande
-   aucune autre plomberie. */
-const bokehPass = new BokehPass(scene, camera, { focus: 12, aperture: 0, maxblur: 0.012 });
-bokehPass.enabled = false;
-composer.addPass(bokehPass);
 
 /* Garde-fou anti-rognage des coins : au lieu d'un recul de caméra
    fixe (qui rapetissait tout le plateau en permanence, y compris de
@@ -2116,7 +2104,6 @@ function resize(){
   composer.setSize(w,h);
   camera.aspect = w/h;
   camera.updateProjectionMatrix();
-  bokehPass.uniforms['aspect'].value = camera.aspect;
 }
 window.addEventListener('resize',resize,{passive:true});
 window.addEventListener('orientationchange',()=>setTimeout(resize,150),{passive:true});
@@ -2453,53 +2440,42 @@ const easeInCubic  = x => x*x*x;
    jamais entrer en conflit avec OrbitControls (auto-rotation, zoom
    utilisateur en cours, etc.). L'intensité et la durée montent avec le
    niveau du lot (tier, 0-5 — voir TIER_LEVEL) : une case commune reste
-   un petit "tac" discret, un ETB/jackpot tape un vrai coup de projecteur
-   cinématique avec un souffle de profondeur de champ (bokehPass, sinon
-   désactivé en permanence pour ne rien coûter le reste du temps). */
+   un petit "tac" discret, un ETB/jackpot tape plus fort et plus
+   longtemps. (Un souffle de profondeur de champ avait été ajouté ici,
+   mais BokehPass refait un rendu de profondeur complet de la scène à
+   chaque frame tant qu'il reste dans la chaîne de composition, même
+   désactivé — retiré : sur le téléphone de l'utilisateur, le jeu était
+   devenu saccadé partout, pas seulement pendant l'effet.) */
 function cameraPunch(tier){
   if(reduceMotion) return;
   tier = tier || 0;
   const intensity = 1 + tier*0.32;
   const baseFov = camera.fov;
   const punchFov = baseFov*(1 - 0.065*intensity);
-  const useDof = tier >= 2;
-  const targetAperture = useDof ? 0.00085*intensity : 0;
   const start = performance.now();
   const outDur = 130, holdDur = 55+tier*22, inDur = 240+tier*55, total = outDur+holdDur+inDur;
   cameraPunchActive = true;
-  if(useDof){
-    bokehPass.uniforms['focus'].value = controls.target.distanceTo(camera.position);
-    bokehPass.enabled = true;
-  }
   function step(now){
     // Le timestamp reçu par le tout premier rAF peut être légèrement
     // antérieur au performance.now() lu juste avant de le programmer
     // (particularité des navigateurs) : sans ce clamp, "el" part parfois
-    // à quelques millisecondes négatives, ce qui fait dépasser -1..1 aux
-    // deux fonctions d'easing et produit un très bref flou/FOV inversé.
+    // à quelques millisecondes négatives, ce qui fait dépasser -1..1 à
+    // la fonction d'easing et produit un très bref FOV inversé.
     const el = Math.max(0, now-start);
     if(el>=total){
       camera.fov = baseFov; camera.updateProjectionMatrix();
-      if(useDof) bokehPass.uniforms['aperture'].value = 0;
-      bokehPass.enabled = false;
       cameraPunchActive = false;
       return;
     }
-    let fov, aperture;
+    let fov;
     if(el<outDur){
-      const p = easeOutCubic(el/outDur);
-      fov = baseFov + (punchFov-baseFov)*p;
-      aperture = targetAperture*p;
+      fov = baseFov + (punchFov-baseFov)*easeOutCubic(el/outDur);
     } else if(el<outDur+holdDur){
       fov = punchFov;
-      aperture = targetAperture;
     } else {
-      const p = easeInCubic((el-outDur-holdDur)/inDur);
-      fov = punchFov + (baseFov-punchFov)*p;
-      aperture = targetAperture*(1-p);
+      fov = punchFov + (baseFov-punchFov)*easeInCubic((el-outDur-holdDur)/inDur);
     }
     camera.fov = fov; camera.updateProjectionMatrix();
-    if(useDof) bokehPass.uniforms['aperture'].value = aperture;
     requestAnimationFrame(step);
   }
   requestAnimationFrame(step);

@@ -40,11 +40,8 @@ VENDOR_MODULES = [
     'vendor/three/examples/jsm/postprocessing/ShaderPass.js',
     'vendor/three/examples/jsm/postprocessing/EffectComposer.js',
     'vendor/three/examples/jsm/postprocessing/UnrealBloomPass.js',
-    'vendor/three/examples/jsm/postprocessing/BokehPass.js',
     'vendor/three/examples/jsm/shaders/CopyShader.js',
     'vendor/three/examples/jsm/shaders/LuminosityHighPassShader.js',
-    'vendor/three/examples/jsm/shaders/BokehShader.js',
-    'vendor/three/examples/jsm/environments/RoomEnvironment.js',
 ]
 ENTRY = 'board3d.js'
 THREE_CORE = 'vendor/three/three.module.min.js'
