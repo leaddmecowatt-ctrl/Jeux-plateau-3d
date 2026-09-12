@@ -65,31 +65,6 @@ body{overflow:hidden;color:#fff}
   pointer-events:none;
 }
 
-/* Épées légèrement électrifiées flottant autour du long serpent en
-   arrière-plan : silhouette acier (dégradé gris clair/blanc) + halo
-   bleu électrique qui grésille (opacité/flou du filtre qui varie de
-   façon irrégulière, jamais un simple pulse régulier). Purement
-   décoratif (au-dessus du fond, sous le plateau), donc pointer-events
-   coupé et figé si l'utilisateur préfère moins d'animations. */
-.electro-sword{
-  position:absolute; width:38px; height:auto; z-index:1; pointer-events:none;
-  filter:drop-shadow(0 0 5px rgba(120,210,255,.85)) drop-shadow(0 0 11px rgba(80,170,255,.55));
-  animation:swordFlicker 2.6s ease-in-out infinite;
-}
-.electro-sword.s1{ left:14vw;  top:9vh;  width:34px; transform:rotate(-18deg); animation-delay:0s; }
-.electro-sword.s2{ left:63vw;  top:6vh;  width:30px; transform:rotate(12deg);  animation-delay:.7s; }
-.electro-sword.s3{ left:8vw;   top:24vh; width:26px; transform:rotate(6deg);   animation-delay:1.4s; }
-.electro-sword.s4{ left:70vw;  top:20vh; width:36px; transform:rotate(-9deg);  animation-delay:.35s; }
-@keyframes swordFlicker{
-  0%, 100%{ filter:drop-shadow(0 0 5px rgba(120,210,255,.85)) drop-shadow(0 0 11px rgba(80,170,255,.55)); opacity:.92; }
-  8%{  filter:drop-shadow(0 0 2px rgba(120,210,255,.4))  drop-shadow(0 0 4px rgba(80,170,255,.25));  opacity:.7; }
-  22%{ filter:drop-shadow(0 0 8px rgba(160,225,255,1))   drop-shadow(0 0 18px rgba(90,180,255,.8));  opacity:1; }
-  45%{ filter:drop-shadow(0 0 5px rgba(120,210,255,.85)) drop-shadow(0 0 11px rgba(80,170,255,.55)); opacity:.9; }
-  61%{ filter:drop-shadow(0 0 3px rgba(120,210,255,.5))  drop-shadow(0 0 6px rgba(80,170,255,.3));   opacity:.75; }
-  78%{ filter:drop-shadow(0 0 9px rgba(160,225,255,1))   drop-shadow(0 0 20px rgba(90,180,255,.85)); opacity:1; }
-}
-@media (prefers-reduced-motion: reduce){ .electro-sword{ animation:none; opacity:.9; } }
-
 /* HUD haut : petit fil d'Ariane doré en haut, puis une bannière de
    destination bien plus grande et clairement séparée en dessous
    (avant, les deux se chevauchaient visuellement, illisibles). */
@@ -175,11 +150,9 @@ body{overflow:hidden;color:#fff}
 }
 @media (prefers-reduced-motion: reduce){ .fall-star{ display:none; } }
 
-/* Nuages blancs dessinés en CSS : désactivés à la demande — l'utilisateur
-   veut que ce soient les vrais nuages peints DANS la photo de fond qui
-   bougent (via le travelling bgDrift ci-dessus), pas des nuages en plus
-   qui ne collent pas au style de l'illustration. */
-.bg-clouds{display:none}
+/* Nuages blancs qui traversent lentement l'arrière-plan, derrière le
+   plateau — réactivés à la demande (après plusieurs essais d'animer
+   la photo elle-même, plus simple/lisible qu'un effet de fond complexe). */
 .cloud{
   position:absolute;width:180px;opacity:.5;
   filter:drop-shadow(0 0 7px rgba(255,226,122,.5));
@@ -557,32 +530,6 @@ if(new URLSearchParams(location.search).get('view')==='display'){
 }
 </script>
 <div id="app">
-  <svg class="electro-sword s1" viewBox="0 0 40 140" aria-hidden="true"><use href="#swordShape"/></svg>
-  <svg class="electro-sword s2" viewBox="0 0 40 140" aria-hidden="true"><use href="#swordShape"/></svg>
-  <svg class="electro-sword s3" viewBox="0 0 40 140" aria-hidden="true"><use href="#swordShape"/></svg>
-  <svg class="electro-sword s4" viewBox="0 0 40 140" aria-hidden="true"><use href="#swordShape"/></svg>
-  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-    <defs>
-      <linearGradient id="swordSteel" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0" stop-color="#7c8a96"/>
-        <stop offset=".22" stop-color="#f3fbff"/>
-        <stop offset=".5" stop-color="#c8d8e2"/>
-        <stop offset=".78" stop-color="#f3fbff"/>
-        <stop offset="1" stop-color="#7c8a96"/>
-      </linearGradient>
-      <linearGradient id="swordGold" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#ffe9a8"/>
-        <stop offset="1" stop-color="#c99a2e"/>
-      </linearGradient>
-      <g id="swordShape">
-        <polygon points="20,0 27,88 13,88" fill="url(#swordSteel)"/>
-        <rect x="19" y="6" width="2" height="80" fill="#eaf6ff" opacity=".8"/>
-        <rect x="6" y="88" width="28" height="7" rx="3" fill="url(#swordGold)"/>
-        <rect x="17" y="95" width="6" height="24" rx="2" fill="#5b3d1c"/>
-        <circle cx="20" cy="126" r="7" fill="url(#swordGold)"/>
-      </g>
-    </defs>
-  </svg>
   <div class="top-hud">
     <div class="brand">★ PIKAJACKPOT ★</div>
     <div class="place-banner-wrap"><div class="place-banner" id="placeBanner">Départ</div></div>
