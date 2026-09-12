@@ -23,15 +23,6 @@ body{overflow:hidden;color:#fff}
 #app::before{
   content:"";
   position:absolute;
-  /* Débordement RÉEL de 6% de chaque côté (pas un transform:scale
-     appliqué après coup) : le filtre de distorsion ci-dessous a besoin
-     de vrais pixels d'image au-delà du cadre visible pour aller y
-     puiser quand il déplace les pixels du bord. Un transform:scale
-     agrandit une image déjà "coupée" par le filtre — la couture qu'il
-     laisse au bord reste une couture, juste redimensionnée. Avec un
-     cadre réellement plus grand que la zone visible (repassée au clip
-     par #app{overflow:hidden}), le filtre pioche toujours dans de la
-     vraie image, jamais dans du vide -> plus de trait noir. */
   inset:-6%;
   background-image:url("./assets/bg/dragon_sky.jpg");
   background-repeat:no-repeat;
@@ -43,23 +34,27 @@ body{overflow:hidden;color:#fff}
   background-position:center center;
   z-index:0;
   pointer-events:none;
-  /* Fait "onduler" la photo sur place (comme un reptile qui respire/se
-     tord légèrement) sans jamais déplacer le cadrage — une vraie
-     distorsion de l'image (feDisplacementMap piloté par un bruit
-     fractal qui varie lentement), pas un travelling caméra. Vrais
-     pixels d'image disponibles sur toute la marge grâce à inset:-6%
-     ci-dessus (voir commentaire), donc plus aucun risque de couture
-     noire au bord même quand le déplacement est à son maximum.
-     Pas de brightness/saturate animés en plus ici : un filter CSS qui
-     mélange un url() et des fonctions animées n'interpole pas en
-     douceur dans les navigateurs (il saute d'un coup à mi-chemin de
-     l'animation au lieu de varier progressivement) — un défaut
-     justement interdit ("aucun mouvement brusque"). Rien ne vaut mieux
-     qu'un saut de luminosité non désiré : uniquement la distorsion. */
-  filter:url(#dragonLive);
+  /* Le filtre SVG de distorsion (feTurbulence + feDisplacementMap,
+     doublé en plus dans la dernière version pour un rendu multi-
+     échelle) faisait chuter tout le jeu à ~3 img/s sur le téléphone de
+     l'utilisateur ("tout bug de partout") : ce type de filtre force le
+     navigateur à retraiter l'intégralité de l'image à chaque frame, un
+     coût énorme sur mobile, contrairement à un simple
+     brightness/saturate qui reste géré par le compositeur GPU. Rendre
+     le jeu injouable pour une ondulation en arrière-plan n'est pas un
+     compromis acceptable — retour à la respiration douce de
+     luminosité/saturation, qui donne un peu de vie sans jamais coûter
+     cher à calculer. */
+  transform:scale(1.05);
+  transform-origin:center center;
+  animation:dragonGlow 9s ease-in-out infinite;
+}
+@keyframes dragonGlow{
+  0%,100%{ filter:brightness(1) saturate(1); }
+  50%{ filter:brightness(1.06) saturate(1.09); }
 }
 @media (prefers-reduced-motion: reduce){
-  #app::before{ filter:none; }
+  #app::before{ animation:none; }
 }
 /* Voile sombre entre la photo de fond et le plateau : la photo seule
    (très claire/chargée) écrasait le contraste du plateau, qui se
@@ -173,10 +168,8 @@ body{overflow:hidden;color:#fff}
 @media (prefers-reduced-motion: reduce){ .fall-star{ display:none; } }
 
 /* Pas de nuages ajoutés par-dessus la photo : la "vie" du fond vient
-   uniquement de la distorsion de la photo elle-même (filtre #dragonLive
-   sur #app::before, plus haut) — ce sont les nuages/rochers/le serpent
-   DÉJÀ peints dans l'image qui doivent paraître bouger, pas des formes
-   en plus superposées dessus. */
+   uniquement d'une respiration de luminosité/saturation sur #app::before
+   (plus haut) — pas de formes ajoutées superposées à l'image. */
 
 .board-col{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;flex:1 1 auto;min-height:0}
 .board-wrap{
@@ -537,42 +530,6 @@ if(new URLSearchParams(location.search).get('view')==='display'){
   document.documentElement.classList.add('display-mode');
 }
 </script>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <defs>
-    <!-- Fait "onduler" la photo de fond sur place (comme un reptile qui
-         respire/se tord légèrement, les nuages qui coulent doucement,
-         les îlots qui frémissent), sans jamais déplacer le cadrage —
-         appliqué uniquement à #app::before (le fond), jamais au plateau
-         (canvas WebGL séparé) ni à sa caméra (OrbitControls, gérée par
-         board3d.js, totalement indépendante de ce filtre CSS).
-
-         Deux bruits fractals de fréquences différentes, mélangés, au
-         lieu d'un seul : un grand (bigNoise, cycle lent sur 26s) qui
-         fait onduler les grandes masses de façon cohérente sur de
-         larges zones — le corps du serpent qui "respire" — et un petit
-         (smallNoise, cycle plus rapide sur 9s) qui ajoute du frémissement
-         local sur les détails — nuages/rochers qui vibrent légèrement.
-         Un seul champ de déplacement au final, mais qui ne bouge plus
-         tout à la même échelle : lit comme plusieurs éléments animés
-         différemment plutôt qu'un unique filtre uniforme sur toute
-         l'image.
-
-         scale=8 (au lieu de 10 à l'origine) : marge de sécurité en plus
-         du vrai débordement de 6% du fond (voir #app::before), qui
-         fournit désormais de la vraie image à puiser au lieu du vide
-         -> plus de couture noire. -->
-    <filter id="dragonLive" x="-20%" y="-20%" width="140%" height="140%">
-      <feTurbulence type="fractalNoise" baseFrequency="0.0028 0.0045" numOctaves="2" seed="7" result="bigNoise">
-        <animate attributeName="baseFrequency" dur="26s" values="0.0028 0.0045;0.0038 0.0058;0.0028 0.0045" repeatCount="indefinite"/>
-      </feTurbulence>
-      <feTurbulence type="fractalNoise" baseFrequency="0.022 0.034" numOctaves="2" seed="3" result="smallNoise">
-        <animate attributeName="baseFrequency" dur="9s" values="0.022 0.034;0.029 0.041;0.022 0.034" repeatCount="indefinite"/>
-      </feTurbulence>
-      <feComposite in="bigNoise" in2="smallNoise" operator="arithmetic" k1="0" k2="0.72" k3="0.28" k4="0" result="noise"/>
-      <feDisplacementMap in="SourceGraphic" in2="noise" scale="8" xChannelSelector="R" yChannelSelector="G"/>
-    </filter>
-  </defs>
-</svg>
 <div id="app">
   <canvas id="dragonBreath" width="220" height="320" aria-hidden="true"></canvas>
   <div class="top-hud">
