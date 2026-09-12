@@ -940,6 +940,77 @@ const centerPlate = new THREE.Mesh(
 centerPlate.position.y = 0.07;
 boardGroup.add(centerPlate);
 
+/* ---------- Ornements dorés dans les 4 angles du plateau ----------
+   Petites "boucles" en volutes façon gravure, comme sur le visuel
+   promotionnel du jeu : un médaillon en losange d'où partent deux
+   spirales symétriques, posé bien à plat au tout coin du plateau. */
+function drawScrollSpiral(ctx, cx, cy, dir, turns, maxR){
+  ctx.beginPath();
+  const steps = 48;
+  for(let i=0;i<=steps;i++){
+    const t = i/steps;
+    const ang = t*turns*Math.PI*2*dir - Math.PI/2;
+    const r = maxR*t;
+    const x = cx + Math.cos(ang)*r, y = cy + Math.sin(ang)*r;
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+}
+function makeCornerOrnamentTexture(){
+  const size = 512;
+  const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
+  const ctx = cvs.getContext('2d');
+  const cx = size/2, gemY = size*0.30, scrollY = size*0.52, r = size*0.16;
+
+  ctx.shadowColor = 'rgba(0,0,0,.8)'; ctx.shadowBlur = size*0.015;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+  // tige centrale reliant le médaillon aux volutes
+  ctx.lineWidth = size*0.02; ctx.strokeStyle = GOLD;
+  ctx.beginPath(); ctx.moveTo(cx, gemY+size*0.06); ctx.lineTo(cx, scrollY-size*0.02); ctx.stroke();
+
+  // deux volutes symétriques
+  ctx.lineWidth = size*0.028;
+  const grad = ctx.createLinearGradient(0,0,0,size);
+  grad.addColorStop(0, GOLD_BRIGHT); grad.addColorStop(1, '#b6862a');
+  ctx.strokeStyle = grad;
+  drawScrollSpiral(ctx, cx-r*0.85, scrollY, 1, 1.65, r);
+  drawScrollSpiral(ctx, cx+r*0.85, scrollY, -1, 1.65, r);
+
+  // petits fleurons aux extrémités des volutes
+  ctx.shadowBlur = size*0.01;
+  ctx.fillStyle = GOLD_BRIGHT;
+  [[cx-r*0.85-r, scrollY],[cx+r*0.85+r, scrollY]].forEach(([fx,fy])=>{
+    ctx.beginPath(); ctx.arc(fx,fy,size*0.02,0,Math.PI*2); ctx.fill();
+  });
+
+  // médaillon en losange (même motif que la gemme du bandeau)
+  const gs = size*0.11;
+  ctx.beginPath();
+  ctx.moveTo(cx, gemY-gs); ctx.lineTo(cx+gs*0.62, gemY); ctx.lineTo(cx, gemY+gs); ctx.lineTo(cx-gs*0.62, gemY);
+  ctx.closePath();
+  ctx.fillStyle = GOLD_BRIGHT; ctx.fill();
+  ctx.lineWidth = size*0.015; ctx.strokeStyle = '#8a6a1e'; ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  const tex = new THREE.CanvasTexture(cvs);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+{
+  const ornTex = makeCornerOrnamentTexture();
+  const ornSize = 2.1;
+  const cornerHalf = (11*CELL+0.7)/2;
+  [[1,1],[-1,1],[-1,-1],[1,-1]].forEach(([sx,sz])=>{
+    const mat = new THREE.MeshBasicMaterial({map:ornTex, transparent:true, depthWrite:false});
+    const orn = new THREE.Mesh(new THREE.PlaneGeometry(ornSize,ornSize), mat);
+    orn.rotation.x = -Math.PI/2;
+    orn.rotation.z = Math.atan2(sx,sz) + Math.PI; // pointe vers l'extérieur du plateau
+    orn.position.set(sx*cornerHalf, 0.025, sz*cornerHalf);
+    boardGroup.add(orn);
+  });
+}
+
 /* ---------- Les 40 cases ---------- */
 const TILE = 0.95;
 const tiles = [];
