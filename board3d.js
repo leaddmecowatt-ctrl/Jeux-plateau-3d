@@ -1569,10 +1569,105 @@ const shatterFlash = new THREE.Sprite(new THREE.SpriteMaterial({
 shatterFlash.position.set(0, 0.4, 0);
 scene.add(shatterFlash);
 
+/* ---------- Impact à l'arrivée sur une case ----------
+   Un anneau plat qui s'ouvre depuis la case, plus un bref flash au sol :
+   c'est ce qui donne son poids à l'atterrissage. L'intensité suit le
+   niveau du lot — si une pioche commune faisait le même effet qu'un
+   gros lot, plus rien ne se distinguerait et l'effet ne voudrait plus
+   rien dire.
+   Le flash est un disque additif posé sur la case, pas une vraie
+   lampe : une PointLight en atténuation quadratique éclaire en
+   1/distance², donc la carte-lot qui flotte à ~40 cm au-dessus de la
+   case recevait plus de six fois l'intensité réglée et cramait en
+   blanc pur. Un disque additif donne le même éclat sans toucher à
+   l'éclairage du reste de la scène, et ne coûte pas une lumière
+   dynamique de plus. */
+const shockRing = new THREE.Mesh(
+  new THREE.RingGeometry(0.40, 0.50, 48),
+  new THREE.MeshBasicMaterial({color:0xffe9ae, transparent:true, opacity:0,
+    blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide})
+);
+shockRing.rotation.x = -Math.PI/2;
+shockRing.visible = false;
+scene.add(shockRing);
+const impactGlow = new THREE.Mesh(
+  new THREE.CircleGeometry(0.62, 32),
+  new THREE.MeshBasicMaterial({color:0xffd98a, transparent:true, opacity:0,
+    blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide})
+);
+impactGlow.rotation.x = -Math.PI/2;
+impactGlow.visible = false;
+scene.add(impactGlow);
+let shockT0 = -1, shockLevel = 1;
+function winShock(tile, level){
+  if(reduceMotion) return;
+  shockLevel = Math.max(1, level);
+  shockRing.position.set(tile.world.x, tile.tileTopY + 0.04, tile.world.z);
+  impactGlow.position.set(tile.world.x, tile.tileTopY + 0.03, tile.world.z);
+  shockT0 = clock.getElapsedTime();
+  shockRing.visible = true;
+  impactGlow.visible = true;
+}
+
 let shakeUntil = 0, shatterUntil = 0, shatterActive = false, shatterStartT = 0;
 const _shardDummy = new THREE.Object3D();
+/* Pluie d'or du jackpot : un rideau de paillettes qui tombe sur toute la
+   largeur du plateau pendant l'éclatement. C'est un système de points à
+   part, pas le pool d'étincelles : le pool ne tient que 48 particules,
+   partagées avec les impacts, et une pluie continue le vidait en une
+   demi-seconde — les paillettes étaient recyclées avant même d'entrer
+   dans le champ. Ici les particules bouclent en haut quand elles
+   touchent le sol, donc le rideau reste plein du début à la fin, pour
+   un seul draw call. */
+const RAIN_COUNT = 150;
+const rainPos = new Float32Array(RAIN_COUNT*3);
+const rainVel = new Float32Array(RAIN_COUNT);
+const rainGeo = new THREE.BufferGeometry();
+rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
+const rainMat = new THREE.PointsMaterial({
+  map: brightGoldTex, color: 0xffe2a0, size: 0.34, sizeAttenuation: true,
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0
+});
+const goldRain = new THREE.Points(rainGeo, rainMat);
+goldRain.frustumCulled = false;
+goldRain.visible = false;
+scene.add(goldRain);
+let goldRainUntil = 0, goldRainT0 = 0;
+function seedRainDrop(i, yMin, ySpan){
+  rainPos[i*3]   = (Math.random()-0.5)*11.5;
+  rainPos[i*3+1] = yMin + Math.random()*ySpan;
+  rainPos[i*3+2] = (Math.random()-0.5)*11.5;
+  rainVel[i] = 1.6 + Math.random()*2.6;
+}
+function startGoldRain(durSec){
+  if(reduceMotion) return;
+  const now = clock.getElapsedTime();
+  goldRainUntil = now + durSec;
+  goldRainT0 = now;
+  /* Semé sur toute la hauteur dès le départ : si tout partait du haut,
+     il ne se passerait rien à l'écran pendant la première seconde. */
+  for(let i=0;i<RAIN_COUNT;i++) seedRainDrop(i, 0.8, 6.8);
+  rainGeo.attributes.position.needsUpdate = true;
+  rainMat.opacity = 0;
+  goldRain.visible = true;
+}
+function updateGoldRain(t, dt){
+  if(!goldRain.visible) return;
+  if(t >= goldRainUntil){ goldRain.visible = false; rainMat.opacity = 0; return; }
+  rainMat.opacity = 0.95 * Math.min(1, (t-goldRainT0)/0.25)
+                         * Math.min(1, (goldRainUntil-t)/0.7);
+  for(let i=0;i<RAIN_COUNT;i++){
+    const y = rainPos[i*3+1] - rainVel[i]*dt;
+    if(y < 0.05) seedRainDrop(i, 6.0, 2.0);
+    else rainPos[i*3+1] = y;
+  }
+  rainGeo.attributes.position.needsUpdate = true;
+}
+
 function startBoardShatter(){
   const now = clock.getElapsedTime();
+  startGoldRain((SHAKE_MS + SHATTER_MS)/1000 + 1.4);
+  cameraPunch(2.2);
   shakeUntil = now + SHAKE_MS/1000;
   shatterUntil = shakeUntil + SHATTER_MS/1000;
   shatterActive = false;
@@ -1728,6 +1823,39 @@ function setupBlink(material, srcTexture){
   };
 }
 
+/* ---------- Réaction de joie du pion sur un gros lot ----------
+   Une couche ponctuelle par-dessus la "vie au repos" : bras levés,
+   tête relevée et deux petits sauts. Réservée aux gros lots (niveau
+   3 et plus) : si le pion sautait de joie pour une pioche commune,
+   le geste ne voudrait plus rien dire quand un vrai gros lot tombe.
+   Comme la vie au repos, tout est additif et recalculé à partir du
+   temps, donc sans dérive d'une frame à l'autre. Le saut, lui, ne
+   passe pas par les os mais par la hauteur de `root` : les os sont
+   remis à zéro par le mixer à chaque frame, la position du pion sur
+   le plateau non — d'où `playerBaseY`, la hauteur au sol de la case
+   où il vient d'arriver. */
+const CHEER_DUR = 1.3;
+let cheerT0 = -1, cheerStrength = 1, cheerAmt = 0, cheerHopY = 0, cheerWave = 0, playerBaseY = 0;
+/* Reste vrai une frame de plus que le saut lui-même : sans ça le pion
+   resterait figé en l'air à la hauteur du dernier saut calculé. */
+let cheerSettle = false;
+function triggerCheer(strength){
+  if(reduceMotion) return;
+  cheerT0 = clock.getElapsedTime();
+  cheerSettle = true;
+  cheerStrength = Math.max(0.6, Math.min(1.6, strength || 1));
+}
+function updateCheer(t){
+  if(cheerT0 < 0) return;
+  const u = (t - cheerT0)/CHEER_DUR;
+  if(u >= 1){ cheerT0 = -1; cheerAmt = 0; cheerHopY = 0; cheerWave = 0; return; }
+  cheerAmt  = Math.min(1, u/0.15) * Math.min(1, (1-u)/0.28) * cheerStrength;
+  cheerHopY = Math.abs(Math.sin(u*Math.PI*2)) * 0.10 * cheerStrength * (1 - u*0.45);
+  // les deux bras s'agitent en opposition : deux bras figés à la même
+  // hauteur donnent une pose raide, pas un personnage qui exulte
+  cheerWave = Math.sin(u*Math.PI*6);
+}
+
 function buildIdleLife(bones, blink){
   const twoPi = Math.PI*2;
   return function updateIdleLife(t){
@@ -1771,6 +1899,18 @@ function buildIdleLife(bones, blink){
     if(bones.rightArm) bones.rightArm.rotation.x -= gesture*0.55;
     if(bones.rightForeArm) bones.rightForeArm.rotation.x -= gesture*0.4;
     if(bones.head) bones.head.rotation.x -= gesture*0.12;
+
+    // Joie ponctuelle (gros lot) : se superpose au reste plutôt que de
+    // le remplacer, la respiration et le balancement continuent.
+    if(cheerAmt > 0.001){
+      const c = cheerAmt, w = cheerWave*0.16;
+      if(bones.rightArm) bones.rightArm.rotation.x -= c*(1.15 + w);
+      if(bones.leftArm) bones.leftArm.rotation.x -= c*(1.15 - w);
+      if(bones.rightForeArm) bones.rightForeArm.rotation.x -= c*(0.55 + w);
+      if(bones.leftForeArm) bones.leftForeArm.rotation.x -= c*(0.55 - w);
+      if(bones.head) bones.head.rotation.x -= c*0.22;
+      if(bones.chest) bones.chest.rotation.x -= c*0.14;
+    }
 
     blink.update(ph);
   };
@@ -1934,6 +2074,7 @@ setActive(-1);
 function placeTokenInstant(idx){
   const t = tileAt(idx);
   player.root.position.set(t.world.x, t.tileTopY, t.world.z);
+  playerBaseY = t.tileTopY;
 }
 placeTokenInstant(-1);
 
@@ -2064,6 +2205,7 @@ function animate(){
   controls.update();
   updateCornerSafety(dt);
   updateSparkles(dt);
+  updateGoldRain(t, dt);
   updateAmbientSparkles(dt);
 
   trimLights.forEach(tl=>{
@@ -2137,8 +2279,15 @@ function animate(){
       }
     }
     if(tile.isActive){
-      tile.halo.material.opacity = reduceMotion ? 0.55 : 0.4 + Math.sin(t*5)*0.25;
+      // Le halo de la case courante monte avec la valeur du lot : une
+      // case "gros lot" doit se voir plus fort qu'une pioche commune,
+      // sinon la hiérarchie des gains ne se lit plus à l'écran.
+      const hl = (TIER_LEVEL[tile.catKey] ?? 1);
+      const hk = 0.85 + hl*0.14;
+      tile.halo.material.opacity = reduceMotion ? 0.55*hk : (0.4 + Math.sin(t*5)*0.25)*hk;
       tile.halo.rotation.z += dt*0.6;
+      const hs = 1 + (hl-1)*0.05 + (reduceMotion ? 0 : Math.sin(t*5)*0.03);
+      tile.halo.scale.set(hs, hs, 1);
     }
   });
   if(!reduceMotion){
@@ -2201,9 +2350,15 @@ function animate(){
       setActive(currentIndex);
       const landedTile = walk.path[walk.path.length-1];
       if(!reduceMotion){
-        spawnSparkles(landedTile.world.x, landedTile.tileTopY+0.4, landedTile.world.z, 22, 1.8, 3.4);
-        cameraPunch();
+        const lvl = TIER_LEVEL[landedTile.catKey] ?? 1;
+        spawnSparkles(landedTile.world.x, landedTile.tileTopY+0.4, landedTile.world.z,
+                      12 + lvl*11, 1.3 + lvl*0.38, 2.9 + lvl*0.55, 0.5, 0.9);
+        winShock(landedTile, lvl);
+        cameraPunch(0.65 + lvl*0.28);
+        // le pion ne fête que les gros lots — voir triggerCheer
+        if(lvl >= 3) triggerCheer(0.8 + (lvl-3)*0.35);
       }
+      playerBaseY = landedTile.tileTopY;
       walk = null;
     }
   } else if(!reduceMotion){
@@ -2212,8 +2367,36 @@ function animate(){
     player.root.rotation.x *= 0.8;
     player.setWalking(false);
   }
+  if(shockT0 >= 0){
+    const se = t - shockT0;
+    const sdur = 0.40 + shockLevel*0.10;
+    if(se >= sdur){
+      shockT0 = -1;
+      shockRing.visible = false;
+      impactGlow.visible = false;
+      impactGlow.material.opacity = 0;
+    } else {
+      const k = se/sdur, fade = (1-k)*(1-k);
+      const sc = 0.55 + k*(1.5 + shockLevel*0.6);
+      shockRing.scale.set(sc, sc, sc);
+      shockRing.material.opacity = fade*(0.30 + shockLevel*0.14);
+      // le flash est bref et concentré sur le premier tiers de l'onde :
+      // c'est le "coup", l'anneau qui s'ouvre en est la traînée
+      const fk = Math.max(0, 1 - se/(sdur*0.35));
+      impactGlow.material.opacity = fk*fk*(0.12 + shockLevel*0.07);
+      const fs = 0.7 + (1-fk)*0.5;
+      impactGlow.scale.set(fs, fs, fs);
+    }
+  }
+  updateCheer(t);
   player.mixer.update(dt);
-  if(!walk && !reduceMotion) player.updateIdleLife(t);
+  if(!walk && !reduceMotion){
+    player.updateIdleLife(t);
+    if(cheerSettle){
+      player.root.position.y = playerBaseY + cheerHopY;
+      if(cheerT0 < 0) cheerSettle = false;
+    }
+  }
 
   // Séisme puis éclatement du plateau (effet "Carte Darkrai")
   if(shakeUntil>0 && t<shakeUntil){
@@ -2604,16 +2787,25 @@ function playFanfare(level){
 /* Punch-zoom caméra via le champ de vision (pas la position) pour ne
    jamais entrer en conflit avec OrbitControls (auto-rotation, zoom
    utilisateur en cours, etc.). */
-function cameraPunch(){
+let _punchGen = 0, _punchBase = null;
+function cameraPunch(strength){
   if(reduceMotion) return;
-  const baseFov = camera.fov;
-  const punchFov = baseFov*0.93;
+  const k = Math.min(2.4, strength || 1);
+  // Une frappe qui démarre pendant une autre relevait l'ancien FOV
+  // déjà enfoncé comme nouveau repos : le champ dérivait à chaque
+  // enchaînement. On mémorise le vrai FOV de repos, et un compteur de
+  // génération coupe la boucle précédente.
+  const gen = ++_punchGen;
+  if(_punchBase === null) _punchBase = camera.fov;
+  const baseFov = _punchBase;
+  const punchFov = baseFov*(1 - 0.055*k);
   const start = performance.now();
-  const outDur=140, holdDur=60, inDur=260, total=outDur+holdDur+inDur;
+  const outDur=120, holdDur=70, inDur=300, total=outDur+holdDur+inDur;
   cameraPunchActive = true;
   function step(now){
-    const el = now-start;
-    if(el>=total){ camera.fov = baseFov; camera.updateProjectionMatrix(); cameraPunchActive = false; return; }
+    if(gen !== _punchGen) return;
+    const el = Math.max(0, now-start);
+    if(el>=total){ camera.fov = baseFov; camera.updateProjectionMatrix(); cameraPunchActive = false; _punchBase = null; return; }
     let fov;
     if(el<outDur) fov = baseFov + (punchFov-baseFov)*(el/outDur);
     else if(el<outDur+holdDur) fov = punchFov;
@@ -3347,7 +3539,7 @@ function celebFrame(){
     // Un lot validé ("LOT REMPORTÉ") reste affiché à l'écran tant que
     // l'animateur n'a pas cliqué sur "RECOMMENCER" — seuls les
     // confettis (animés ci-dessus) s'arrêtent une fois retombés.
-    if(!celebLocked) celeb.classList.remove('show');
+    if(!celebLocked) celeb.classList.remove('show','flip','rare-card');
   }
 }
 
@@ -3358,7 +3550,7 @@ function clearCelebration(){
   celebParticles = [];
   celebRockets = [];
   celebLocked = false;
-  if(celeb) celeb.classList.remove('show','shake');
+  if(celeb) celeb.classList.remove('show','shake','flip','rare-card');
 }
 
 /* Aperçu du lot dès l'arrivée sur la case, avant toute décision de le
@@ -3386,7 +3578,7 @@ function showLotPreview(catKey){
   celeb.classList.add('show');
   const myPreviewGen = ++previewGen;
   setTimeout(()=>{
-    if(myPreviewGen===previewGen && !celebLocked) celeb.classList.remove('show');
+    if(myPreviewGen===previewGen && !celebLocked) celeb.classList.remove('show','flip','rare-card');
   }, 2600);
 }
 
@@ -3440,7 +3632,7 @@ function celebrate(catKey, forcedCard, opts){
     // (sinon sa photo resterait visible, figée, pendant tout le
     // tremblement du plateau) : rien ne s'affiche tant que le vrai
     // reveal n'est pas prêt, jamais une photo périmée d'un autre lot.
-    celeb.classList.remove('show','shake');
+    celeb.classList.remove('show','shake','flip','rare-card');
     startBoardShatter();
     setTimeout(()=>{
       // Le jeton de génération protège contre un reveal différé qui
@@ -3458,6 +3650,9 @@ function revealCelebration(catKey, forcedCard, level){
   resizeCelebCanvas();
   if(celebMain) celebMain.hidden = false;
   celeb.dataset.level = String(level);
+  // état repris à zéro : sans ça le halo "carte rare" d'une pioche
+  // précédente resterait allumé sur un lot ordinaire.
+  celeb.classList.remove('flip','rare-card');
   celeb.classList.add('show');
   if(level>=4) celeb.classList.add('shake');
 
@@ -3470,7 +3665,18 @@ function revealCelebration(catKey, forcedCard, level){
       ? '🌟 JACKPOT DE PIOCHE ! 🌟'
       : (catKey==='chance' ? '🎴 CARTE CHANCE' : '🗃️ CAISSE COMMUNAUTAIRE');
     if(celebSub){ celebSub.textContent = card.text; celebSub.hidden = false; }
-    if(rareCardDrawn) celeb.classList.add('shake');
+    if(rareCardDrawn){ celeb.classList.add('shake'); triggerCheer(1.3); }
+    // Retournement de carte : une pioche doit se RETOURNER, pas
+    // apparaître. Volontairement court (~0,5 s) — on montre le geste
+    // du tirage, on ne fabrique pas un faux suspense sur un résultat
+    // déjà décidé. La classe est retirée puis reposée après un reflow,
+    // sinon l'animation ne rejoue pas d'une pioche à l'autre.
+    if(!reduceMotion){
+      celeb.classList.remove('flip');
+      void celeb.offsetWidth;
+      celeb.classList.add('flip');
+    }
+    celeb.classList.toggle('rare-card', rareCardDrawn);
     // Toute carte Chance/Caisse qui offre un lot en argent (rare ou
     // non) passe par le même plafond de reversement que les cases du
     // plateau — sinon ces petits lots automatiques échapperaient au

@@ -430,6 +430,29 @@ html.display-mode .display-badge{ display:block; }
   box-shadow:0 12px 28px rgba(0,0,0,.6),0 0 26px rgba(255,226,122,.55);
 }
 .celeb-photo[hidden]{display:none}
+/* Révélation d'une pioche Chance/Caisse : le panneau se retourne comme
+   une carte qu'on découvre, au lieu d'apparaître d'un coup. Court à
+   dessein — c'est le geste du tirage qui est montré, pas un suspense
+   étiré sur un résultat déjà tiré. */
+.celebration.flip .celeb-text{animation:celebFlip .5s cubic-bezier(.2,.9,.3,1)}
+@keyframes celebFlip{
+  0%{transform:perspective(900px) rotateY(-92deg) scale(.88);opacity:0}
+  55%{transform:perspective(900px) rotateY(9deg) scale(1.03);opacity:1}
+  100%{transform:perspective(900px) rotateY(0) scale(1);opacity:1}
+}
+/* La carte rare se distingue par un halo doré qui respire : le seul
+   signal réservé au vrai gros tirage. */
+.celebration.rare-card .celeb-text{
+  border-color:#fff3c4;
+  animation:rareCardGlow 1.2s ease-in-out infinite alternate;
+}
+.celebration.flip.rare-card .celeb-text{
+  animation:celebFlip .5s cubic-bezier(.2,.9,.3,1), rareCardGlow 1.2s ease-in-out .5s infinite alternate;
+}
+@keyframes rareCardGlow{
+  from{box-shadow:0 0 22px rgba(255,226,122,.45)}
+  to{box-shadow:0 0 54px rgba(255,238,170,.95),0 0 96px rgba(255,196,60,.5)}
+}
 /* Fin de partie (case Prison) : un traitement à part, plus sombre et
    dramatique, pour qu'on ne le confonde jamais avec un lot gagné. */
 .celebration[data-level="0"]::before{
