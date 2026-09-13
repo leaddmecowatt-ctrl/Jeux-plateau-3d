@@ -2954,7 +2954,19 @@ async function playCardDrawAnimation(draw){
   for(let i=0;i<12;i++){
     const c = document.createElement('div');
     c.className = 'mini-card';
-    c.innerHTML = '<div class="face back"></div><div class="face front"></div>';
+    /* La face révélée est une vraie face de carte, pas un simple
+       rectangle doré avec un chiffre posé dessus : rayons derrière le
+       nombre, double liseré, coins marqués, index dans deux coins
+       opposés et un reflet holo qui balaie au moment du retournement. */
+    c.innerHTML =
+      '<div class="face back"></div>' +
+      '<div class="face front">' +
+        '<span class="card-rays"></span>' +
+        '<span class="card-pip tl"></span>' +
+        '<span class="card-num"></span>' +
+        '<span class="card-pip br"></span>' +
+        '<span class="card-holo"></span>' +
+      '</div>';
     cardGrid.appendChild(c);
     cardEls.push(c);
   }
@@ -2964,9 +2976,18 @@ async function playCardDrawAnimation(draw){
 
   const {a,b} = draw.pairs[0];
   const s1 = draw.slotOrder[0], s2 = draw.slotOrder[1];
-  const f1 = cardEls[s1].querySelector('.front'), f2 = cardEls[s2].querySelector('.front');
-  if(f1) f1.textContent = a;
-  if(f2) f2.textContent = b;
+  const setFace = (el, n) => {
+    if(!el) return;
+    el.querySelector('.card-num').textContent = n;
+    el.querySelectorAll('.card-pip').forEach(p => p.dataset.n = n);
+  };
+  setFace(cardEls[s1].querySelector('.front'), a);
+  setFace(cardEls[s2].querySelector('.front'), b);
+
+  // Les cartes non tirées s'effacent : sans ça les deux cartes
+  // choisies se perdent au milieu de dix autres identiques et le
+  // regard ne sait pas où se poser au moment du retournement.
+  cardEls.forEach((c,i)=>{ if(i!==s1 && i!==s2) c.classList.add('dim'); });
 
   // Suspense : les 2 cartes qui vont être retournées se mettent à
   // luire avant la révélation, avec un son qui monte en tension —
@@ -2978,7 +2999,11 @@ async function playCardDrawAnimation(draw){
   cardEls[s1].classList.remove('suspense');
   cardEls[s2].classList.remove('suspense');
 
+  // Retournement décalé : deux cartes qui tournent exactement en même
+  // temps ont l'air d'un mécanisme, pas d'un tirage. La première part,
+  // la seconde suit une fraction de seconde après.
   cardEls[s1].classList.add('flipped');
+  await wait(220);
   cardEls[s2].classList.add('flipped');
   await wait(700);
   revealImpact();
