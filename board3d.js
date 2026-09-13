@@ -6,7 +6,7 @@ import { RenderPass } from './vendor/three/examples/jsm/postprocessing/RenderPas
 import { UnrealBloomPass } from './vendor/three/examples/jsm/postprocessing/UnrealBloomPass.js';
 
 /* =========================================================================
-   PIKAJACKPOT — plateau 40 cases en vraie 3D (WebGL / three.js)
+   PIKAPOLY — plateau 40 cases en vraie 3D (WebGL / three.js)
    Thème noir & or façon jeu télévisé / roue de la fortune, avec les
    vraies photos des lots intégrées sur les cases correspondantes, des
    lieux Pokémon mythiques à la place des noms de rues, et des
@@ -711,9 +711,9 @@ function makeStudioBackdrop(){
   grad.addColorStop(1,'#000000');
   ctx.fillStyle=grad; ctx.fillRect(0,0,w,h);
 
-  /* Identité "mur de studio" PikaJackpot : grands anneaux façon
+  /* Identité "mur de studio" Pikapoly : grands anneaux façon
      Pokéball très estompés au centre-haut, + un mot-symbole
-     "PIKAJACKPOT" répété en diagonale, discret mais reconnaissable
+     "PIKAPOLY" répété en diagonale, discret mais reconnaissable
      — comme le fond de plateau d'une vraie émission télé. */
   ctx.save();
   ctx.translate(w*0.5, h*0.24);
@@ -735,7 +735,7 @@ function makeStudioBackdrop(){
     const y = row*h*0.22 - h*0.3;
     for(let col=-1; col<=2; col++){
       const x = col*w*0.85 + (row%2===0 ? 0 : w*0.42) - w*0.1;
-      ctx.fillText('★ PIKAJACKPOT ★', x, y);
+      ctx.fillText('★ PIKAPOLY ★', x, y);
     }
   }
   ctx.restore();
@@ -987,7 +987,7 @@ function perimeterPosAt(u){ // u in [0,1)
   return [x0+(x1-x0)*lp, z0+(z1-z0)*lp];
 }
 
-/* ---------- Plaque centrale "PIKAJACKPOT" + légende des lots ----------
+/* ---------- Plaque centrale "PIKAPOLY" + légende des lots ----------
    Reprend le même esprit que le visuel promotionnel "TOUS LES LOTS À
    GAGNER" : une carte sombre à bordure dorée, listant chaque
    catégorie réelle du plateau (couleur, icône, nom, valeur). Ce
@@ -1025,7 +1025,7 @@ function makeCenterPlateTexture(){
   // sombres derrière chaque élément (texte, médaillons, bandeaux),
   // pas d'un panneau plein.
 
-  // mini Pokeball + PIKAJACKPOT compact en haut de la carte
+  // mini Pokeball + PIKAPOLY compact en haut de la carte
   const pbY = size*0.115, pbR = size*0.04;
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR,Math.PI,0); ctx.fillStyle='#f5484f'; ctx.fill();
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR,0,Math.PI); ctx.fillStyle='#f6fbff'; ctx.fill();
@@ -1038,7 +1038,7 @@ function makeCenterPlateTexture(){
   ctx.font='900 '+(size*0.05)+'px Arial,Helvetica,sans-serif';
   ctx.shadowColor='rgba(255,210,110,.7)'; ctx.shadowBlur=size*0.01;
   ctx.fillStyle = GOLD_BRIGHT;
-  ctx.fillText('PIKAJACKPOT', size/2, size*0.185);
+  ctx.fillText('PIKAPOLY', size/2, size*0.185);
   ctx.shadowBlur = 0;
 
   // en-tête de la légende — ombre sombre pour rester lisible sur
