@@ -2035,7 +2035,7 @@ function animate(){
       const landedTile = walk.path[walk.path.length-1];
       if(!reduceMotion){
         spawnSparkles(landedTile.world.x, landedTile.tileTopY+0.4, landedTile.world.z, 22, 1.8, 3.4);
-        cameraPunch(TIER_LEVEL[landedTile.catKey]);
+        cameraPunch();
       }
       walk = null;
     }
@@ -2433,48 +2433,23 @@ function playFanfare(level){
     });
   }catch(e){}
 }
-const easeOutCubic = x => 1-Math.pow(1-x,3);
-const easeInCubic  = x => x*x*x;
-
 /* Punch-zoom caméra via le champ de vision (pas la position) pour ne
    jamais entrer en conflit avec OrbitControls (auto-rotation, zoom
-   utilisateur en cours, etc.). L'intensité et la durée montent avec le
-   niveau du lot (tier, 0-5 — voir TIER_LEVEL) : une case commune reste
-   un petit "tac" discret, un ETB/jackpot tape plus fort et plus
-   longtemps. (Un souffle de profondeur de champ avait été ajouté ici,
-   mais BokehPass refait un rendu de profondeur complet de la scène à
-   chaque frame tant qu'il reste dans la chaîne de composition, même
-   désactivé — retiré : sur le téléphone de l'utilisateur, le jeu était
-   devenu saccadé partout, pas seulement pendant l'effet.) */
-function cameraPunch(tier){
+   utilisateur en cours, etc.). */
+function cameraPunch(){
   if(reduceMotion) return;
-  tier = tier || 0;
-  const intensity = 1 + tier*0.32;
   const baseFov = camera.fov;
-  const punchFov = baseFov*(1 - 0.065*intensity);
+  const punchFov = baseFov*0.93;
   const start = performance.now();
-  const outDur = 130, holdDur = 55+tier*22, inDur = 240+tier*55, total = outDur+holdDur+inDur;
+  const outDur=140, holdDur=60, inDur=260, total=outDur+holdDur+inDur;
   cameraPunchActive = true;
   function step(now){
-    // Le timestamp reçu par le tout premier rAF peut être légèrement
-    // antérieur au performance.now() lu juste avant de le programmer
-    // (particularité des navigateurs) : sans ce clamp, "el" part parfois
-    // à quelques millisecondes négatives, ce qui fait dépasser -1..1 à
-    // la fonction d'easing et produit un très bref FOV inversé.
-    const el = Math.max(0, now-start);
-    if(el>=total){
-      camera.fov = baseFov; camera.updateProjectionMatrix();
-      cameraPunchActive = false;
-      return;
-    }
+    const el = now-start;
+    if(el>=total){ camera.fov = baseFov; camera.updateProjectionMatrix(); cameraPunchActive = false; return; }
     let fov;
-    if(el<outDur){
-      fov = baseFov + (punchFov-baseFov)*easeOutCubic(el/outDur);
-    } else if(el<outDur+holdDur){
-      fov = punchFov;
-    } else {
-      fov = punchFov + (baseFov-punchFov)*easeInCubic((el-outDur-holdDur)/inDur);
-    }
+    if(el<outDur) fov = baseFov + (punchFov-baseFov)*(el/outDur);
+    else if(el<outDur+holdDur) fov = punchFov;
+    else fov = punchFov + (baseFov-punchFov)*((el-outDur-holdDur)/inDur);
     camera.fov = fov; camera.updateProjectionMatrix();
     requestAnimationFrame(step);
   }
