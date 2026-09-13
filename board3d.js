@@ -1034,25 +1034,42 @@ function makeCenterPlateTexture(){
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR,0,Math.PI*2); ctx.stroke();
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR*0.34,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill(); ctx.stroke();
 
-  // Titre façon logo de jeu : lettres épaisses arrondies jaunes, gros
-  // contour bleu, et une extrusion en biais qui donne le relief. Le
-  // relief est fait en redessinant le texte plusieurs fois décalé vers
-  // le bas-droite : une simple ombre portée resterait plate.
+  // Titre : lettres épaisses arrondies posées sur un arc léger (comme
+  // un logo de jeu), mais dans l'or du plateau — la couleur d'origine
+  // ne change pas, seule la forme des lettres et la courbe changent.
+  // Chaque lettre est placée puis pivotée le long du cercle : écrire le
+  // mot d'un bloc ne permettrait aucune courbure.
   ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.font=(size*0.072)+'px "Luckiest Guy",Impact,"Arial Black",sans-serif';
   ctx.lineJoin = 'round';
+  const title = 'PIKAPOLY';
   const tx = size/2, ty = size*0.185;
-  const depth = size*0.008;
-  for(let i=6;i>=1;i--){
-    ctx.fillStyle = '#1d3f86';
-    ctx.fillText('PIKAPOLY', tx + depth*i*0.35, ty + depth*i*0.5);
+  const arcR = size*1.55;                 // grand rayon = courbe discrète
+  const widths = [...title].map(ch => ctx.measureText(ch).width);
+  const totalW = widths.reduce((a, b) => a + b, 0);
+
+  function drawArcTitle(draw){
+    ctx.save();
+    ctx.translate(tx, ty + arcR);         // centre du cercle sous le texte
+    let a = -(totalW/arcR)/2;             // départ à gauche de l'arc
+    for(let i=0;i<title.length;i++){
+      a += (widths[i]/arcR)/2;
+      ctx.save();
+      ctx.rotate(a);
+      ctx.translate(0, -arcR);
+      draw(title[i]);
+      ctx.restore();
+      a += (widths[i]/arcR)/2;
+    }
+    ctx.restore();
   }
-  ctx.strokeStyle = '#173572'; ctx.lineWidth = size*0.017;
-  ctx.strokeText('PIKAPOLY', tx, ty);
-  ctx.strokeStyle = '#2f6fc4'; ctx.lineWidth = size*0.010;
-  ctx.strokeText('PIKAPOLY', tx, ty);
-  ctx.fillStyle = '#ffcb05';
-  ctx.fillText('PIKAPOLY', tx, ty);
+
+  ctx.shadowColor='rgba(255,210,110,.7)'; ctx.shadowBlur=size*0.012;
+  ctx.strokeStyle = 'rgba(60,38,6,.85)'; ctx.lineWidth = size*0.009;
+  drawArcTitle(ch => ctx.strokeText(ch, 0, 0));
+  ctx.fillStyle = GOLD_BRIGHT;
+  drawArcTitle(ch => ctx.fillText(ch, 0, 0));
+  ctx.shadowBlur = 0;
 
   // en-tête de la légende — ombre sombre pour rester lisible sur
   // n'importe quel fond de photo, sans panneau derrière
