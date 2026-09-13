@@ -20,39 +20,50 @@ body{overflow:hidden;color:#fff}
   display:flex;flex-direction:column;
   position:relative;
 }
-/* Fond fixe + respiration douce de luminosité/saturation. Deux
-   tentatives de vraie distorsion (feTurbulence+feDisplacementMap SVG,
-   puis un <canvas> redessiné par bandes avec drawImage()) ont chacune
-   fait ramer le jeu sur le téléphone réel de l'utilisateur, même la
-   version canvas pourtant bien moins coûteuse en théorie qu'un filtre
-   pixel par pixel. Un jeu injouable pour un effet de fond n'est jamais
-   un compromis acceptable — retour à la version qui n'a jamais posé
-   ce problème : un simple background-image animé en CSS pur (géré par
-   le compositeur, quasi gratuit), sans aucune déformation de l'image. */
-#app::before{
-  content:"";
-  position:absolute;
-  inset:0;
-  background-image:url("./assets/bg/dragon_sky.jpg");
-  background-repeat:no-repeat;
-  /* L'image est en portrait (plus haute que large) et le format du
-     téléphone aussi : "cover" ici ne rogne quasiment que les bords
-     gauche/droite (les volutes extérieures), jamais le haut/bas — le
-     dragon reste visible de la tête à la queue. */
-  background-size:cover;
-  background-position:center center;
-  z-index:0;
-  pointer-events:none;
-  transform:scale(1.05);
-  transform-origin:center center;
+/* Fond vivant, troisième approche, bien plus légère que les deux
+   précédentes (filtre SVG feTurbulence+feDisplacementMap, puis un
+   <canvas> redessiné par bandes en JS à chaque frame) : la photo est
+   coupée en 10 bandes horizontales fixes (une fois, au chargement/
+   redimensionnement, jamais par frame), chacune animée par un simple
+   transform:translateX() en CSS pur. Un transform animé en CSS est
+   composité par le GPU sans jamais repasser par le thread principal
+   ni redessiner quoi que ce soit une fois lancé — le travail par
+   frame tombe donc à ~zéro, contrairement aux deux tentatives
+   précédentes qui redessinaient/refiltraient l'image à chaque frame.
+   Chaque bande garde son propre petit décalage/vitesse/délai (comme
+   les nuages/étoiles déjà animés ailleurs sur cette page) pour un
+   mouvement organique, pas synchronisé. */
+#bgBands{
+  position:absolute; inset:0; overflow:hidden;
+  z-index:0; pointer-events:none;
   animation:dragonGlow 9s ease-in-out infinite;
 }
 @keyframes dragonGlow{
   0%,100%{ filter:brightness(1) saturate(1); }
   50%{ filter:brightness(1.08) saturate(1.12); }
 }
+.bg-band{
+  position:absolute; left:0; width:100%;
+  background-image:url("./assets/bg/dragon_sky.jpg");
+  background-repeat:no-repeat;
+  --amp:2.2px;
+  animation-name:bandDrift; animation-timing-function:ease-in-out; animation-iteration-count:infinite;
+  animation-duration:8s;
+  will-change:transform;
+}
+@keyframes bandDrift{ 0%,100%{ transform:translateX(calc(var(--amp) * -1)); } 50%{ transform:translateX(var(--amp)); } }
+/* Avec une amplitude et une durée IDENTIQUES sur toutes les bandes, seul
+   le déphasage (animation-delay) varie d'une bande à l'autre — et ce
+   déphasage est fixé par bande en JS (voir layout() plus bas) comme une
+   fraction continue de la position verticale, pas par un cycle de
+   quelques profils répétés. Deux bandes voisines ont donc un décalage de
+   phase minuscule entre elles : leur position instantanée ne peut jamais
+   sauter, ce qui élimine la "marche" visible à la jonction — l'amplitude
+   seule (sans changement de phase abrupt) ne suffisait pas, l'essai
+   précédent avec 6 profils cycliques le montrait encore. */
 @media (prefers-reduced-motion: reduce){
-  #app::before{ animation:none; }
+  #bgBands{ animation:none; }
+  .bg-band{ animation:none; }
 }
 /* Voile sombre entre la photo de fond et le plateau : la photo seule
    (très claire/chargée) écrasait le contraste du plateau, qui se
@@ -535,6 +546,20 @@ if(new URLSearchParams(location.search).get('view')==='display'){
 }
 </script>
 <div id="app">
+  <div id="bgBands" aria-hidden="true">
+    <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
+    <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
+    <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
+    <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
+    <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
+    <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
+    <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
+    <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
+    <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
+    <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
+    <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
+    <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
+  </div>
   <div class="top-hud">
     <div class="brand">★ PIKAPOLY ★</div>
     <div class="place-banner-wrap"><div class="place-banner" id="placeBanner">Départ</div></div>
@@ -668,6 +693,58 @@ if(new URLSearchParams(location.search).get('view')==='display'){
   </div>
 </div>
 
+<script>
+/* Calcule UNE FOIS (au chargement + à chaque resize/rotation — jamais
+   par frame d'animation) la position/taille "cover" de la photo de
+   fond, puis répartit ce calcul sur les 10 bandes de #bgBands via
+   background-size/background-position en pixels. L'ondulation elle-
+   même (translateX) est ensuite gérée entièrement par les animations
+   CSS déclarées dans le <style> — ce script ne tourne plus jamais une
+   fois la mise en page posée, contrairement aux deux tentatives
+   précédentes qui redessinaient quelque chose à chaque frame. */
+(function(){
+  var container = document.getElementById('bgBands');
+  if(!container) return;
+  var bands = container.querySelectorAll('.bg-band');
+  var img = new Image();
+
+  function layout(){
+    var iw = img.naturalWidth, ih = img.naturalHeight;
+    if(!iw || !ih) return;
+    var app = document.getElementById('app');
+    var cw = app.clientWidth, ch = app.clientHeight;
+    if(cw<=0 || ch<=0) return;
+    // "cover" : l'image remplit toute la hauteur et déborde en largeur
+    // (jamais l'inverse sur ce format portrait/téléphone) — la marge
+    // horizontale ainsi créée est ce qui permet à chaque bande de se
+    // décaler de quelques px sans jamais révéler de bord vide.
+    var scale = Math.max(cw/iw, ch/ih);
+    var drawW = iw*scale, drawH = ih*scale;
+    var offsetX = (cw-drawW)/2;
+    var n = bands.length;
+    var bandH = ch/n;
+    for(var i=0;i<n;i++){
+      var b = bands[i];
+      b.style.top = (i*bandH)+'px';
+      b.style.height = (bandH+1)+'px'; // +1px : recouvrement léger, pas de trait entre bandes
+      b.style.backgroundSize = drawW+'px '+drawH+'px';
+      b.style.backgroundPosition = offsetX+'px '+(-i*bandH)+'px';
+      // Vague continue de haut en bas : le déphasage de chaque bande
+      // avance d'une fraction infime et régulière de la durée totale
+      // (WAVE_CYCLES tours complets sur toute la hauteur), jamais par
+      // paliers — deux bandes voisines ont donc quasiment la même phase
+      // à tout instant, donc quasiment le même décalage horizontal.
+      var WAVE_CYCLES = 1.4, DURATION_S = 8;
+      b.style.animationDelay = (-(i/n) * WAVE_CYCLES * DURATION_S) + 's';
+    }
+  }
+  window.addEventListener('resize', layout, {passive:true});
+  window.addEventListener('orientationchange', function(){ setTimeout(layout,150); }, {passive:true});
+  if(window.ResizeObserver){ new ResizeObserver(layout).observe(document.getElementById('app')); }
+  img.onload = layout;
+  img.src = './assets/bg/dragon_sky.jpg';
+})();
+</script>
 <script type="importmap">
 { "imports": { "three": "./vendor/three/three.module.min.js" } }
 </script>
