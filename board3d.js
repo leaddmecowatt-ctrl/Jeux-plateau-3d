@@ -1701,13 +1701,16 @@ function setupBlink(material, srcTexture){
   material.map = tex;
   material.needsUpdate = true;
 
-  // Zones des deux yeux dans la texture (mesurées une fois sur
-  // l'atlas du personnage), en fractions 0..1 de la largeur/hauteur.
+  // Zones des deux yeux dans la texture, en fractions 0..1 de la
+  // largeur/hauteur. Elles sortent du script qui peint la texture du
+  // pion (il les calcule à partir du cadre réservé au visage), pas
+  // d'un relevé à l'œil : si le visage bouge dans l'atlas, ces
+  // valeurs doivent être reprises de là.
   const EYES = [
-    {x0:0.250, y0:0.188, x1:0.308, y1:0.240},
-    {x0:0.303, y0:0.188, x1:0.375, y1:0.240},
+    {x0:0.1695, y0:0.1293, x1:0.3066, y1:0.2343},
+    {x0:0.3574, y0:0.1293, x1:0.4945, y1:0.2343},
   ];
-  const SKIN = '#f0b28c';
+  const SKIN = '#eeac84';
   let closed = false;
   function setClosed(v){
     if(v===closed) return;
@@ -1797,11 +1800,17 @@ async function loadPlayerModel(player){
   model.scale.setScalar(scale);
   model.position.y = -box.min.y*scale;
 
-  // Look "manga shonen" : shader toon (bandes d'ombre nettes, pas de
-  // dégradé PBR lisse) + contour noir épais par mesh inversé (technique
-  // classique du "inverted hull" : une copie de la géométrie, normales
-  // vues de l'intérieur (BackSide), légèrement agrandie, en noir plat —
-  // elle ne dépasse que sur le pourtour de la silhouette).
+  // Rendu "figurine" : shader toon (bandes d'ombre nettes plutôt qu'un
+  // dégradé PBR lisse), sans contour noir.
+  //
+  // Le contour d'avant était une copie du maillage agrandie de 4,5% et
+  // vue de l'intérieur. Agrandir depuis l'origine du modèle décale une
+  // pièce d'autant plus qu'elle en est loin : le bord fin du chapeau,
+  // tout en haut, se retrouvait décalé bien plus que son épaisseur et
+  // disparaissait entièrement sous sa propre copie noire (chapeau de
+  // paille qui s'affichait noir). Une vraie figurine plastique n'a de
+  // toute façon pas de trait d'encre — et ça fait deux fois moins de
+  // maillages à dessiner pour le pion.
   const toonGradientMap = (()=>{
     const n = 4;
     const data = new Uint8Array(n);
@@ -1812,8 +1821,6 @@ async function loadPlayerModel(player){
     tex.needsUpdate = true;
     return tex;
   })();
-  const outlineMat = new THREE.MeshBasicMaterial({color:0x0a0805, side:THREE.BackSide});
-  const outlineMeshes = [];
   let blink = { update(){} };
   let blinkAssigned = false;
   model.traverse(o=>{
@@ -1832,12 +1839,7 @@ async function loadPlayerModel(player){
       blink = setupBlink(newMat, oldMat.map);
       blinkAssigned = true;
     }
-    const outline = o.isSkinnedMesh ? new THREE.SkinnedMesh(o.geometry, outlineMat) : new THREE.Mesh(o.geometry, outlineMat);
-    if(o.isSkinnedMesh) outline.bind(o.skeleton, o.bindMatrix);
-    outline.scale.setScalar(1.045);
-    outlineMeshes.push([o.parent, outline]);
   });
-  outlineMeshes.forEach(([parent, o])=>parent.add(o));
 
   player.root.add(model);
 
