@@ -54,7 +54,7 @@ function outwardYaw(r,c){
    ========================================================================= */
 const CATS = {
   commune:     { label:'Pioche du Prof. Chen',        value:'~0,68€',  tier:'flat',  swatch:'bronze' },
-  booster8:    { label:'Booster du Marchand',         value:'8€',      tier:'float', swatch:'blue'   },
+  booster8:    { label:'Booster du Marchand 30 ans',  value:'8€',      tier:'float', swatch:'blue'   },
   alternative: { label:'Zone Safari',                 value:'~7,20€',  tier:'flat',  swatch:'red'    },
   gradee:      { label:'Duopack 30 ans',              value:'20-80€',  tier:'float', swatch:'teal'   },
   booster50:   { label:'Tripack 30 ans',              value:'50€',     tier:'float', swatch:'rose'   },
@@ -1137,12 +1137,18 @@ function makeCenterPlateTexture(){
 
     // titre du lot à droite du médaillon (pas de prix affiché : le
     // plateau doit rester une carte "quoi gagner", pas un tarif) —
-    // ombre sombre pour rester lisible sans fond plein derrière
+    // noir gras avec un fin liseré doré (façon plaque de luxe/casino
+    // haut de gamme) : lisible aussi bien sur les zones claires que
+    // sombres de la photo derrière, plus "classe" qu'un simple aplat.
     const textX = dotX + dotR*1.5;
     ctx.textAlign='left'; ctx.textBaseline='middle';
-    ctx.shadowColor = 'rgba(0,0,0,.9)'; ctx.shadowBlur = size*0.014;
-    ctx.fillStyle = GOLD_BRIGHT;
-    ctx.font='800 '+(rh*0.32)+'px Arial,Helvetica,sans-serif';
+    ctx.font='900 '+(rh*0.32)+'px Arial,Helvetica,sans-serif';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = size*0.0045;
+    ctx.strokeStyle = GOLD_BRIGHT;
+    ctx.strokeText(CATS[r.catKey].label, textX, y+rh*0.52);
+    ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = size*0.008;
+    ctx.fillStyle = '#0a0a0a';
     ctx.fillText(CATS[r.catKey].label, textX, y+rh*0.52);
     ctx.shadowBlur = 0;
     ctx.textBaseline='alphabetic';
