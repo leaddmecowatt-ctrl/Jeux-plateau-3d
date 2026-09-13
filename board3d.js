@@ -1643,7 +1643,139 @@ const PLAYER_TARGET_HEIGHT = 0.82; // hauteur visée sur le plateau (mêmes prop
    prêt, sans jamais bloquer le reste du jeu si ce chargement échoue ou
    traîne (réseau lent, navigateur qui bute sur le GLB, etc.). */
 function createPlayer(){
-  return { root: new THREE.Group(), mixer: { update(){} }, setWalking(){} };
+  return { root: new THREE.Group(), mixer: { update(){} }, setWalking(){}, updateIdleLife(){} };
+}
+
+/* ---------- Petite "vie" du pion au repos (respiration, regard,
+   clignement, gestes) ----------
+   Superposée APRÈS mixer.update() : le mixer pose d'abord la pose de
+   l'anim "idle" du modèle Kenney (statique, bras le long du corps),
+   puis on ajoute ici de petites rotations locales sur quelques os —
+   jamais de remplacement de la pose, juste un delta additif rejoué
+   depuis la valeur que le mixer vient de poser à cette frame (donc
+   sans dérive d'une frame à l'autre, purement fonction du temps
+   écoulé). Toute la boucle est une fonction périodique exacte de
+   période IDLE_LIFE_PERIOD : comme le jeu tourne en continu (pas une
+   vidéo à durée fixe), c'est déjà une boucle parfaite — elle se
+   répète à l'identique indéfiniment, sans aucune coupure visible. */
+const IDLE_LIFE_PERIOD = 6.4;
+
+function findBone(root, name){
+  let found = null;
+  root.traverse(o=>{ if(!found && o.isBone && o.name===name) found = o; });
+  return found;
+}
+
+/* Bosse lisse centrée sur `center` (0..1, cyclique), de demi-largeur
+   `width` : utile pour un geste ponctuel dans la boucle plutôt qu'une
+   sinusoïde continue (un "regard" ou un petit geste doit avoir un
+   début et une fin, pas juste osciller sans arrêt). */
+function pulse(ph, center, width, power){
+  let d = Math.abs(ph-center);
+  d = Math.min(d, 1-d) / width;
+  return d<1 ? Math.pow(1-d*d, power||2) : 0;
+}
+
+/* Découpe la texture de peau (déjà chargée pour le matériau du
+   personnage) en un <canvas> qu'on peut redessiner : au repos, les
+   yeux sont peints directement dans la texture (pas de géométrie de
+   paupière séparée), donc "cligner des yeux" veut dire repeindre par-
+   dessus un petit rectangle couleur peau à l'endroit des yeux pendant
+   quelques dixièmes de seconde, puis revenir à la texture d'origine —
+   un aller-retour bien moins coûteux qu'un changement de géométrie,
+   et qui ne redessine que sur un changement d'état (pas à chaque
+   frame). */
+function setupBlink(material, srcTexture){
+  const img = srcTexture.image;
+  if(!img || !img.width) return { update(){} };
+  const w = img.width, h = img.height;
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, w, h);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = srcTexture.colorSpace;
+  tex.flipY = srcTexture.flipY;
+  tex.wrapS = srcTexture.wrapS;
+  tex.wrapT = srcTexture.wrapT;
+  material.map = tex;
+  material.needsUpdate = true;
+
+  // Zones des deux yeux dans la texture (mesurées une fois sur
+  // l'atlas du personnage), en fractions 0..1 de la largeur/hauteur.
+  const EYES = [
+    {x0:0.250, y0:0.188, x1:0.308, y1:0.240},
+    {x0:0.303, y0:0.188, x1:0.375, y1:0.240},
+  ];
+  const SKIN = '#f0b28c';
+  let closed = false;
+  function setClosed(v){
+    if(v===closed) return;
+    closed = v;
+    ctx.drawImage(img, 0, 0, w, h);
+    if(v){
+      ctx.fillStyle = SKIN;
+      EYES.forEach(e=>{
+        const ex = e.x0*w, ey = e.y0*h;
+        ctx.fillRect(ex, ey, (e.x1-e.x0)*w, (e.y1-e.y0)*h);
+      });
+    }
+    tex.needsUpdate = true;
+  }
+  return {
+    update(ph){
+      const blinking = pulse(ph, 0.16, 0.018) > 0.15 || pulse(ph, 0.63, 0.018) > 0.15;
+      setClosed(blinking);
+    },
+  };
+}
+
+function buildIdleLife(bones, blink){
+  const twoPi = Math.PI*2;
+  return function updateIdleLife(t){
+    const ph = (t % IDLE_LIFE_PERIOD) / IDLE_LIFE_PERIOD;
+
+    // Respiration douce (2 cycles par boucle) : la cage thoracique se
+    // soulève/penche à peine, le buste haut compense un peu à
+    // l'inverse pour rester naturel.
+    const breathe = Math.sin(ph*twoPi*2);
+    if(bones.chest) bones.chest.rotation.x += breathe*0.026;
+    if(bones.upperChest) bones.upperChest.rotation.x -= breathe*0.013;
+
+    // Tête curieuse qui regarde autour d'elle : un grand mouvement de
+    // balayage par boucle + un petit temps d'arrêt/reprise (2e
+    // harmonique) pour que ça ne ressemble pas à un métronome.
+    const yaw = Math.sin(ph*twoPi)*0.20 + Math.sin(ph*twoPi*2+1.1)*0.08;
+    const pitch = Math.sin(ph*twoPi + 0.6)*0.06 + pulse(ph,0.5,0.05)*0.05;
+    if(bones.neck){ bones.neck.rotation.y += yaw*0.35; bones.neck.rotation.x += pitch*0.35; }
+    if(bones.head){ bones.head.rotation.y += yaw*0.65; bones.head.rotation.x += pitch*0.65; }
+
+    // Léger balancement du corps (transfert de poids d'un pied à
+    // l'autre, sans bouger les pieds eux-mêmes).
+    const sway = Math.sin(ph*twoPi + 0.3);
+    if(bones.hips){ bones.hips.rotation.z += sway*0.032; bones.hips.position.y += Math.abs(breathe)*0.003; }
+    if(bones.spine) bones.spine.rotation.z -= sway*0.016;
+
+    // Petits mouvements de bras au repos, légèrement déphasés du
+    // corps pour un rendu organique plutôt que synchronisé.
+    const armL = Math.sin(ph*twoPi*1.5 + 2.1);
+    const armR = Math.sin(ph*twoPi*1.5 + 0.4);
+    if(bones.leftArm) bones.leftArm.rotation.z += armL*0.045;
+    if(bones.rightArm) bones.rightArm.rotation.z += armR*0.045;
+    if(bones.leftForeArm) bones.leftForeArm.rotation.x += armL*0.035;
+    if(bones.rightForeArm) bones.rightForeArm.rotation.x += armR*0.035;
+
+    // Un petit geste spontané par boucle : la main droite se lève un
+    // instant, comme une réaction curieuse et attendrissante, avant
+    // de retomber — un vrai début/milieu/fin, pas une oscillation
+    // continue.
+    const gesture = pulse(ph, 0.5, 0.14, 3);
+    if(bones.rightArm) bones.rightArm.rotation.x -= gesture*0.55;
+    if(bones.rightForeArm) bones.rightForeArm.rotation.x -= gesture*0.4;
+    if(bones.head) bones.head.rotation.x -= gesture*0.12;
+
+    blink.update(ph);
+  };
 }
 
 /* Charge le vrai modèle 3D animé en arrière-plan et le greffe dans le
@@ -1682,15 +1814,24 @@ async function loadPlayerModel(player){
   })();
   const outlineMat = new THREE.MeshBasicMaterial({color:0x0a0805, side:THREE.BackSide});
   const outlineMeshes = [];
+  let blink = { update(){} };
+  let blinkAssigned = false;
   model.traverse(o=>{
     if(!o.isMesh) return;
     o.castShadow = true;
     const oldMat = o.material;
-    o.material = new THREE.MeshToonMaterial({
+    const newMat = new THREE.MeshToonMaterial({
       map: oldMat.map || null,
       gradientMap: toonGradientMap,
       color: oldMat.color ? oldMat.color.clone() : new THREE.Color(0xffffff),
     });
+    o.material = newMat;
+    // Le matériau "peau" (texture visage/corps) est le seul avec une
+    // map — casquette/bande/cheveux sont en couleur plate.
+    if(oldMat.map && !blinkAssigned){
+      blink = setupBlink(newMat, oldMat.map);
+      blinkAssigned = true;
+    }
     const outline = o.isSkinnedMesh ? new THREE.SkinnedMesh(o.geometry, outlineMat) : new THREE.Mesh(o.geometry, outlineMat);
     if(o.isSkinnedMesh) outline.bind(o.skeleton, o.bindMatrix);
     outline.scale.setScalar(1.045);
@@ -1743,6 +1884,20 @@ async function loadPlayerModel(player){
 
   player.mixer = mixer;
   player.setWalking = setWalking;
+
+  const bones = {
+    hips: findBone(model, 'Hips'),
+    spine: findBone(model, 'Spine'),
+    chest: findBone(model, 'Chest'),
+    upperChest: findBone(model, 'UpperChest'),
+    neck: findBone(model, 'Neck'),
+    head: findBone(model, 'Head'),
+    leftArm: findBone(model, 'LeftArm'),
+    rightArm: findBone(model, 'RightArm'),
+    leftForeArm: findBone(model, 'LeftForeArm'),
+    rightForeArm: findBone(model, 'RightForeArm'),
+  };
+  player.updateIdleLife = buildIdleLife(bones, blink);
 }
 
 const player = createPlayer();
@@ -2061,6 +2216,7 @@ function animate(){
     player.setWalking(false);
   }
   player.mixer.update(dt);
+  if(!walk && !reduceMotion) player.updateIdleLife(t);
 
   // Séisme puis éclatement du plateau (effet "Carte Darkrai")
   if(shakeUntil>0 && t<shakeUntil){
