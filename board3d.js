@@ -1140,16 +1140,16 @@ function makeCenterPlateTexture(){
     // noir gras avec un fin liseré doré (façon plaque de luxe/casino
     // haut de gamme) : lisible aussi bien sur les zones claires que
     // sombres de la photo derrière, plus "classe" qu'un simple aplat.
-    // Taille de police maximisée : part grand (rh*0.44, bien plus gros
-    // qu'avant) et ne réduit que si un nom précis (ex. "Booster du
-    // Marchand 30 ans", le plus long) déborderait sinon de la ligne.
+    // Taille de police maximisée : part encore plus grand (rh*0.52) et
+    // ne réduit que si un nom précis (ex. "Booster du Marchand 30 ans",
+    // le plus long) déborderait sinon de la ligne.
     const textX = dotX + dotR*1.5;
     const maxTextW = rowX + rowW - textX - size*0.012;
     ctx.textAlign='left'; ctx.textBaseline='middle';
     ctx.lineJoin = 'round';
-    let fontSize = rh*0.44;
+    let fontSize = rh*0.52;
     ctx.font='900 '+fontSize+'px Arial,Helvetica,sans-serif';
-    while(fontSize > rh*0.26 && ctx.measureText(CATS[r.catKey].label).width > maxTextW){
+    while(fontSize > rh*0.28 && ctx.measureText(CATS[r.catKey].label).width > maxTextW){
       fontSize -= 1;
       ctx.font='900 '+fontSize+'px Arial,Helvetica,sans-serif';
     }
