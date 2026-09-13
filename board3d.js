@@ -1034,12 +1034,25 @@ function makeCenterPlateTexture(){
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR,0,Math.PI*2); ctx.stroke();
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR*0.34,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill(); ctx.stroke();
 
+  // Titre façon logo de jeu : lettres épaisses arrondies jaunes, gros
+  // contour bleu, et une extrusion en biais qui donne le relief. Le
+  // relief est fait en redessinant le texte plusieurs fois décalé vers
+  // le bas-droite : une simple ombre portée resterait plate.
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.font='900 '+(size*0.05)+'px Arial,Helvetica,sans-serif';
-  ctx.shadowColor='rgba(255,210,110,.7)'; ctx.shadowBlur=size*0.01;
-  ctx.fillStyle = GOLD_BRIGHT;
-  ctx.fillText('PIKAPOLY', size/2, size*0.185);
-  ctx.shadowBlur = 0;
+  ctx.font=(size*0.072)+'px "Luckiest Guy",Impact,"Arial Black",sans-serif';
+  ctx.lineJoin = 'round';
+  const tx = size/2, ty = size*0.185;
+  const depth = size*0.008;
+  for(let i=6;i>=1;i--){
+    ctx.fillStyle = '#1d3f86';
+    ctx.fillText('PIKAPOLY', tx + depth*i*0.35, ty + depth*i*0.5);
+  }
+  ctx.strokeStyle = '#173572'; ctx.lineWidth = size*0.017;
+  ctx.strokeText('PIKAPOLY', tx, ty);
+  ctx.strokeStyle = '#2f6fc4'; ctx.lineWidth = size*0.010;
+  ctx.strokeText('PIKAPOLY', tx, ty);
+  ctx.fillStyle = '#ffcb05';
+  ctx.fillText('PIKAPOLY', tx, ty);
 
   // en-tête de la légende — ombre sombre pour rester lisible sur
   // n'importe quel fond de photo, sans panneau derrière
@@ -1048,13 +1061,6 @@ function makeCenterPlateTexture(){
   ctx.fillStyle = GOLD_BRIGHT;
   ctx.fillText('★ TOUS LES LOTS À GAGNER ★', size/2, size*0.235);
   ctx.shadowBlur = 0;
-
-  // liseré tricolore (clin d'oeil Pokémon)
-  const stripeY = size*0.25, stripeW = size*0.3, stripeH = size*0.011;
-  [[-1,'#1a56db'],[0,'#ffffff'],[1,'#e0323f']].forEach(([d,c])=>{
-    ctx.fillStyle = c;
-    ctx.fillRect(size/2 - stripeW/2, stripeY + d*stripeH, stripeW, stripeH);
-  });
 
   // Chance / Caisse : deux petits badges compacts côte à côte (pas
   // des lots, pas de ligne dédiée) — icône dans un rond + nom court.
@@ -1178,6 +1184,19 @@ const centerPlate = new THREE.Mesh(
 );
 centerPlate.position.y = 0.07;
 boardGroup.add(centerPlate);
+
+/* Le titre de la plaque est dessiné dans un canvas dès le chargement,
+   or la police du logo arrive du réseau : au premier passage elle n'est
+   pas encore là et le titre retomberait sur la police de secours. On
+   redessine donc la plaque une fois la police réellement disponible. */
+if(document.fonts && document.fonts.load){
+  document.fonts.load('40px "Luckiest Guy"').then(()=>{
+    const tex = makeCenterPlateTexture();
+    centerPlate.material.map.dispose();
+    centerPlate.material.map = tex;
+    centerPlate.material.needsUpdate = true;
+  }).catch(()=>{});
+}
 
 /* ---------- Ornements dorés dans les 4 angles du plateau ----------
    Petites "boucles" en volutes façon gravure, comme sur le visuel
