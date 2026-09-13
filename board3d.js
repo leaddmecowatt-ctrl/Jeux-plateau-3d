@@ -1034,41 +1034,13 @@ function makeCenterPlateTexture(){
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR,0,Math.PI*2); ctx.stroke();
   ctx.beginPath(); ctx.arc(size/2,pbY,pbR*0.34,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill(); ctx.stroke();
 
-  // Titre : lettres épaisses arrondies posées sur un arc léger (comme
-  // un logo de jeu), mais dans l'or du plateau — la couleur d'origine
-  // ne change pas, seule la forme des lettres et la courbe changent.
-  // Chaque lettre est placée puis pivotée le long du cercle : écrire le
-  // mot d'un bloc ne permettrait aucune courbure.
+  // Titre du plateau, dans la police et l'or d'origine — juste un peu
+  // plus grand qu'avant.
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.font=(size*0.072)+'px "Luckiest Guy",Impact,"Arial Black",sans-serif';
-  ctx.lineJoin = 'round';
-  const title = 'PIKAPOLY';
-  const tx = size/2, ty = size*0.185;
-  const arcR = size*1.55;                 // grand rayon = courbe discrète
-  const widths = [...title].map(ch => ctx.measureText(ch).width);
-  const totalW = widths.reduce((a, b) => a + b, 0);
-
-  function drawArcTitle(draw){
-    ctx.save();
-    ctx.translate(tx, ty + arcR);         // centre du cercle sous le texte
-    let a = -(totalW/arcR)/2;             // départ à gauche de l'arc
-    for(let i=0;i<title.length;i++){
-      a += (widths[i]/arcR)/2;
-      ctx.save();
-      ctx.rotate(a);
-      ctx.translate(0, -arcR);
-      draw(title[i]);
-      ctx.restore();
-      a += (widths[i]/arcR)/2;
-    }
-    ctx.restore();
-  }
-
-  ctx.shadowColor='rgba(255,210,110,.7)'; ctx.shadowBlur=size*0.012;
-  ctx.strokeStyle = 'rgba(60,38,6,.85)'; ctx.lineWidth = size*0.009;
-  drawArcTitle(ch => ctx.strokeText(ch, 0, 0));
+  ctx.font='900 '+(size*0.060)+'px Arial,Helvetica,sans-serif';
+  ctx.shadowColor='rgba(255,210,110,.7)'; ctx.shadowBlur=size*0.01;
   ctx.fillStyle = GOLD_BRIGHT;
-  drawArcTitle(ch => ctx.fillText(ch, 0, 0));
+  ctx.fillText('PIKAPOLY', size/2, size*0.185);
   ctx.shadowBlur = 0;
 
   // en-tête de la légende — ombre sombre pour rester lisible sur
@@ -1201,19 +1173,6 @@ const centerPlate = new THREE.Mesh(
 );
 centerPlate.position.y = 0.07;
 boardGroup.add(centerPlate);
-
-/* Le titre de la plaque est dessiné dans un canvas dès le chargement,
-   or la police du logo arrive du réseau : au premier passage elle n'est
-   pas encore là et le titre retomberait sur la police de secours. On
-   redessine donc la plaque une fois la police réellement disponible. */
-if(document.fonts && document.fonts.load){
-  document.fonts.load('40px "Luckiest Guy"').then(()=>{
-    const tex = makeCenterPlateTexture();
-    centerPlate.material.map.dispose();
-    centerPlate.material.map = tex;
-    centerPlate.material.needsUpdate = true;
-  }).catch(()=>{});
-}
 
 /* ---------- Ornements dorés dans les 4 angles du plateau ----------
    Petites "boucles" en volutes façon gravure, comme sur le visuel
