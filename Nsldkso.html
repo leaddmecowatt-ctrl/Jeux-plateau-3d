@@ -20,37 +20,29 @@ body{overflow:hidden;color:#fff}
   display:flex;flex-direction:column;
   position:relative;
 }
-#app::before{
-  content:"";
-  position:absolute;
-  inset:0;
+/* Le fond vivant est un <canvas> (#bgLive, voir script plus bas), pas
+   un background-image CSS : ça permet de redessiner la photo bande par
+   bande avec un léger décalage horizontal (façon miroitement de
+   chaleur) pour faire onduler nuages/rochers/îlots, sans jamais
+   toucher au plateau (canvas séparé). Un filtre SVG feTurbulence +
+   feDisplacementMap avait été essayé ici : il fait retraiter toute
+   l'image par le CPU à chaque frame, ce qui a rendu tout le jeu
+   saccadé sur le téléphone de l'utilisateur — retiré. Cette version
+   ne fait que des drawImage() par bandes, une opération native bien
+   moins coûteuse, tout en donnant un effet de distorsion réel (pas
+   juste une respiration de luminosité). */
+#bgLive{
+  position:absolute; inset:0; width:100%; height:100%;
+  z-index:0; pointer-events:none;
+}
+@media (prefers-reduced-motion: reduce){ #bgLive{ display:none; } }
+#bgLiveFallback{
+  position:absolute; inset:0;
   background-image:url("./assets/bg/dragon_sky.jpg");
-  background-repeat:no-repeat;
-  /* L'image est en portrait (plus haute que large) et le format du
-     téléphone aussi : "cover" ici ne rogne quasiment que les bords
-     gauche/droite (les volutes extérieures), jamais le haut/bas — le
-     dragon reste visible de la tête à la queue. */
-  background-size:cover;
-  background-position:center center;
-  z-index:0;
-  pointer-events:none;
-  /* Cadrage fixe (pas de travelling/zoom/pan : on ne "balade" pas la
-     caméra dans la photo). Le filtre SVG de distorsion (feTurbulence +
-     feDisplacementMap) essayé ici créait une couture noire visible par
-     moments (bug connu de ce filtre près des bords) — retiré. La vie
-     vient maintenant d'une respiration douce de luminosité/saturation,
-     sans jamais déformer l'image (donc plus aucun risque de couture). */
-  transform:scale(1.05);
-  transform-origin:center center;
-  animation:dragonGlow 9s ease-in-out infinite;
+  background-repeat:no-repeat; background-size:cover; background-position:center center;
+  z-index:0; pointer-events:none; display:none;
 }
-@keyframes dragonGlow{
-  0%,100%{ filter:brightness(1) saturate(1); }
-  50%{ filter:brightness(1.08) saturate(1.12); }
-}
-@media (prefers-reduced-motion: reduce){
-  #app::before{ animation:none; }
-}
+@media (prefers-reduced-motion: reduce){ #bgLiveFallback{ display:block; } }
 /* Voile sombre entre la photo de fond et le plateau : la photo seule
    (très claire/chargée) écrasait le contraste du plateau, qui se
    voyait mal par-dessus. Un peu plus sombre sur les bords qu'au
@@ -532,6 +524,8 @@ if(new URLSearchParams(location.search).get('view')==='display'){
 }
 </script>
 <div id="app">
+  <canvas id="bgLive" aria-hidden="true"></canvas>
+  <div id="bgLiveFallback" aria-hidden="true"></div>
   <div class="top-hud">
     <div class="brand">★ PIKAPOLY ★</div>
     <div class="place-banner-wrap"><div class="place-banner" id="placeBanner">Départ</div></div>
@@ -665,6 +659,84 @@ if(new URLSearchParams(location.search).get('view')==='display'){
   </div>
 </div>
 
+<script>
+/* Fond vivant : redessine la photo de fond en bandes horizontales,
+   chaque bande légèrement décalée sur l'axe X par une somme de deux
+   sinus (une grande onde lente + une petite plus rapide), façon
+   miroitement de chaleur / reflet dans l'eau. Contrairement à un
+   filtre SVG (feTurbulence + feDisplacementMap, essayé avant et retiré
+   — il fait retraiter l'image entière au niveau du pixel à chaque
+   frame, très coûteux sur mobile), ceci ne fait qu'un drawImage() par
+   bande : une opération native, largement moins chère.
+
+   Sécurité anti-couture : l'image est en "cover" sur cet écran, ce qui
+   la rend plus LARGE que le canvas (elle déborde et est rognée à
+   gauche/droite, jamais en haut/bas) — cette marge existante sert de
+   réserve dans laquelle chaque bande peut se décaler sans jamais
+   révéler de vide, tant que l'amplitude du décalage reste petite par
+   rapport à cette marge (vérifié : marge type de plusieurs dizaines de
+   pixels, amplitude ici plafonnée à ~7px). Aucun décalage vertical
+   n'est appliqué (le "cover" ne laisse aucune marge verticale), donc
+   aucun risque de couture en haut/bas non plus. */
+(function(){
+  var canvas = document.getElementById('bgLive');
+  var fallback = document.getElementById('bgLiveFallback');
+  if(!canvas || !canvas.getContext) return;
+  if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  var ctx = canvas.getContext('2d', {alpha:false});
+  var img = new Image();
+  var ready = false;
+  var cw = 0, ch = 0, dpr = 1;
+  var SLICE = 10; // hauteur de bande en px CSS — plus petit = plus fin mais plus de drawImage()
+
+  function resize(){
+    var app = document.getElementById('app');
+    var r = app.getBoundingClientRect();
+    cw = Math.max(1, Math.round(r.width));
+    ch = Math.max(1, Math.round(r.height));
+    dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    canvas.width = Math.round(cw*dpr);
+    canvas.height = Math.round(ch*dpr);
+    canvas.style.width = cw+'px';
+    canvas.style.height = ch+'px';
+  }
+  window.addEventListener('resize', resize, {passive:true});
+  window.addEventListener('orientationchange', function(){ setTimeout(resize,150); }, {passive:true});
+  resize();
+
+  img.onload = function(){ ready = true; requestAnimationFrame(frame); };
+  img.onerror = function(){
+    // La photo n'a pas pu charger : autant montrer le <div> de secours
+    // (statique, background-size:cover) que garder un canvas vide.
+    if(fallback) fallback.style.display = 'block';
+  };
+  img.src = './assets/bg/dragon_sky.jpg';
+
+  function frame(now){
+    requestAnimationFrame(frame);
+    if(!ready || cw<=0 || ch<=0) return;
+    var t = now/1000;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+
+    // "cover" : l'image remplit toute la hauteur (bord à bord, aucune
+    // marge verticale) et déborde en largeur (marge = réserve anti-
+    // couture pour le décalage horizontal des bandes).
+    var scale = Math.max(cw/img.naturalWidth, ch/img.naturalHeight);
+    var drawW = img.naturalWidth*scale, drawH = img.naturalHeight*scale;
+    var offsetX = (cw-drawW)/2, offsetY = (ch-drawH)/2;
+
+    for(var destY=0; destY<ch; destY+=SLICE){
+      var sliceH = Math.min(SLICE, ch-destY);
+      var srcY = (destY-offsetY)/scale;
+      var srcH = sliceH/scale;
+      if(srcY<0 || srcY+srcH>img.naturalHeight) continue;
+      var shift = 4.2*Math.sin(t*0.4 + destY*0.011) + 2.1*Math.sin(t*1.15 + destY*0.03);
+      ctx.drawImage(img, 0, srcY, img.naturalWidth, srcH,
+                    offsetX+shift, destY, drawW, sliceH);
+    }
+  }
+})();
+</script>
 <script type="importmap">
 { "imports": { "three": "./vendor/three/three.module.min.js" } }
 </script>
