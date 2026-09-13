@@ -1516,6 +1516,13 @@ for(let i=0;i<40;i++){
   tiles.push({
     group, topGroup, world, tileTopY, catKey, catDef, caseNum, isVisite:data.isVisite,
     halo, floatObj, shadowDisc, floatBaseScale, holoShine, motion: MOTION[catKey]||{bob:0.08},
+    // Demi-hauteur réelle du lot flottant et sa hauteur de repos au-dessus
+    // de la case : sert à calculer de combien il doit s'élever pour passer
+    // AU-DESSUS du pion au lieu d'être traversé par lui (voir la boucle
+    // d'animation). Le sprite "glyphe" (Chance/Caisse) mesure 0.6 de côté.
+    floatHalfH: catDef.tier==='float' ? floatBaseScale*0.5 : 0.3,
+    floatBaseOff: catDef.tier==='float' ? 0.32 + floatBaseScale*0.5 : 0.3,
+    floatLiftCur: 0,
     bezelBase, rivetPositions, rivetY:RIVET_Y, bezelIndex:i,
     phase: Math.random()*Math.PI*2,
     breathePhase: ((r+c)%8)*0.4
@@ -1821,6 +1828,45 @@ function setupBlink(material, srcTexture){
       setClosed(blinking);
     },
   };
+}
+
+/* Hauteur RÉELLE du pion au-dessus de ses pieds, relevée une fois sur le
+   modèle chargé. On ne peut pas se fier à PLAYER_TARGET_HEIGHT : c'est la
+   hauteur visée, mais la mise à l'échelle du modèle est calculée sur une
+   Box3 qui ignore le skinning, et le personnage rendu fait en pratique
+   près du double. Un lot flottant calé sur 0.82 s'arrêtait donc au niveau
+   du torse et coupait le pion en deux. computeBoundingBox() d'une
+   SkinnedMesh, lui, applique les matrices d'os et donne la vraie
+   silhouette — coûteux (il parcourt tous les sommets), d'où un relevé
+   limité aux premières frames.
+   Le relevé est pris sur des frames déjà POSÉES (l'appel se fait après
+   mixer.update) et on garde le maximum : sur la toute première frame le
+   squelette n'a pas encore ses matrices d'os, computeBoundingBox rend
+   une boîte écrasée, et un relevé unique se figeait sur cette valeur
+   fausse. */
+let playerTopOffset = PLAYER_TARGET_HEIGHT;
+let playerTopSamples = 0, playerTopSkip = 0;
+function measurePlayerTop(){
+  if(playerTopSamples >= 60 || !player.root.children.length) return;
+  // un relevé toutes les 8 frames : la boucle "idle" dure 6,4 s, donc
+  // 60 relevés d'affilée n'en couvriraient qu'une fraction et la
+  // silhouette la plus haute du cycle passerait à côté.
+  if(playerTopSkip-- > 0) return;
+  playerTopSkip = 7;
+  playerTopSamples++;
+  let maxY = -Infinity;
+  player.root.updateWorldMatrix(true, true);
+  player.root.traverse(o=>{
+    if(!o.isSkinnedMesh) return;
+    if(typeof o.computeBoundingBox === 'function') o.computeBoundingBox();
+    const src = o.boundingBox || o.geometry.boundingBox;
+    if(!src) return;
+    const bb = src.clone().applyMatrix4(o.matrixWorld);
+    if(bb.max.y > maxY) maxY = bb.max.y;
+  });
+  if(maxY > -Infinity){
+    playerTopOffset = Math.max(playerTopOffset, maxY - player.root.position.y);
+  }
 }
 
 /* ---------- Réaction de joie du pion sur un gros lot ----------
@@ -2258,7 +2304,25 @@ function animate(){
       const bobAmt = reduceMotion ? 0 : m.bob;
       const bob = Math.sin(t*2 + tile.phase)*bobAmt;
       const baseY = tile.tileTopY + 0.32 + (tile.catDef.tier==='float' ? tile.floatBaseScale*0.5 : -0.02);
-      tile.floatObj.position.y = baseY + bob;
+      // Le lot s'élève quand le pion approche, pour lui passer AU-DESSUS
+      // de la tête. Au repos il flotte à hauteur de torse : le pion le
+      // traversait et se retrouvait coupé en deux par la carte. La montée
+      // est amortie dans le temps, donc le lot se soulève à l'approche et
+      // se repose une fois le pion reparti, au lieu de sauter d'un coup.
+      const pdx = player.root.position.x - tile.world.x;
+      const pdz = player.root.position.z - tile.world.z;
+      const pd = Math.hypot(pdx, pdz);
+      // 1 quand le pion est sur la case, 0 au-delà d'une case d'écart
+      const near = pd <= CELL*0.5 ? 1
+                 : pd >= CELL*1.0 ? 0
+                 : 1 - (pd - CELL*0.5)/(CELL*0.5);
+      // marge au-dessus de la silhouette au repos : elle doit encaisser
+      // le petit saut de joie (+0.16) et les bras levés, que le relevé de
+      // chargement ne voit pas.
+      const needOff = playerTopOffset + 0.30 + tile.floatHalfH;
+      const wantLift = Math.max(0, needOff - tile.floatBaseOff) * (near*near*(3-2*near));
+      tile.floatLiftCur += (wantLift - tile.floatLiftCur) * Math.min(1, dt*7);
+      tile.floatObj.position.y = baseY + bob + tile.floatLiftCur;
       if(!reduceMotion && m.swing){
         tile.floatObj.rotation.y = Math.sin(t*0.7 + tile.phase)*m.swing;
       }
@@ -2271,8 +2335,11 @@ function animate(){
       }
       if(tile.shadowDisc){
         const k = 1 - Math.min(Math.abs(bob)/ (m.bob||1), 1)*0.5;
-        tile.shadowDisc.scale.set(k,k,k);
-        tile.shadowDisc.material.opacity = 0.3*k;
+        // plus le lot monte, plus son ombre s'élargit et s'efface
+        const liftN = Math.min(1, tile.floatLiftCur/0.9);
+        const sk = k*(1 + liftN*0.35);
+        tile.shadowDisc.scale.set(sk,sk,sk);
+        tile.shadowDisc.material.opacity = 0.3*k*(1 - liftN*0.55);
       }
       if(tile.holoShine && !reduceMotion){
         tile.holoShine.tex.offset.x = (t*tile.holoShine.speed + tile.holoShine.phase) % 1;
@@ -2390,6 +2457,7 @@ function animate(){
   }
   updateCheer(t);
   player.mixer.update(dt);
+  measurePlayerTop();
   if(!walk && !reduceMotion){
     player.updateIdleLife(t);
     if(cheerSettle){
@@ -2966,7 +3034,13 @@ async function playCardDrawAnimation(draw){
         '<span class="card-num"></span>' +
         '<span class="card-pip br"></span>' +
         '<span class="card-holo"></span>' +
-      '</div>';
+      '</div>' +
+      // hors de la carte : l'onde de choc et les eclats doivent
+      // deborder du cadre, or la face avant est en overflow:hidden
+      '<span class="card-shock"></span>' +
+      '<span class="card-sparks">' +
+        '<i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>' +
+      '</span>';
     cardGrid.appendChild(c);
     cardEls.push(c);
   }
@@ -3460,46 +3534,159 @@ window.addEventListener('resize', resizeCelebCanvas, {passive:true});
    un flash lumineux + des étincelles qui retombent. Plusieurs fusées
    sont lancées en décalé pour un petit spectacle, pas un simple
    confetti qui tombe d'un point fixe. */
-function spawnFirework(x, y, level, colors){
+/* Une gerbe : flash au coeur, onde de choc, puis la couronne
+   d'etincelles. Les particules trainent (trail), freinent dans l'air et
+   scintillent en fin de vie — c'est ce qui separe un vrai feu d'artifice
+   d'une simple explosion de confettis. */
+function spawnFirework(x, y, level, colors, opts){
+  const o = opts || {};
   const cols = colors || (level>=4 ? ['#ffe27a','#fff2c2','#ffffff','#ffd200'] : ['#ffe27a','#e0323f','#1a56db','#ffffff']);
-  const count = 26 + level*10;
+  const power = o.power || 1;
+  const count = Math.round((30 + level*12) * power);
+
+  // coeur : un flash bref, tres lumineux
   celebParticles.push({
-    x, y, px:x, py:y, vx:0, vy:0, g:0, size: 26+level*7, color:'#fff6d8',
-    life:1, decay:0.085, shape:'flash', rot:0, vr:0, spark:false
+    x, y, px:x, py:y, vx:0, vy:0, g:0, size:(30+level*8)*power, color:'#fff8e4',
+    life:1, decay:0.12, shape:'flash', rot:0, vr:0, spark:false, drag:1
   });
+  // onde de choc : un anneau fin qui s'ouvre et s'efface tres vite
+  celebParticles.push({
+    x, y, px:x, py:y, vx:0, vy:0, g:0, size:(10+level*3)*power, color:cols[0],
+    life:1, decay:0.07, shape:'ring', rot:0, vr:0, spark:false, drag:1
+  });
+
+  // couronne principale : deux rayons de vitesse pour donner de
+  // l'epaisseur a la sphere au lieu d'un simple cercle de points
   for(let i=0;i<count;i++){
-    const ang = (i/count)*Math.PI*2 + (Math.random()-0.5)*0.3;
-    const spd = (2.3+Math.random()*3)*(1+level*0.12);
-    const isSpark = Math.random() < 0.4;
+    const ang = (i/count)*Math.PI*2 + (Math.random()-0.5)*0.35;
+    const shell = Math.random()<0.62 ? 1 : 0.58;
+    const spd = (2.6+Math.random()*3.4)*(1+level*0.13)*power*shell;
+    const isSpark = Math.random() < 0.55;
     celebParticles.push({
       x, y, px:x, py:y, vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd,
-      g: 0.09+Math.random()*0.035, size: isSpark ? 1.6+Math.random()*1.6 : 2.6+Math.random()*3.2,
-      color: cols[(Math.random()*cols.length)|0], life:1, decay: 0.011+Math.random()*0.009,
-      shape: isSpark ? 'spark' : (Math.random()<0.5?'rect':'circle'), rot:Math.random()*Math.PI, vr:(Math.random()-0.5)*0.3,
-      spark:isSpark
+      g: 0.055+Math.random()*0.03,
+      size: isSpark ? 1.5+Math.random()*1.7 : 2.4+Math.random()*3.0,
+      color: cols[(Math.random()*cols.length)|0],
+      life:1, decay: 0.0075+Math.random()*0.007,
+      shape: isSpark ? 'spark' : (Math.random()<0.45?'rect':'circle'),
+      rot:Math.random()*Math.PI, vr:(Math.random()-0.5)*0.3,
+      spark:isSpark, drag:0.975, twinkle: Math.random()<0.45
     });
+  }
+
+  // crepitement : une seconde salve blanche part du meme point un
+  // instant plus tard, comme les fusees "a bouquet"
+  if(o.crackle !== false){
+    setTimeout(()=>{
+      const n = Math.round(16*power);
+      for(let i=0;i<n;i++){
+        const a = Math.random()*Math.PI*2;
+        const s = (1+Math.random()*2)*power;
+        celebParticles.push({
+          x, y, px:x, py:y, vx:Math.cos(a)*s, vy:Math.sin(a)*s - 0.6,
+          g:0.05, size:1.2+Math.random()*1.3, color:'#fffaf0',
+          life:1, decay:0.02+Math.random()*0.015, shape:'spark',
+          rot:0, vr:0, spark:true, drag:0.965, twinkle:true
+        });
+      }
+      if(!celebRAF) celebFrame();
+    }, 420);
   }
 }
 
-function launchFireworksShow(level){
+/* Cadre du lot a l'ecran : les gerbes doivent ENCADRER la photo, pas la
+   recouvrir. Sans ca les eclats passent devant le lot au moment precis
+   ou le joueur veut le voir. */
+function celebAnchorRect(){
+  if(celebPhoto && !celebPhoto.hidden){
+    const r = celebPhoto.getBoundingClientRect();
+    if(r.width > 40 && r.height > 40) return r;
+  }
+  const el = celeb && celeb.querySelector('.celeb-text');
+  if(el){
+    const r = el.getBoundingClientRect();
+    if(r.width > 40) return r;
+  }
+  return null;
+}
+
+/* Un point d'eclatement pour la fusee n°i : colonnes gauche et droite du
+   cadre, puis au-dessus. Jamais au centre — le lot doit rester lisible.
+   Le cadre est relu a chaque tir : au moment ou le show est lance la
+   photo vient d'etre affichee et n'a pas encore sa taille finale. */
+function framedBurstPoint(rect, i, W, H){
+  // On ne tire que dans les marges REELLES autour de la photo. En
+  // portrait sur telephone le lot occupe presque toute la largeur : des
+  // gerbes calees a gauche et a droite partaient derriere l'image (le
+  // canvas est sous la photo, pour que le lot reste lisible) et la
+  // moitie du bouquet ne se voyait pas.
+  const MIN = 80;
+  const zones = [];
+  if(rect.left > MIN) zones.push('L');
+  if(W - rect.right > MIN) zones.push('R');
+  if(rect.top > MIN) zones.push('T', 'T');       // le haut compte double
+  if(H - rect.bottom > MIN) zones.push('B');
+  if(!zones.length) zones.push('T');
+  const rnd = (a,b) => a + Math.random()*(b-a);
+  const z = zones[i % zones.length];
+  let x, y;
+  if(z === 'L'){
+    x = rnd(W*0.05, Math.max(W*0.06, rect.left - 18));
+    y = rnd(rect.top + rect.height*0.1, rect.top + rect.height*0.85);
+  } else if(z === 'R'){
+    x = rnd(Math.min(W*0.94, rect.right + 18), W*0.95);
+    y = rnd(rect.top + rect.height*0.1, rect.top + rect.height*0.85);
+  } else if(z === 'B'){
+    x = rnd(rect.left + rect.width*0.12, rect.right - rect.width*0.12);
+    y = rnd(rect.bottom + 24, H*0.95);
+  } else {
+    x = rnd(rect.left + rect.width*0.10, rect.right - rect.width*0.10);
+    y = rnd(H*0.05, Math.max(H*0.06, rect.top - 20));
+  }
+  return {
+    x: Math.max(W*0.04, Math.min(W*0.96, x)),
+    y: Math.max(H*0.04, Math.min(H*0.96, y))
+  };
+}
+
+/* Palettes par lot : le Duopack et le Tripack ont droit a leur propre
+   spectacle, cale sur la couleur de leur case (teal / rose). */
+const FIREWORK_PALETTES = {
+  gradee:    [['#48e5c2','#b9fff0','#ffffff','#ffe27a'], ['#2fd6b0','#ffffff','#aaf7e6']],
+  booster50: [['#ff6fae','#ffc2dd','#ffffff','#ffe27a'], ['#ff4f9a','#ffffff','#ffd7e8']],
+};
+
+function launchFireworksShow(level, catKey){
   if(!celebCanvas) return;
-  const palettes = level>=4
-    ? [['#ffe27a','#fff2c2','#ffffff','#ffd200'], ['#ffb347','#ffe27a','#ffffff']]
-    : [['#ffe27a','#e0323f','#1a56db','#ffffff'], ['#1a56db','#ffffff','#ffe27a']];
   const W = celebCanvas.width, H = celebCanvas.height;
-  const rocketCount = 2 + level;
+  // Le Duopack (gradee) et le Tripack (booster50) recoivent un vrai
+  // bouquet cadre sur la photo du lot, pas la volee generique.
+  const showcase = (catKey === 'gradee' || catKey === 'booster50');
+  const palettes = FIREWORK_PALETTES[catKey] || (level>=4
+    ? [['#ffe27a','#fff2c2','#ffffff','#ffd200'], ['#ffb347','#ffe27a','#ffffff']]
+    : [['#ffe27a','#e0323f','#1a56db','#ffffff'], ['#1a56db','#ffffff','#ffe27a']]);
+
+  const rocketCount = showcase ? 14 : 2 + level;
+
   for(let i=0;i<rocketCount;i++){
+    // salves de 3 : un bouquet se lit par vagues, une fusee toutes les
+    // 200 ms d'affilee donne un egrenage monotone
+    const wave = Math.floor(i/3);
+    const delay = wave*520 + (i%3)*(90+Math.random()*70);
     setTimeout(()=>{
-      const x = W*(0.18+Math.random()*0.64);
-      const y1 = H*(0.22+Math.random()*0.2);
+      const rect = showcase ? celebAnchorRect() : null;
+      const p = rect ? framedBurstPoint(rect, i, W, H) : null;
+      const x = p ? p.x : W*(0.18+Math.random()*0.64);
+      const y1 = p ? p.y : H*(0.22+Math.random()*0.2);
       const colors = palettes[(Math.random()*palettes.length)|0];
       celebRockets.push({
         x, y:H*1.05, y0:H*1.05, y1, px:x, py:H*1.05,
-        start: performance.now(), dur: 480+Math.random()*220,
-        exploded:false, level, colors
+        start: performance.now(), dur: (showcase?600:480)+Math.random()*240,
+        exploded:false, level, colors,
+        power: showcase ? 1.25+Math.random()*0.45 : 1
       });
       if(!celebRAF) celebFrame();
-    }, i*(200+Math.random()*140));
+    }, delay);
   }
 }
 
@@ -3516,7 +3703,7 @@ function celebFrame(){
     r.y = r.y0 + (r.y1 - r.y0) * eased;
     if(frac >= 1 && !r.exploded){
       r.exploded = true;
-      spawnFirework(r.x, r.y1, r.level, r.colors);
+      spawnFirework(r.x, r.y1, r.level, r.colors, {power:r.power});
     }
   });
   celebCtx.save();
@@ -3534,10 +3721,23 @@ function celebFrame(){
 
   celebParticles.forEach(p=>{
     p.px = p.x; p.py = p.y;
+    // frein de l'air : sans lui les eclats filent en ligne droite et la
+    // gerbe ressemble a une roue de rayons, pas a une sphere qui retombe
+    const dr = p.drag == null ? 1 : p.drag;
+    p.vx *= dr; p.vy *= dr;
     p.x += p.vx; p.y += p.vy; p.vy += p.g; p.life -= p.decay; p.rot += p.vr;
     celebCtx.save();
-    celebCtx.globalAlpha = Math.max(0,p.life);
-    if(p.shape==='flash'){
+    // scintillement de fin de vie, comme une braise
+    let a = Math.max(0, p.life);
+    if(p.twinkle && p.life < 0.55) a *= 0.35 + 0.65*Math.abs(Math.sin(p.life*42));
+    celebCtx.globalAlpha = a;
+    if(p.shape==='ring'){
+      const rad = p.size * (1 + (1-p.life)*7);
+      celebCtx.globalCompositeOperation = 'lighter';
+      celebCtx.strokeStyle = p.color;
+      celebCtx.lineWidth = Math.max(0.6, 3.5*p.life);
+      celebCtx.beginPath(); celebCtx.arc(p.x,p.y,rad,0,Math.PI*2); celebCtx.stroke();
+    } else if(p.shape==='flash'){
       const rad = p.size * (1.15 - p.life*0.3);
       const grad = celebCtx.createRadialGradient(p.x,p.y,0, p.x,p.y,rad);
       grad.addColorStop(0, p.color);
@@ -3546,9 +3746,19 @@ function celebFrame(){
       celebCtx.fillStyle = grad;
       celebCtx.beginPath(); celebCtx.arc(p.x,p.y,rad,0,Math.PI*2); celebCtx.fill();
     } else if(p.spark){
+      celebCtx.globalCompositeOperation = 'lighter';
+      celebCtx.lineCap = 'round';
       celebCtx.strokeStyle = p.color; celebCtx.lineWidth = p.size;
       celebCtx.beginPath(); celebCtx.moveTo(p.px,p.py); celebCtx.lineTo(p.x,p.y); celebCtx.stroke();
     } else {
+      // trainee derriere chaque eclat : c'est elle qui donne la sensation
+      // de vitesse et de matiere incandescente
+      celebCtx.globalCompositeOperation = 'lighter';
+      celebCtx.lineCap = 'round';
+      celebCtx.globalAlpha = a*0.5;
+      celebCtx.strokeStyle = p.color; celebCtx.lineWidth = p.size*0.7;
+      celebCtx.beginPath(); celebCtx.moveTo(p.px,p.py); celebCtx.lineTo(p.x,p.y); celebCtx.stroke();
+      celebCtx.globalAlpha = a;
       celebCtx.translate(p.x,p.y); celebCtx.rotate(p.rot);
       celebCtx.fillStyle = p.color;
       if(p.shape==='rect') celebCtx.fillRect(-p.size/2,-p.size/2,p.size,p.size*0.6);
@@ -3743,11 +3953,18 @@ function revealCelebration(catKey, forcedCard, level){
   // maintenant droit à son petit feu d'artifice (échelle réduite,
   // niveau 1) pour ne pas paraître trop terne face aux gros lots.
   const skipFx = !rareCardDrawn && catKey==='commune';
+  // Duopack et Tripack : bouquet cadre sur la photo du lot (voir
+  // launchFireworksShow), et show plus long pour lui laisser le temps
+  // de se dérouler jusqu'au bout.
+  const showcase = (catKey==='gradee' || catKey==='booster50');
   if(!skipFx){
-    launchFireworksShow(effectiveLevel);
-    if(effectiveLevel>=3){ triggerLightning(); if(effectiveLevel>=4) setTimeout(triggerLightning, 380); }
+    launchFireworksShow(effectiveLevel, catKey);
+    if(effectiveLevel>=3 || showcase){
+      triggerLightning();
+      if(effectiveLevel>=4 || showcase) setTimeout(triggerLightning, 380);
+    }
   }
-  celebEndAt = performance.now() + (skipFx ? 1200 : 1900 + effectiveLevel*500);
+  celebEndAt = performance.now() + (skipFx ? 1200 : (showcase ? 4600 : 1900 + effectiveLevel*500));
   if(!celebRAF) celebFrame();
   setTimeout(()=>{ celeb.classList.remove('shake'); }, rareCardDrawn ? 900 : 700);
 }
