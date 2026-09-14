@@ -865,6 +865,10 @@ controls.addEventListener('end', ()=>{
   idleTimer = setTimeout(()=>{ if(!reduceMotion && !gameStarted) controls.autoRotate = true; }, 3500);
 });
 if(hint3d){ setTimeout(()=>{ hint3d.style.opacity = '0'; }, 5000); }
+/* Un doigt sur l'écran reprend la main sur la caméra, même au milieu
+   d'un mouvement cinématique : le joueur doit toujours pouvoir regarder
+   le plateau où il veut. */
+renderer.domElement.addEventListener('pointerdown', ()=>{ cineEnd(); }, {passive:true});
 
 /* ---------- Lumières : ambiance "roue de la fortune" dorée ---------- */
 /* Le sol (couleur "ground") reprend une touche de bleu-violet nocturne
@@ -1781,8 +1785,14 @@ const RIG_BONES = [
 const REST_POSE = {
   LeftShoulder:  { z:  0.06, x: -0.02 },
   RightShoulder: { z: -0.05, x: -0.03 },
-  LeftArm:       { z: -1.46, x:  0.10, y:  0.05 },
-  RightArm:      { z:  1.41, x:  0.06, y: -0.04 },
+  /* Valeurs trouvées par recherche numérique sur le modèle lui-même et
+     non à l'estime : on mesure l'angle épaule→main par rapport à la
+     verticale et on descend jusqu'à ce que le bras pende vraiment. Les
+     deux épaules n'ont pas la même orientation de liaison sur ce rig —
+     AUCUNE valeur de z seule ne fait redescendre le bras droit, d'où
+     les trois axes de ce côté. */
+  LeftArm:       { z: -1.50, x:  0.10, y:  0.05 },
+  RightArm:      { z: -0.39, x: -1.14, y:  1.01 },
   LeftForeArm:   { x: -0.30, y:  0.12 },
   RightForeArm:  { x: -0.24, y: -0.09 },
   LeftHand:      { x: -0.12, z:  0.07 },
@@ -1966,6 +1976,7 @@ function setupBlink(material, srcTexture){
    fausse. */
 let playerTopOffset = PLAYER_TARGET_HEIGHT;
 let playerTopSamples = 0, playerTopSkip = 0;
+let footCalSamples = 0, footCalDone = false;
 function measurePlayerTop(){
   if(playerTopSamples >= 60 || !player.root.children.length) return;
   // un relevé toutes les 8 frames : la boucle "idle" dure 6,4 s, donc
@@ -1974,7 +1985,7 @@ function measurePlayerTop(){
   if(playerTopSkip-- > 0) return;
   playerTopSkip = 7;
   playerTopSamples++;
-  let maxY = -Infinity;
+  let maxY = -Infinity, minY = Infinity;
   player.root.updateWorldMatrix(true, true);
   player.root.traverse(o=>{
     if(!o.isSkinnedMesh) return;
@@ -1983,9 +1994,31 @@ function measurePlayerTop(){
     if(!src) return;
     const bb = src.clone().applyMatrix4(o.matrixWorld);
     if(bb.max.y > maxY) maxY = bb.max.y;
+    if(bb.min.y < minY) minY = bb.min.y;
   });
   if(maxY > -Infinity){
     playerTopOffset = Math.max(playerTopOffset, maxY - player.root.position.y);
+  }
+  /* Calage des pieds sur la case.
+     Le modèle est posé au chargement avec `model.position.y = -box.min.y`,
+     où box est une Box3 qui IGNORE le skinning : elle décrit la pose de
+     liaison du maillage, pas l'endroit où les semelles se retrouvent une
+     fois le squelette appliqué. Résultat, le pion flottait 0,20 unité
+     au-dessus de la case — 14 % de sa hauteur — et ne pouvait donc
+     jamais donner l'impression de prendre appui.
+     On relève ici le point le plus bas RÉELLEMENT rendu, sur plusieurs
+     frames posées, et on descend le modèle d'autant. */
+  if(!footCalDone && !walk && minY < Infinity && player.model){
+    // `sole` > 0 : le point le plus bas rendu est AU-DESSUS de la case,
+    // donc le pion flotte. On descend le modèle d'une fraction de l'écart
+    // à chaque relevé ; en une douzaine de relevés la semelle rejoint le
+    // plateau. Amorti plutôt qu'appliqué d'un coup, parce que déplacer le
+    // modèle change la mesure suivante.
+    // Uniquement à l'arrêt : pendant un bond la semelle quitte le sol
+    // pour de bonnes raisons, et corriger là-dessus l'enfoncerait.
+    const sole = minY - player.root.position.y;
+    player.model.position.y -= sole * 0.6;
+    if(++footCalSamples >= 14) footCalDone = true;
   }
 }
 
@@ -2051,13 +2084,34 @@ function updateReaction(t){
    `buildBodyLayer` renvoie la fonction appelée après chaque mixer.update.
    Elle compose, dans cet ordre : pose de repos → respiration et report du
    poids → corrections posturales → regard → marche → réaction. */
+let updateBodyReset = null;
 function buildBodyLayer(bones, blink, model){
-  // Pose de référence, relevée AVANT que le moindre clip ne soit lu.
+  /* Pose de référence, relevée AVANT que le moindre clip ne soit lu, et
+     conservée en QUATERNION.
+     Le passage par les angles d'Euler était une erreur : la pose de
+     liaison de ce rig porte déjà des angles énormes sur les bras
+     (x ≈ 2,19 rad, z ≈ -1,88). Additionner un décalage d'Euler à de
+     telles valeurs ne compose pas les rotations, ça produit n'importe
+     quoi — les bras partaient à l'horizontale dans des poses aberrantes.
+     L'ancienne correction du code, elle, MULTIPLIAIT un quaternion ;
+     c'était la bonne méthode, et c'est celle reprise ici. */
   const bind = {};
   for(const n of RIG_BONES){
     const b = bones[n];
-    if(b) bind[n] = { x:b.rotation.x, y:b.rotation.y, z:b.rotation.z, py:b.position.y };
+    if(b) bind[n] = { q: b.quaternion.clone(), py: b.position.y };
   }
+  // décalages de repos pré-composés une fois pour toutes
+  const restQ = {};
+  function rebuildRestQ(){
+    for(const n of RIG_BONES){
+      const r = REST_POSE[n];
+      restQ[n] = r ? new THREE.Quaternion().setFromEuler(
+        new THREE.Euler(r.x||0, r.y||0, r.z||0, 'XYZ')) : null;
+    }
+  }
+  rebuildRestQ();
+  const _qA = new THREE.Quaternion(), _qB = new THREE.Quaternion();
+  const _eA = new THREE.Euler(0,0,0,'XYZ');
 
   // deltas de la frame courante
   const d = {};
@@ -2066,12 +2120,33 @@ function buildBodyLayer(bones, blink, model){
   };
   const add = (n, ax, v)=>{ if(d[n]) d[n][ax] += v; };
 
-  // Poids du clip par os : à la marche on garde la jambe telle que
-  // l'animation la pose (c'est elle qui donne l'appui au sol) mais on
-  // atténue le balancement des bras, beaucoup trop ample sur ce rig.
+  /* Poids du clip par os.
+
+     Mesuré os par os sur ce rig : au repos, le clip "idle" fourni avec
+     le modèle fait balayer les bras sur ~130° en continu (main à 21° du
+     corps puis 152°, soit au-dessus de l'épaule, toutes les 5 s). C'est
+     très exactement l'effet épouvantail — il ne venait pas de
+     l'animation procédurale, mais du clip lui-même, qu'on laissait
+     passer à 100 %.
+
+     On ne peut pas rééditer le clip depuis le jeu ; on l'atténue. Le
+     slerp part de la pose de liaison (bras en croix) et REST_POSE les
+     rabat le long du corps : à poids faible sur les bras, on obtient
+     donc des bras qui pendent, et c'est le procédural (respiration,
+     report de poids, regard) qui les fait vivre — discrètement.
+
+     Le buste, le cou et les jambes gardent une part large du clip :
+     c'est lui qui donne l'appui au sol et la respiration du torse. */
+  const CLIP_WEIGHT_IDLE = {
+    LeftArm:0.10, RightArm:0.10, LeftForeArm:0.16, RightForeArm:0.16,
+    LeftHand:0.22, RightHand:0.22, LeftShoulder:0.30, RightShoulder:0.30,
+    Neck:0.55, Head:0.45,
+  };
+  // À la marche on laisse un peu plus de balancement : c'est le bras qui
+  // contrebalance le pas. Toujours loin du 100 % d'origine.
   const CLIP_WEIGHT_WALK = {
-    LeftArm:0.42, RightArm:0.42, LeftForeArm:0.5, RightForeArm:0.5,
-    LeftHand:0.5, RightHand:0.5, LeftShoulder:0.6, RightShoulder:0.6,
+    LeftArm:0.22, RightArm:0.22, LeftForeArm:0.28, RightForeArm:0.28,
+    LeftHand:0.35, RightHand:0.35, LeftShoulder:0.45, RightShoulder:0.45,
     Spine:0.7, Chest:0.7, UpperChest:0.7, Neck:0.5, Head:0.4,
   };
 
@@ -2079,6 +2154,26 @@ function buildBodyLayer(bones, blink, model){
   let weightSide = 0, weightTarget = 0, weightNext = 2 + Math.random()*3;
   let postureT = 0;
   let lastT = 0;
+
+  /* Remise à la pose de liaison AVANT chaque mixer.update().
+
+     Sans elle, les os que le clip ne pilote pas (le buste, sur ce
+     modèle) conservent d'une frame à l'autre la valeur que NOUS leur
+     avons écrite : le décalage de repos et le procédural se
+     remultiplient alors indéfiniment. Mesuré : le buste basculait de
+     0° à 87° de la verticale en huit secondes, sans jamais revenir —
+     le personnage se pliait en deux debout sur sa case. C'est la
+     source des "figures" à l'écran.
+
+     Le mixer réécrit ensuite les os qu'il pilote ; ceux qu'il ne
+     pilote pas restent à la pose de liaison, propre, et notre couche
+     repart chaque frame d'une base connue. */
+  updateBodyReset = function(){
+    for(const n of RIG_BONES){
+      const b = bones[n], bd = bind[n];
+      if(b && bd){ b.quaternion.copy(bd.q); b.position.y = bd.py; }
+    }
+  };
 
   return function updateBody(t, ctx){
     const dt = Math.max(0, Math.min(0.05, t - lastT));
@@ -2226,6 +2321,42 @@ function buildBodyLayer(bones, blink, model){
       add('RightShoulder','z', sw*0.018*gait);
     }
 
+    /* ---- 5bis. Bond de case en case ----
+       Une seule impulsion par case : compression (le corps se tasse avant
+       de partir, c'est elle qui donne le poids), extension à la poussée,
+       jambes légèrement repliées en l'air, puis absorption à la
+       réception. Sans la compression initiale, un saut part de nulle part
+       et ressemble à un objet soulevé. */
+    const hop = ctx && ctx.hop || 0;
+    if(hop > 0.001){
+      const u = ctx.hopPhase;
+      const crouch = bell(Math.min(1, u/0.24));            // appel
+      const land   = u > 0.70 ? bell((u-0.70)/0.30) : 0;   // réception
+      const air    = (u > 0.24 && u < 0.80) ? bell((u-0.24)/0.56) : 0;
+      const comp = (crouch*0.60 + land*0.95) * hop;
+      const tuck = air * hop;
+
+      // genoux : compression au contact, léger repli en l'air
+      add('LeftLeg','x',  comp*0.62 + tuck*0.40);
+      add('RightLeg','x', comp*0.58 + tuck*0.34);
+      add('LeftUpLeg','x',  -tuck*0.20 - comp*0.12);
+      add('RightUpLeg','x', -tuck*0.16 - comp*0.12);
+      add('LeftFoot','x',  comp*0.26 - tuck*0.18);
+      add('RightFoot','x', comp*0.22 - tuck*0.16);
+      // le bassin descend à l'appel et à la réception
+      d.Hips.py += -comp*0.030;
+      add('Spine','x', comp*0.13 - tuck*0.05);
+      add('Chest','x', comp*0.08 - tuck*0.03);
+      // bras : en arrière à l'appel, portés en avant en l'air
+      add('LeftArm','x',  comp*0.34 - tuck*0.44);
+      add('RightArm','x', comp*0.30 - tuck*0.40);
+      add('LeftForeArm','x',  -tuck*0.30 - comp*0.12);
+      add('RightForeArm','x', -tuck*0.26 - comp*0.10);
+      // la tête encaisse la réception avec un temps de retard
+      add('Neck','x', land*hop*0.10);
+      add('Head','x', land*hop*0.08);
+    }
+
     /* ---- 6. Réaction ---- */
     if(reactArm > 0.0005 || reactNod > 0.0005){
       const a = reactArm, wv = reactWave;
@@ -2241,22 +2372,31 @@ function buildBodyLayer(bones, blink, model){
       add('Spine','x', -reactNod*0.4);
     }
 
-    /* ---- application ----
-       final = bind + (clip - bind)*poids + repos + procédural */
+    /* ---- application, entièrement en quaternions ----
+          final = slerp(bind, clip, poids) × repos × procédural
+       Le slerp atténue l'apport du clip sans jamais sortir du domaine des
+       rotations valides, là où une interpolation d'Euler le pouvait. */
     for(const n of RIG_BONES){
       const b = bones[n];
       if(!b) continue;
-      const bd = bind[n], rest = REST_POSE[n];
-      const cw = walking ? (CLIP_WEIGHT_WALK[n] != null ? CLIP_WEIGHT_WALK[n] : 1) : 1;
-      const cx = bd.x + (b.rotation.x - bd.x)*cw;
-      const cy = bd.y + (b.rotation.y - bd.y)*cw;
-      const cz = bd.z + (b.rotation.z - bd.z)*cw;
-      b.rotation.set(
-        cx + (rest && rest.x || 0) + d[n].x,
-        cy + (rest && rest.y || 0) + d[n].y,
-        cz + (rest && rest.z || 0) + d[n].z
-      );
-      b.position.y = bd.py + d[n].py;
+      const bd = bind[n];
+      /* Le barème dépend du clip réellement en train de tourner : pendant
+         un bond c'est encore le clip "idle" qui joue (les jambes sont
+         pilotées à la main), donc c'est le barème repos qui s'applique. */
+      const wTab = ctx.gait > 0.02 ? CLIP_WEIGHT_WALK : CLIP_WEIGHT_IDLE;
+      const cw = wTab[n] != null ? wTab[n] : 1;
+      _qA.copy(bd.q);
+      if(cw >= 0.999) _qA.copy(b.quaternion);
+      else if(cw > 0.001) _qA.slerp(b.quaternion, cw);
+      if(restQ[n]) _qA.multiply(restQ[n]);
+      const dn = d[n];
+      if(dn.x || dn.y || dn.z){
+        _eA.set(dn.x, dn.y, dn.z);
+        _qB.setFromEuler(_eA);
+        _qA.multiply(_qB);
+      }
+      b.quaternion.copy(_qA);
+      b.position.y = bd.py + dn.py;
     }
 
     blink.update(dt);
@@ -2324,6 +2464,7 @@ async function loadPlayerModel(player){
   });
 
   player.root.add(model);
+  player.model = model;
 
   const mixer = new THREE.AnimationMixer(model);
   const clip = name => THREE.AnimationClip.findByName(gltf.animations, name);
@@ -2386,6 +2527,7 @@ loadPlayerModel(player).catch(err=>{
   console.error('Chargement du personnage 3D échoué, le plateau continue sans lui :', err);
 });
 
+
 /* ---------- État de jeu ---------- */
 let currentIndex = -1; // -1 = au départ, pas encore sur le plateau
 let moving = false;
@@ -2445,7 +2587,7 @@ function landingIndex(fromIdx, count){
    Réglée sur la longueur de jambe du pion : trop grande, les pieds
    patinent vers l'avant ; trop petite, ils patinent vers l'arrière. */
 const WALK_STRIDE = 0.72;
-let walkBank = 0, walkGait = 0, walkStepPhase = 0;
+let walkBank = 0, walkGait = 0, walkStepPhase = 0, hopGait = 0, hopPhase = 0;
 
 function startWalk(fromIdx, count, stepDuration){
   // Le pion démarre visuellement SUR la case 1 (pas sur une case
@@ -2475,23 +2617,40 @@ function startWalk(fromIdx, count, stepDuration){
      le reste du jeu attend cette durée pour enchaîner. Pendant
      l'anticipation le pion ne se translate pas encore : il tourne le
      regard vers sa destination et transfère son poids. */
+  /* Deux allures, choisies sur la longueur du trajet.
+     À 0,36 s par case (l'ancienne vitesse unique), le cycle de marche
+     tournait à 7,7 pas/seconde — quatre fois le rythme d'un humain. Aucun
+     cycle de jambes ne peut se lire à cette cadence : les jambes
+     vibraient au lieu de marcher.
+       • trajet court  → vraie marche, ralentie pour être lisible ;
+       • trajet long   → bond de case en case, ce qu'un pion de plateau
+         fait de toute façon, et qui reste honnête à grande vitesse.
+     Le mode rapide (correction de fin de partie, jusqu'à 39 cases en
+     1,4 s) garde la durée qu'on lui impose et bondit. */
+  const forcedFast = stepDuration < HOP_DURATION*0.9;
+  const gaitMode = (!forcedFast && steps > 0 && steps <= 3) ? 'walk' : 'hop';
+  if(!forcedFast){
+    stepDuration = gaitMode === 'walk' ? 0.85 : 0.30;
+  }
   const vCruise = steps>0 ? 1/stepDuration : 0;
   const rampUnits = Math.min(0.5, steps/2);
   const accelTime = rampUnits>0 ? (2*rampUnits)/vCruise : 0;
   const cruiseUnits = steps - 2*rampUnits;
   const cruiseTime = vCruise>0 ? cruiseUnits/vCruise : 0;
-  const prepTime = steps>0 ? 0.26 : 0;
-  const settleTime = steps>0 ? 0.40 : 0;
+  const prepTime = steps>0 ? (gaitMode==='walk' ? 0.30 : 0.16) : 0;
+  const settleTime = steps>0 ? (gaitMode==='walk' ? 0.42 : 0.30) : 0;
   const moveTime = Math.max(0.001, accelTime*2+cruiseTime);
   walk = {
     path, indices, steps, vCruise, rampUnits, accelTime, cruiseTime,
-    prepTime, settleTime, moveTime,
+    prepTime, settleTime, moveTime, gaitMode,
     totalTime: prepTime + moveTime + settleTime,
     t0: clock.getElapsedTime(), lastSeg:-1,
     phase: 0, prevDist: 0, announced: false,
   };
   // le regard part en avant AVANT le corps
   if(steps>0) lookAtTile(path[path.length-1], prepTime + moveTime*0.5);
+  // la caméra recule du gros plan précédent et repart en suivi
+  if(steps>0) cineBegin('travel');
   return walk;
 }
 
@@ -2560,14 +2719,138 @@ function updateAmbientSparkles(dt){
   }
 }
 
+/* ---------- Caméra cinématique ----------
+   Le plateau se regarde d'en haut (52°) pour que les 40 cases soient
+   lisibles. Mais à cet angle le bord du chapeau de paille couvre la
+   tête, les épaules et la moitié du torse : mesuré image par image, le
+   personnage était réduit à un disque beige d'une quarantaine de
+   pixels. Toute l'animation (marche, regard, réactions) était donc
+   invisible — pas absente, invisible.
+
+   La vue plateau reste la vue par défaut. Elle s'efface seulement
+   pendant qu'il se passe quelque chose, en trois temps :
+     • VOYAGE  — dès qu'il part, léger zoom ; la caméra suit son azimut
+                 autour du plateau, ce qui fait tourner la vue de façon
+                 naturelle au lieu d'un panoramique plaqué ;
+     • ARRIVÉE — gros plan bas sur lui, sous le bord du chapeau : on
+                 voit le visage, la pose, la réaction ;
+     • RETOUR  — au lancer suivant on recule sur le plateau.
+   Un doigt sur l'écran rend la main au joueur immédiatement. */
+const CINE = {
+  /* `lead` = à quel point la caméra se place devant le personnage plutôt
+     que simplement à l'extérieur de l'anneau ; `side` = décalage fixe
+     pour obtenir un trois-quarts et non un plein face figé. */
+  travel:  { dist: 12.0, elev: 0.77, aim: 0.55, lead: 0.30, side: 0.00, ease: 1.7, aimY: 0.34 },
+  /* `aimY` = hauteur du point visé au-dessus des pieds. À 0.34 (le
+     torse) la tête arrivait à ras du bord haut du cadre sur un écran de
+     téléphone : on vise plus haut pour dégager du ciel au-dessus du
+     chapeau, et on recule un peu. */
+  /* elev 0.20 = caméra 7° au-dessus de la tête. Balayé puis vérifié à
+     l'image : au-delà de 14°, le bord du chapeau de paille recouvre le
+     visage — c'est toute l'origine du "on ne le voit pas". */
+  closeup: { dist:  3.55, elev: 0.20, aim: 1.00, lead: 1.00, side: 0.55, ease: 3.6, aimY: 0.50 },
+};
+let cineMode = null;          // null | 'travel' | 'closeup'
+let cineBlend = 0;            // 0 = vue plateau, 1 = vue cinéma
+let cineAz = 0, cineAzInit = false;
+const _cineTarget = new THREE.Vector3();
+const _cinePos = new THREE.Vector3();
+const _boardTarget = new THREE.Vector3();
+const _boardPos = new THREE.Vector3();
+
+function angLerp(a, b, k){
+  let d = b - a;
+  d = Math.atan2(Math.sin(d), Math.cos(d));
+  return a + d*k;
+}
+
+function cineBegin(mode){
+  if(reduceMotion) return;
+  /* On ne mémorise la vue plateau QUE si on en part vraiment. Si un
+     nouveau lancer arrive pendant le retour (fondu encore en cours), la
+     caméra est à mi-chemin : la prendre comme référence ferait dériver
+     la vue plateau un peu plus à chaque tour, sans jamais y revenir. */
+  if(cineMode === null && cineBlend <= 0.001){
+    _boardTarget.copy(controls.target);
+    _boardPos.copy(camera.position);
+  }
+  if(cineMode === null){
+    controls.autoRotate = false;
+    controls.enabled = false;
+  }
+  cineMode = mode;
+}
+
+function cineEnd(){
+  if(cineMode === null) return;
+  cineMode = null;
+}
+
+function updateCineCam(dt){
+  if(cineMode === null && cineBlend <= 0.0001){
+    if(!controls.enabled){
+      controls.enabled = true;
+      cineAzInit = false;
+    }
+    return false;
+  }
+
+  const want = cineMode ? 1 : 0;
+  const cfg = CINE[cineMode || 'travel'];
+  cineBlend += (want - cineBlend) * Math.min(1, dt*cfg.ease);
+  if(want === 0 && cineBlend < 0.004) cineBlend = 0;
+
+  const P = player.root.position;
+  // azimut du pion autour du plateau : la caméra reste à l'extérieur de
+  // l'anneau et tourne avec lui — c'est ce qui fait "tourner le plateau"
+  const radialAz = Math.atan2(P.x, P.z);
+  // ...légèrement ramenée vers l'avant du personnage pour un 3/4 plutôt
+  // qu'un profil strict
+  const wantAz = angLerp(radialAz, player.root.rotation.y + cfg.side, cfg.lead);
+  if(!cineAzInit){ cineAz = wantAz; cineAzInit = true; }
+  else cineAz = angLerp(cineAz, wantAz, Math.min(1, dt*2.2));
+
+  // point visé : entre le centre du plateau et le pion selon l'étape
+  _cineTarget.set(P.x*cfg.aim, P.y + cfg.aimY, P.z*cfg.aim);
+  const ce = Math.cos(cfg.elev), se = Math.sin(cfg.elev);
+  _cinePos.set(
+    _cineTarget.x + Math.sin(cineAz)*ce*cfg.dist,
+    _cineTarget.y + se*cfg.dist,
+    _cineTarget.z + Math.cos(cineAz)*ce*cfg.dist
+  );
+
+  // fondu entre la vue plateau mémorisée et la vue cinéma
+  const k = cineBlend*cineBlend*(3-2*cineBlend);
+  _cineTarget.lerp(_boardTarget, 1-k);
+  _cinePos.lerp(_boardPos, 1-k);
+
+  // suivi amorti : la caméra ne se colle jamais instantanément
+  const f = Math.min(1, dt*cfg.ease*1.5);
+  controls.target.lerp(_cineTarget, f);
+  camera.position.lerp(_cinePos, f);
+  camera.lookAt(controls.target);
+
+  if(!cameraPunchActive){
+    camera.fov += (BASE_FOV - camera.fov) * Math.min(1, dt*3);
+    camera.updateProjectionMatrix();
+  }
+  return true;
+}
+
 /* Le corps de la frame est isolé de la boucle d'affichage : la boucle
    fournit le temps réel, mais on peut aussi l'avancer pas à pas depuis
    l'extérieur (enregistrement d'une séquence à cadence régulière sur une
    machine qui ne tient pas le temps réel). */
 function frameStep(dt, t){
 
-  controls.update();
-  updateCornerSafety(dt);
+  /* Quand la caméra cinématique a la main, ni OrbitControls ni le
+     garde-fou anti-rognage des coins ne doivent la contredire : le
+     garde-fou élargit le champ pour garder les 4 coins visibles, ce qui
+     n'a aucun sens en gros plan sur le pion. */
+  if(!updateCineCam(dt)){
+    controls.update();
+    updateCornerSafety(dt);
+  }
   updateSparkles(dt);
   updateGoldRain(t, dt);
   updateAmbientSparkles(dt);
@@ -2723,9 +3006,14 @@ function frameStep(dt, t){
 
     /* Oscillation verticale du centre de masse, calée sur le pas : deux
        creux par cycle, au moment où le pied se pose. */
+    /* Bond : arc parabolique par case. Le point bas est au contact
+       (u=0 et u=1), le sommet au milieu du saut. En marche, simple
+       oscillation du centre de masse calée sur le pas. */
+    const hopU = walk.gaitMode === 'hop' ? (dist - Math.floor(dist)) : 0;
     const bob = reduceMotion ? 0
-              : (-Math.abs(Math.cos(walk.phase*Math.PI*2)) * 0.022
-                 + 0.022) * gaitAmp;
+      : (walk.gaitMode === 'hop'
+          ? Math.sin(Math.min(1, hopU) * Math.PI) * 0.105 * gaitAmp
+          : (-Math.abs(Math.cos(walk.phase*Math.PI*2)) * 0.022 + 0.022) * gaitAmp);
 
     /* Transfert de poids pendant l'anticipation et la stabilisation :
        un petit creux avant de partir, un autre en posant le dernier pas. */
@@ -2771,9 +3059,14 @@ function frameStep(dt, t){
       const leanTarget = -0.075*gaitAmp + (inSettle ? 0.03 : 0);
       player.root.rotation.x += (leanTarget - player.root.rotation.x)*Math.min(1,dt*8);
     }
-    player.setWalking(gaitAmp > 0.02, walk.phase);
-    walkGait = gaitAmp;
+    // Pendant un bond on laisse tourner le clip "idle" : les jambes sont
+    // pilotées entièrement à la main (appel, envol, réception), le cycle
+    // de marche n'aurait aucun sens à cette vitesse.
+    player.setWalking(walk.gaitMode === 'walk' && gaitAmp > 0.02, walk.phase);
+    walkGait = walk.gaitMode === 'walk' ? gaitAmp : 0;
     walkStepPhase = walk.phase % 1;
+    hopGait = walk.gaitMode === 'hop' ? gaitAmp : 0;
+    hopPhase = hopU;
 
     /* ---- arrivée : une seule séquence continue ----
        Les effets ne se déclenchent plus à l'instant où la translation
@@ -2787,6 +3080,9 @@ function frameStep(dt, t){
       playerBaseY = landedTile.tileTopY;
       // il regarde ce sur quoi il vient de tomber
       lookAtTile(landedTile, 2.4);
+      // et la caméra vient le chercher en gros plan, sous le bord du
+      // chapeau, pour qu'on voie enfin sa tête et sa réaction
+      cineBegin('closeup');
       if(!reduceMotion){
         const lvl = TIER_LEVEL[landedTile.catKey] ?? 1;
         spawnSparkles(landedTile.world.x, landedTile.tileTopY+0.4, landedTile.world.z,
@@ -2807,13 +3103,14 @@ function frameStep(dt, t){
     if(te >= walk.totalTime){
       walk.done = true;
       walk = null;
-      walkGait = 0;
+      walkGait = 0; hopGait = 0;
     }
   } else if(!reduceMotion){
     // au repos : le buste revient droit, la marche s'efface
     player.root.rotation.x *= 0.85;
     player.root.rotation.z *= 0.85;
     walkGait += (0 - walkGait)*Math.min(1, dt*6);
+    hopGait += (0 - hopGait)*Math.min(1, dt*7);
     player.setWalking(false);
   }
 
@@ -2839,6 +3136,7 @@ function frameStep(dt, t){
     }
   }
   updateReaction(t);
+  if(updateBodyReset) updateBodyReset();
   player.mixer.update(dt);
   measurePlayerTop();
   /* La couche procédurale tourne TOUJOURS, marche comprise : c'est elle
@@ -2847,9 +3145,11 @@ function frameStep(dt, t){
      des bras qui repartaient à l'horizontale dès le premier pas. */
   if(!reduceMotion){
     player.updateBody(t, {
-      walking: walkGait > 0.02,
+      walking: walkGait > 0.02 || hopGait > 0.02,
       gait: walkGait,
       stepPhase: walkStepPhase,
+      hop: hopGait,
+      hopPhase: hopPhase,
       bodyYaw: player.root.rotation.y,
     });
     if(reactSettle && !walk){
@@ -3513,7 +3813,9 @@ function updateWinButton(){
   }
 }
 
-const wait = ms => new Promise(r=>setTimeout(r,ms));
+const wait = ms => new Promise(r=>{
+  setTimeout(r, ms);
+});
 const HOP_DURATION = 0.36;
 
 async function move(forcedCount, forcedCard){
@@ -3632,6 +3934,7 @@ function restart(){
   player.root.scale.set(1,1,1);
   player.root.rotation.x = 0;
   player.setWalking(false);
+  cineEnd();                 // retour à la vue plateau
   placeTokenInstant(-1);
   setActive(-1);
   statusEl.textContent = 'Le joueur est prêt sur Départ.';
