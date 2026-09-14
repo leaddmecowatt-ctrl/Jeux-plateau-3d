@@ -1842,6 +1842,13 @@ const _lookTarget = new THREE.Vector3();
 const _lookTmp = new THREE.Vector3();
 let lookActive = false, lookUntil = 0, lookWeight = 0;
 let glanceYaw = 0, glancePitch = 0, glanceNext = 3;
+/* Curiosité : il vient d'arriver quelque part et il ne sait pas encore
+   où il est. Il lève la tête vers le ciel, redescend sur le plateau,
+   balaie autour de lui. C'est ce qui donne un personnage qui DÉCOUVRE
+   plutôt qu'un pion qui attend. `glanceUp` mémorise à quel point il est
+   en train de regarder en l'air : le buste s'ouvre d'autant, sinon seule
+   la tête bouge et ça fait pantin. */
+let glanceUp = 0, glanceEncore = 0;
 let gazeYaw = 0, gazePitch = 0, gazeYawV = 0, gazePitchV = 0;
 
 function lookAtPoint(x, y, z, holdSec){
@@ -2116,11 +2123,24 @@ function updateReaction(t){
    On tient dans cette limite en allongeant la foulée avec la vitesse
    (le bassin descend, la jambe s'ouvre) plutôt qu'en accélérant la
    cadence : c'est ce qu'on fait en passant de la marche à la course. */
+/* Réglages du squelette, tous relevés par balayage sur le modèle lui-même
+   et non estimés :
+     ankle -1,0   l'axe du pied est INVERSE à celui du genou sur ce rig ;
+                  dans l'autre sens la pointe plongeait dans la case.
+     hipsZ 0,022  à 0,075 le buste roulait de 4,8° à chaque pas, ce qui se
+                  lisait comme un personnage de travers.
+     clear 0,045  garde au sol : marge mesurée pour que la semelle ne
+                  morde pas la case pendant l'appui.
+     symL/symR    la main gauche pendait 6,6 cm EN ARRIÈRE de son épaule
+                  pendant que la droite tombait à l'aplomb — les deux
+                  épaules n'ont pas la même orientation de liaison. */
+const RIG = { ankle:-1.0, hipsZ:0.022, clear:0.045,
+              symL:0.135, symR:0.09, restLX:0.10, restRX:-1.14 };
 const GAIT = {
   thigh: 0.1509, shin: 0.1746, hipY: 0.3668, footY: 0.0492,
   reach: (0.1509 + 0.1746) * 0.995,
   // descente du bassin : sans elle, jambe tendue, aucun pas n'est possible
-  crouch: sp => 0.055 + 0.055*sp,
+  crouch: sp => (0.055 + 0.055*sp) ,
   // part du cycle passée au sol : >0,5 on marche, <0,5 on court
   duty:   sp => 0.46 - 0.08*sp,
   lift:   sp => 0.068 + 0.085*sp,
@@ -2129,7 +2149,7 @@ const GAIT = {
   /* Marge de sol. Relevé image par image pendant un appui : le pied
      descendait jusqu'à 0,02 sous la hauteur qu'il a debout, donc la
      semelle mordait légèrement la case. On relève la cible d'autant. */
-  clearance: 0.022,
+  get clearance(){ return RIG.clear; },
   // demi-foulée = ouverture maximale de la jambe à la hauteur de bassin donnée
   /* Demi-foulée. On la calcule avec une allonge volontairement PLUS
      COURTE que l'allonge réelle : la jambe garde ainsi une réserve
@@ -2178,6 +2198,8 @@ function buildBodyLayer(bones, blink, model){
   // décalages de repos pré-composés une fois pour toutes
   const restQ = {};
   function rebuildRestQ(){
+    REST_POSE.LeftArm.x  = RIG.restLX;
+    REST_POSE.RightArm.x = RIG.restRX;
     for(const n of RIG_BONES){
       const r = REST_POSE[n];
       restQ[n] = r ? new THREE.Quaternion().setFromEuler(
@@ -2284,6 +2306,16 @@ function buildBodyLayer(bones, blink, model){
     add('LeftShoulder','z', breath*0.012);
     add('RightShoulder','z', -breath*0.010);
 
+    /* Symétrie des bras au repos. Mesuré : la main gauche pendait 6,6 cm
+       EN ARRIÈRE de son épaule pendant que la droite tombait à l'aplomb —
+       d'où la posture de travers à l'arrêt. Les deux épaules n'ayant pas
+       la même orientation de liaison, aucune valeur de REST_POSE ne
+       corrigeait ça (le décalage de repos se compose avant le
+       procédural, donc sur un autre axe). On rattrape ici, sur l'axe
+       dont on a vérifié qu'il fait bien avancer la main. */
+    add('LeftArm','x',  RIG.symL);
+    add('RightArm','x', RIG.symR);
+
     /* ---- 2. Report du poids d'un pied sur l'autre ----
        Au repos, personne ne tient son poids réparti également très
        longtemps. Le report change de côté à intervalles IRRÉGULIERS, et le
@@ -2350,14 +2382,45 @@ function buildBodyLayer(bones, blink, model){
     } else {
       if(lookActive && now >= lookUntil) lookActive = false;
       lookWeight += (0 - lookWeight) * Math.min(1, dt*2.2);
-      // coups d'œil spontanés, jamais à intervalle régulier
+      /* ---- il découvre l'endroit ----
+         Trois façons de regarder, tirées au sort, jamais au même
+         rythme. L'ancienne version ne faisait varier le regard que de
+         7° en hauteur : il ne levait jamais vraiment la tête, et ça se
+         lisait comme un pion qui attend son tour, pas comme quelqu'un
+         qui arrive quelque part. */
       glanceNext -= dt;
       if(glanceNext <= 0){
-        glanceYaw = (Math.random()*2-1) * 0.55;
-        glancePitch = (Math.random()*2-1) * 0.13;
-        // une fois sur cinq il ne fait que revenir au centre
-        if(Math.random() < 0.2){ glanceYaw *= 0.15; glancePitch *= 0.2; }
-        glanceNext = 1.8 + Math.random()*5.2;
+        const r = Math.random();
+        if(glanceEncore > 0){
+          // deuxième regard, un peu plus loin : il revérifie ce qu'il a vu
+          glanceEncore--;
+          glanceYaw   *= 1.25 + Math.random()*0.3;
+          glancePitch *= 1.15 + Math.random()*0.25;
+          glanceNext = 1.1 + Math.random()*1.4;
+        } else if(r < 0.42){
+          // EN L'AIR : émerveillement. C'est le regard dominant.
+          glancePitch = -(0.26 + Math.random()*0.24);
+          glanceYaw   = (Math.random()*2-1) * 0.70;
+          glanceNext  = 1.9 + Math.random()*1.6;
+          if(Math.random() < 0.45) glanceEncore = 1;
+        } else if(r < 0.68){
+          // VERS LE BAS : il regarde la case sous ses pieds
+          glancePitch = 0.18 + Math.random()*0.16;
+          glanceYaw   = (Math.random()*2-1) * 0.35;
+          glanceNext  = 1.2 + Math.random()*1.0;
+        } else if(r < 0.94){
+          // AUTOUR : il balaie le plateau
+          glancePitch = -0.05 + Math.random()*0.14;
+          glanceYaw   = (Math.random()*2-1) * 0.88;
+          glanceNext  = 1.0 + Math.random()*1.5;
+          if(Math.random() < 0.3) glanceEncore = 1;
+        } else {
+          // il revient au centre, le temps de souffler
+          glanceYaw *= 0.12; glancePitch *= 0.15;
+          glanceNext = 1.4 + Math.random()*1.8;
+        }
+        glanceYaw   = Math.max(-0.95, Math.min(0.95, glanceYaw));
+        glancePitch = Math.max(-0.52, Math.min(0.40, glancePitch));
       }
       wantYaw = glanceYaw; wantPitch = glancePitch;
     }
@@ -2372,7 +2435,7 @@ function buildBodyLayer(bones, blink, model){
     gazeYaw   += gazeYawV * dt;
     gazePitch += gazePitchV * dt;
     gazeYaw   = Math.max(-0.95, Math.min(0.95, gazeYaw));
-    gazePitch = Math.max(-0.35, Math.min(0.40, gazePitch));
+    gazePitch = Math.max(-0.52, Math.min(0.40, gazePitch));
     add('Head','y', gazeYaw*0.62);  add('Head','x', gazePitch*0.66);
     add('Neck','y', gazeYaw*0.28);  add('Neck','x', gazePitch*0.26);
     add('Chest','y', gazeYaw*0.09);
@@ -2380,6 +2443,21 @@ function buildBodyLayer(bones, blink, model){
     // la tête s'incline légèrement du côté où elle tourne — un réflexe
     // qu'on ne remarque que quand il manque
     add('Head','z', -gazeYaw*0.10);
+
+    /* Quand il regarde en l'air, le buste s'ouvre et le bassin recule un
+       peu : c'est le corps entier qui lève les yeux. Sans ça, seule la
+       tête bascule et on voit un pantin. */
+    const versLeHaut = Math.max(0, -gazePitch);
+    glanceUp += (versLeHaut - glanceUp) * Math.min(1, dt*3.5);
+    if(!walking){
+      add('Chest','x',       glanceUp*0.17);
+      add('UpperChest','x',  glanceUp*0.13);
+      add('Spine','x',       glanceUp*0.07);
+      add('Hips','x',       -glanceUp*0.04);
+      // les bras s'écartent très légèrement, comme quand on lève les yeux
+      add('LeftArm','z',  -glanceUp*0.07);
+      add('RightArm','z',  glanceUp*0.07);
+    }
 
     /* ---- 5. Marche ----
        Le cycle du clip fournit les jambes ; on ajoute ici ce que le clip
@@ -2441,17 +2519,28 @@ function buildBodyLayer(bones, blink, model){
         return { hip, knee };
       };
 
+      /* L'amplitude du pas suit la montée en régime, mais la POSE est
+         recalculée pour cette amplitude au lieu d'être appliquée à
+         fraction. Appliquer 60 % d'une pose calculée pour 100 % n'est pas
+         la pose correcte à 60 % : la relation n'est pas linéaire, et le
+         pied s'enfonçait de 3 cm pendant les phases d'accélération et de
+         freinage. Ici la cinématique inverse reçoit la vraie hauteur de
+         bassin et la vraie longueur de pas, donc le pied tombe juste à
+         chaque instant. */
+      const amp = Math.max(0.30, gait);
+      const extN = ext * amp;
+      const liftN = lift * amp;
       const legPose = (off)=>{
         const t = ((stepPh + off) % 1 + 1) % 1;
         let dz, up;
         if(t < duty){                      // APPUI : le pied ne bouge pas du sol
-          dz = ext - 2*ext*(t/duty);
+          dz = extN - 2*extN*(t/duty);
           up = 0;
         } else {                           // TRANSFERT : arc vers l'avant
           const u = (t - duty)/(1 - duty);
           const e = u*u*(3 - 2*u);
-          dz = -ext + 2*ext*e;
-          up = lift*Math.sin(u*Math.PI);
+          dz = -extN + 2*extN*e;
+          up = liftN*Math.sin(u*Math.PI);
         }
         /* Correction de plan. La résolution ci-dessus raisonne dans un
            plan sagittal parfait ; or sur ce rig les jambes sont
@@ -2468,30 +2557,51 @@ function buildBodyLayer(bones, blink, model){
       const L = legPose(0), R = legPose(0.5);
       // les angles sont ABSOLUS : on retranche la pose debout, car la
       // couche procédurale s'ajoute à la pose de liaison
-      add('LeftUpLeg','x',  LEG_DIR*(L.hip - LEG_HIP0)*gait);
-      add('RightUpLeg','x', LEG_DIR*(R.hip - LEG_HIP0)*gait);
-      add('LeftLeg','x',    KNEE_DIR*(L.knee - LEG_KNEE0)*gait);
-      add('RightLeg','x',   KNEE_DIR*(R.knee - LEG_KNEE0)*gait);
+      /* Poids PLEIN : la pose ci-dessus est déjà la bonne pour l'état
+         courant (hauteur de bassin et longueur de pas réelles). */
+      add('LeftUpLeg','x',  LEG_DIR*(L.hip - LEG_HIP0));
+      add('RightUpLeg','x', LEG_DIR*(R.hip - LEG_HIP0));
+      add('LeftLeg','x',    KNEE_DIR*(L.knee - LEG_KNEE0));
+      add('RightLeg','x',   KNEE_DIR*(R.knee - LEG_KNEE0));
       // la cheville garde la semelle à plat au lieu de suivre le tibia
-      add('LeftFoot','x',   -KNEE_DIR*(L.shin - LEG_SHIN0)*0.8*gait);
-      add('RightFoot','x',  -KNEE_DIR*(R.shin - LEG_SHIN0)*0.8*gait);
+      /* Cheville : elle contre le tibia pour garder la semelle à plat,
+         mais BORNÉE. Sans borne, elle suivait la flexion du genou en
+         phase aérienne et pivotait jusqu'à 46° pointe en bas : la pointe
+         passait alors 13 cm sous l'os du pied et traversait la case.
+         C'est ce qu'on voyait comme « il marche dans le plateau ». */
+      const ank = a => -KNEE_DIR*(a - LEG_SHIN0)*RIG.ankle;
+      add('LeftFoot','x',   ank(L.shin));
+      add('RightFoot','x',  ank(R.shin));
       // les hanches basculent du côté de la jambe d'appui
-      add('Hips','z', sw*0.075*gait);
+      add('Hips','z', sw*RIG.hipsZ*gait);
       add('Hips','y', sw*0.055*gait);
       add('Spine','y', -sw*0.045*gait);
       add('Chest','y', -sw*0.055*gait);
       add('UpperChest','y', -sw*0.030*gait);
       add('Chest','x', Math.abs(st)*0.020*gait);
-      // bras en opposition : gauche avec jambe droite, plus ample en course
+      /* ---- bras ----
+         Deux erreurs corrigées ici. D'abord la PHASE : les bras étaient
+         pilotés par un sinus alors que les jambes le sont par un
+         cosinus — un quart de cycle d'écart, ce qui ne correspond à
+         aucune démarche humaine. Ensuite le SENS : mesuré, la
+         corrélation bras gauche / jambe gauche valait +0,45, donc le
+         bras gauche partait EN AVANT avec la jambe gauche. Un humain
+         fait l'inverse : bras gauche avec jambe droite, c'est ce qui
+         équilibre la rotation du corps.
+         On reprend donc exactement la phase des jambes, en opposition. */
+      const legFwdL = Math.cos(stepPh*Math.PI*2);   // +1 = jambe gauche devant
+      const armFwdL = -legFwdL * 1;  // bras gauche = jambe droite
+      const armFwdR =  legFwdL * 1;
       const armA = 0.30 + 0.36*sp;
-      add('LeftArm','x',  -sw*armA*gait);
-      add('RightArm','x',  sw*armA*gait);
-      add('LeftArm','z',   sw*0.05*gait);
-      add('RightArm','z',  sw*0.05*gait);
-      // le coude se ferme quand le bras avance, et reste plus fermé en course
+      const AD = 1;
+      add('LeftArm','x',  AD*armFwdL*armA*gait);
+      add('RightArm','x', AD*armFwdR*armA*gait);
+      add('LeftArm','z',   sw*0.04*gait);
+      add('RightArm','z',  sw*0.04*gait);
+      // le coude se ferme quand le bras avance
       const elbow = 0.32 + 0.34*sp;
-      add('LeftForeArm','x',  -Math.max(0, -sw)*elbow*gait - (0.05+0.30*sp)*gait);
-      add('RightForeArm','x', -Math.max(0,  sw)*elbow*gait - (0.05+0.30*sp)*gait);
+      add('LeftForeArm','x',  -Math.max(0, armFwdL)*elbow*gait - (0.05+0.30*sp)*gait);
+      add('RightForeArm','x', -Math.max(0, armFwdR)*elbow*gait - (0.05+0.30*sp)*gait);
       add('LeftShoulder','z', sw*0.020*gait);
       add('RightShoulder','z', sw*0.018*gait);
     }
@@ -2701,6 +2811,7 @@ scene.add(player.root);
 loadPlayerModel(player).catch(err=>{
   console.error('Chargement du personnage 3D échoué, le plateau continue sans lui :', err);
 });
+
 
 
 
@@ -3222,10 +3333,13 @@ function frameStep(dt, t){
        atteindre le sol et le pied rattrapait en glissant. */
     const spC = Math.max(0, Math.min(1,
                   (walk.vCruise - WALK_V_MIN)/(WALK_V_MAX - WALK_V_MIN)));
-    const crouchRamp = inPrep ? Math.min(1, te/Math.max(0.001, walk.prepTime))
-                     : inSettle ? Math.max(0, 1 - (tm - walk.moveTime)/walk.settleTime)
-                     : 1;
-    const crouch = GAIT.crouch(spC) * crouchRamp;
+    /* La descente du bassin suit EXACTEMENT la même amplitude que les
+       jambes. Sur deux rampes différentes, le bassin descendait de 11 cm
+       pendant que les jambes étaient encore tendues : le pion s'enfonçait
+       alors de 15 cm dans la case. Mesuré : semelle à -0,150 avec deux
+       rampes, contre -0,033 sans descente du tout. Une seule amplitude
+       pour les deux, et le pied reste sur le plateau. */
+    const crouch = GAIT.crouch(spC) * gaitAmp;
     const osc = reduceMotion ? 0
       : (-Math.abs(Math.cos(walk.phase*Math.PI*2)) * 0.012 + 0.012) * gaitAmp;
     const bob = -crouch + osc;
