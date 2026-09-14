@@ -2808,7 +2808,20 @@ function buildBodyLayer(bones, blink, model){
    jamais empêcher le plateau de s'afficher et de tourner. */
 async function loadPlayerModel(player){
   const gltf = await new Promise((resolve, reject)=>{
-    new GLTFLoader().load('./assets/character/player.glb', resolve, undefined, reject);
+    const url = './assets/character/player.glb';
+    /* Dans le fichier unique publié, le build ne fournit PAS le modèle en
+       data: URI (type de fichier refusé par la vérification du partage
+       public des artefacts) mais en chaîne base64 dans window.__GLB_B64.
+       On la reconstruit en ArrayBuffer et on la parse directement. */
+    const b64 = (typeof window !== 'undefined' && window.__GLB_B64) ? window.__GLB_B64[url] : null;
+    if(b64){
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+      new GLTFLoader().parse(bytes.buffer, '', resolve, reject);
+    } else {
+      new GLTFLoader().load(url, resolve, undefined, reject);
+    }
   });
   const model = gltf.scene;
 

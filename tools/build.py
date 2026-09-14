@@ -122,11 +122,21 @@ def build(out_path):
     asset_paths = set(re.findall(r"\./assets/[A-Za-z0-9_/.\-]+\.(?:jpg|jpeg|png|webp|glb)", html))
     asset_paths |= set(re.findall(r"\./assets/[A-Za-z0-9_/.\-]+\.(?:jpg|jpeg|png|webp|glb)", entry_js))
     data_uris = {}
+    glb_b64 = {}
     for p in asset_paths:
         full = os.path.join(ROOT, p.lstrip('./'))
-        mime = 'model/gltf-binary' if full.endswith('.glb') else (mimetypes.guess_type(full)[0] or 'application/octet-stream')
         with open(full, 'rb') as imgf:
             data = base64.b64encode(imgf.read()).decode('ascii')
+        if full.endswith('.glb'):
+            # Le modèle 3D n'est PAS incrusté en data: URI « model/gltf-binary » :
+            # ce type de fichier ne passe pas la vérification du partage public
+            # des artefacts (« embeds a file type that can't be reviewed »), ce
+            # qui bloquait toute nouvelle version sur une ancienne. On le
+            # transporte en simple chaîne base64 dans un <script>, et le jeu le
+            # reconstruit en ArrayBuffer pour GLTFLoader.parse().
+            glb_b64[p] = data
+            continue
+        mime = mimetypes.guess_type(full)[0] or 'application/octet-stream'
         data_uris[p] = f'data:{mime};base64,{data}'
 
     def inline(text):
@@ -172,6 +182,9 @@ def build(out_path):
     load_order = [PATH_TO_TOKEN[p] for p in order] + ['__ENTRY__']
 
     bootstrap_lines = [
+        "<script>",
+        "window.__GLB_B64 = " + json.dumps(glb_b64) + ";",
+        "</script>",
         "<script>",
         "(function(){",
         "  var SRC = " + json.dumps(bundle_sources) + ";",
