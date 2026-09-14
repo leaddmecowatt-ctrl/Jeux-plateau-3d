@@ -4286,53 +4286,13 @@ function shuffledSlots(){
   for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
   return a;
 }
-/* ---------- Tirage imposé au clavier ----------
-   L'hôte appuie sur une touche et le tirage part TOUT DE SUITE, avec
-   exactement le même déroulé qu'un tirage normal (roulement de tambour,
-   deux cartes qui se retournent, le pion qui avance) — sauf que les deux
-   cartes font le total demandé.
-     touches 2 à 9  → total 2 à 9 (touche physique : avec ou sans Maj
-                       sur clavier français, pavé numérique compris)
-     F, G, H        → 10, 11, 12 (lettres libres, à côté de D)
-   La paire est tirée au hasard parmi celles qui font le total, pour que
-   la même valeur ne montre pas toujours les mêmes cartes. Un total PAIR
-   sort en double une fois sur six (5+5 pour 10 → lancer bonus, comme la
-   règle le prévoit) ; 2 et 12 ne peuvent être que des doubles.
-   Le lot est alors celui de la case atteinte : la mise sort de la file
-   de résultats pré-calculée et du plafond de reversement — la
-   rentabilité est tenue par l'hôte. Rien n'apparaît côté public. */
-let forcedTotal = null, manualGame = false;
-const LETTER_TOTALS = { f:10, g:11, h:12 };
-const DOUBLE_ODDS = 1/3;
-function forcedPair(total){
-  const pairs = [];
-  for(let a=1;a<=6;a++){ const b=total-a; if(b>=1&&b<=6) pairs.push({a,b}); }
-  const doubles = pairs.filter(p=>p.a===p.b);
-  const singles = pairs.filter(p=>p.a!==p.b);
-  if(!singles.length) return doubles[0];                       // 2 et 12
-  if(doubles.length && Math.random() < DOUBLE_ODDS) return doubles[0];
-  return singles[Math.floor(Math.random()*singles.length)];
-}
-function forcedDraw(total){
-  if(isDisplay) return;
-  if(startBtn && !startBtn.hidden) return;          // partie pas démarrée
-  if(moving || finished || rollsUsed>=rollsAllowed) return;
-  forcedTotal = total;
-  drawAndMove();
-}
 function computeCardDraw(){
   // Un seul tirage de 2 cartes par clic. Sur un double, l'hôte
   // relance lui-même manuellement (nouveau clic sur "TIRER LES
   // CARTES") pour la paire bonus, au lieu d'un enchaînement
   // automatique dans le logiciel.
-  let a, b;
-  if(forcedTotal!=null){
-    ({a,b} = forcedPair(forcedTotal));
-    forcedTotal = null;
-  } else {
-    a = 1+Math.floor(Math.random()*6);
-    b = 1+Math.floor(Math.random()*6);
-  }
+  const a = 1+Math.floor(Math.random()*6);
+  const b = 1+Math.floor(Math.random()*6);
   return { pairs: [{a,b}], total: a+b, isDouble: a===b, slotOrder: shuffledSlots() };
 }
 async function playCardDrawAnimation(draw){
@@ -4554,7 +4514,6 @@ function restart(){
   rollsUsed = 0;
   rollsAllowed = 3;
   pendingOutcome = null;
-  manualGame = false; forcedTotal = null;
   walk = null;
   currentIndex = -1;
   player.root.scale.set(1,1,1);
@@ -4589,26 +4548,13 @@ async function drawAndMove(){
   // Premier lancer d'une partie (le pion est encore sur Départ) : une
   // partie complète = une mise, créditée automatiquement à la
   // cagnotte interne, sans aucune saisie manuelle.
-  const manualRoll = forcedTotal != null;
   if(currentIndex===-1){
     totalMise += AVG_MISE;
     saveTotals();
-    manualGame = false;
     // Le lot de cette mise est décidé maintenant, tiré du lot
     // pré-calculé — les dés qui vont suivre restent honnêtes à
     // l'écran, mais ne décident plus du lot réellement remporté.
-    // Sauf si l'hôte impose le tirage : la mise sort de la file.
-    pendingOutcome = manualRoll ? null : nextPredeterminedOutcome();
-  }
-  if(manualRoll && !manualGame){
-    manualGame = true;
-    // un lot pré-tiré pour cette mise ? il retourne dans la file, il
-    // servira à la prochaine mise jouée normalement
-    if(pendingOutcome){
-      outcomeState.batch.splice(outcomeState.pos, 0, pendingOutcome);
-      saveOutcomeState();
-      pendingOutcome = null;
-    }
+    pendingOutcome = nextPredeterminedOutcome();
   }
   // On continue plutôt que de garder le lot affiché : l'aperçu (ou le
   // lot validé) de la case précédente s'efface avant le nouveau tirage.
@@ -4731,14 +4677,7 @@ async function claimCurrentLot(){
   // jamais une version dégradée vers un palier moins cher.
   const paidBefore = totalPaid;
   const rollsUsedBefore = rollsUsed;
-  if(manualGame){
-    // tirage imposé par l'hôte : on compte le vrai coût de la case,
-    // sans passer par le plafond (c'est l'hôte qui tient les comptes)
-    totalPaid += OUTCOME_COST[realCat] || 0;
-    saveTotals();
-  } else {
-    fundedCategory(realCat);
-  }
+  fundedCategory(realCat);
   celebrate(realCat, null, {locked:true});
   broadcastSync({type:'celebrate', catKey:realCat});
   lastWinUndo = { amountAdded: totalPaid - paidBefore, rollsUsedBefore };
@@ -4771,18 +4710,12 @@ if(undoBtn) undoBtn.addEventListener('click', ()=>{
 /* Raccourcis clavier pour piloter le jeu sans viser précisément les
    boutons à l'écran (pratique en filmant en direct) : A = démarrer,
    B = tirer les cartes, C = recommencer la partie, D = valider le lot
-   remporté, E = démarrage cagnotte (remet la cagnotte à 0€), Z = annuler
-   le dernier lot validé par erreur. Ignorés si on est en train de taper
+   remporté, Z = annuler le dernier lot validé par erreur. Ignorés si on est en train de taper
    dans un champ de texte. */
 window.addEventListener('keydown', (e)=>{
   const tag = (document.activeElement && document.activeElement.tagName) || '';
   if(tag==='INPUT' || tag==='TEXTAREA') return;
   const k = e.key.toLowerCase();
-  // chiffres : touche PHYSIQUE (e.code), donc « é » = 2 sur clavier
-  // français sans avoir à faire Maj, et le pavé numérique marche aussi
-  const dm = /^(?:Digit|Numpad)([2-9])$/.exec(e.code || '');
-  if(dm){ forcedDraw(parseInt(dm[1],10)); return; }
-  if(LETTER_TOTALS[k]){ forcedDraw(LETTER_TOTALS[k]); return; }
   if(k==='a'){ if(startBtn && !startBtn.hidden) startBtn.click(); }
   else if(k==='b'){ if(!validate.disabled) validate.click(); }
   else if(k==='c'){ resetBtn.click(); }
