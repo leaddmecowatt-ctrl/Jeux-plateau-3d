@@ -2153,18 +2153,30 @@ function updateReaction(t){
      symL/symR    la main gauche pendait 6,6 cm EN ARRIÈRE de son épaule
                   pendant que la droite tombait à l'aplomb — les deux
                   épaules n'ont pas la même orientation de liaison. */
-const RIG = { ankle:-1.0, hipsZ:0.022, clear:0.045,
+const RIG = { ankle:-1.0, hipsZ:0.022, clear:-0.002, toeIn:0.12,
               symL:0.135, symR:0.09, restLX:0.10, restRX:-1.14 };
 const GAIT = {
   thigh: 0.1509, shin: 0.1746, hipY: 0.3668, footY: 0.0492,
   reach: (0.1509 + 0.1746) * 0.995,
   // descente du bassin : sans elle, jambe tendue, aucun pas n'est possible
-  crouch: sp => (0.040 + 0.015*sp) ,
+  /* Descente du bassin AU DOUBLE APPUI (les deux jambes ouvertes). En
+     appui simple le bassin remonte de `rise` (voir osc dans le pilote de
+     marche) : c'est le pendule inversé de la marche, jambe d'appui
+     presque tendue au passage à la verticale. Mesuré avant : genou
+     entre 71° et 132° tout le cycle, jamais tendu. */
+  crouch: sp => (0.028 + 0.004*sp) ,
+  rise: 0.026,
+  // pied : longueur cheville→orteils et angle sous l'horizontale, relevés
+  footL: 0.085, footA: 0.663,
   // part du cycle passée au sol : >0,5 on marche, <0,5 on court
   duty:   sp => 0.46 - 0.08*sp,
   lift:   sp => 0.035 + 0.025*sp,
   // inclinaison du plan de jambe, relevée sur le modèle (voir plus bas)
-  tilt: 0.163,
+  tilt: 0.25,
+  /* Résidu en cuvette relevé après la correction linéaire : cheville
+     +1,8 cm trop haute pied devant (dz=+0,106), +0,5 cm pied derrière
+     (dz=−0,139), minimum vers dz=−0,05. Terme quadratique relevé. */
+  curv: 0.7, curvC: -0.05,
   /* Marge de sol. Relevé image par image pendant un appui : le pied
      descendait jusqu'à 0,02 sous la hauteur qu'il a debout, donc la
      semelle mordait légèrement la case. On relève la cible d'autant. */
@@ -2178,7 +2190,7 @@ const GAIT = {
      source de patinage restante. */
   ext(sp){
     const gh = this.hipY - this.footY - this.crouch(sp);
-    const r = this.reach * 0.965;
+    const r = this.reach * 0.985;
     const geo = Math.sqrt(Math.max(1e-4, r*r - gh*gh));
     /* Mesuré : à l'ouverture géométrique maximale, l'écart entre les
        deux pieds atteignait 0,49 pour une jambe de 0,33 — un grand
@@ -2333,6 +2345,11 @@ function buildBodyLayer(bones, blink, model){
     const dt = Math.max(0, Math.min(0.05, t - lastT));
     lastT = t;
     resetDeltas();
+    /* Pieds dans l'axe : mesuré, les deux pointes s'ouvraient de 12° vers
+       l'extérieur (pieds « en travers »). On les ramène à ~5°. Sur ce rig
+       l'axe z du pied le fait pivoter à plat, même sens des deux côtés. */
+    add('LeftFoot','z',   RIG.toeIn);
+    add('RightFoot','z', -RIG.toeIn);
 
     const walking = ctx && ctx.walking;
     const gait    = ctx && ctx.gait || 0;     // 0..1, intensité de la marche
@@ -2586,8 +2603,36 @@ function buildBodyLayer(bones, blink, model){
           const u = (t - duty)/(1 - duty);
           const e = u*u*(3 - 2*u);
           dz = -extN + 2*extN*e;
-          up = liftN*Math.sin(u*Math.PI);
+          // le pied passe haut TÔT (talon relevé derrière, genou qui
+          // vient devant) puis redescend tendu vers l'attaque du talon
+          up = liftN*Math.sin(Math.PI*Math.pow(u, 0.72));
         }
+        /* ---- cheville : attaque du talon / décollement ----
+           Le pied ne reste plus rigide. pitch > 0 = pointe vers le bas.
+             • début d'appui   : talon d'abord, orteils relevés (−0,30 → 0)
+             • fin d'appui     : le talon décolle, la cheville monte sur
+                                 les orteils (0 → +0,45)
+             • transfert       : la pointe pend puis se relève avant de
+                                 reposer le talon.
+           Quand la pointe est vers le bas et au sol, ce sont les ORTEILS
+           le point de contact : la cible cheville est décalée d'autant
+           (vers le haut et l'avant), pour que la pointe reste plantée. */
+        let pitch = 0;
+        const HEEL = 0.10, TOEOFF = 0.14;
+        if(t < duty){
+          if(t < HEEL) pitch = -0.30*(1 - t/HEEL);
+          else if(t > duty - TOEOFF){ const q=(t-(duty-TOEOFF))/TOEOFF; pitch = 0.45*q*q; }
+        } else {
+          const u = (t - duty)/(1 - duty);
+          const a = Math.max(0, 1 - u/0.5), b = Math.max(0, (u-0.55)/0.45);
+          pitch = 0.45*a*a - 0.30*b*b;
+        }
+        let ankY = 0, ankZ = 0;
+        if(pitch > 0){
+          ankY = GAIT.footL*(Math.sin(GAIT.footA + pitch) - Math.sin(GAIT.footA));
+          ankZ = GAIT.footL*(Math.cos(GAIT.footA) - Math.cos(GAIT.footA + pitch));
+        }
+        dz += ankZ; up += ankY;
         /* Correction de plan. La résolution ci-dessus raisonne dans un
            plan sagittal parfait ; or sur ce rig les jambes sont
            légèrement écartées et l'axe de la hanche n'est pas
@@ -2597,8 +2642,8 @@ function buildBodyLayer(bones, blink, model){
            d'environ 9° du plan de la jambe. L'écart étant proportionnel à
            l'avancée du pied, on le corrige par un simple terme linéaire,
            relevé sur le modèle. */
-        const r = solve(dz, gh - (up + GAIT.clearance + GAIT.tilt*dz));
-        return { hip: r.hip, knee: r.knee, shin: r.hip - r.knee };
+        const r = solve(dz, gh - (up + GAIT.clearance + GAIT.tilt*dz) + GAIT.curv*(dz-GAIT.curvC)*(dz-GAIT.curvC));
+        return { hip: r.hip, knee: r.knee, shin: r.hip - r.knee, pitch };
       };
       const L = legPose(0), R = legPose(0.5);
       // les angles sont ABSOLUS : on retranche la pose debout, car la
@@ -2616,8 +2661,8 @@ function buildBodyLayer(bones, blink, model){
          passait alors 13 cm sous l'os du pied et traversait la case.
          C'est ce qu'on voyait comme « il marche dans le plateau ». */
       const ank = a => -KNEE_DIR*(a - LEG_SHIN0)*RIG.ankle;
-      add('LeftFoot','x',   ank(L.shin));
-      add('RightFoot','x',  ank(R.shin));
+      add('LeftFoot','x',   ank(L.shin) + L.pitch);
+      add('RightFoot','x',  ank(R.shin) + R.pitch);
       // les hanches basculent du côté de la jambe d'appui
       add('Hips','z', sw*RIG.hipsZ*gait);
       add('Hips','y', sw*0.055*gait);
@@ -3413,7 +3458,7 @@ function frameStep(dt, t){
        pour les deux, et le pied reste sur le plateau. */
     const crouch = GAIT.crouch(spC) * gaitAmp;
     const osc = reduceMotion ? 0
-      : (-Math.abs(Math.cos(walk.phase*Math.PI*2)) * 0.012 + 0.012) * gaitAmp;
+      : (-Math.abs(Math.cos(walk.phase*Math.PI*2)) * GAIT.rise + GAIT.rise) * gaitAmp;
     const bob = -crouch + osc;
 
     /* Transfert de poids pendant l'anticipation et la stabilisation :
