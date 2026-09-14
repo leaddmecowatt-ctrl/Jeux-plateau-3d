@@ -4163,13 +4163,64 @@ function shuffledSlots(){
   for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
   return a;
 }
+/* ---------- Tirage imposé au clavier ----------
+   L'hôte tape un total de 2 à 12 AVANT de tirer : les deux cartes se
+   retournent sur une paire qui fait ce total (choisie au hasard parmi
+   les paires possibles, pour que la même valeur ne montre pas toujours
+   les mêmes cartes), et le pion avance d'autant. Le lot est alors celui
+   de la case atteinte, point : la file de résultats pré-calculée et le
+   plafond de reversement ne s'appliquent plus à cette mise — la
+   rentabilité est tenue par l'hôte, pas par le code. Rien n'apparaît
+   sur l'écran public ; l'hôte voit juste « Prochain tirage : N » sur
+   son propre écran, et Échap l'annule.
+     2 à 9  → immédiat.   1 puis 0/1/2 → 10, 11, 12.
+   Les doubles donnent un lancer supplémentaire : un total imposé n'en
+   produit jamais, sauf 2 et 12 qui ne peuvent être que des doubles. */
+let forcedTotal = null, digitBuf = '', digitTimer = null, manualGame = false;
+function showForced(){
+  if(isDisplay || !statusEl) return;
+  if(forcedTotal!=null) statusEl.textContent = 'Prochain tirage : '+forcedTotal+'  (B pour tirer, Échap pour annuler)';
+}
+function armForcedTotal(n){
+  forcedTotal = n; digitBuf = '';
+  if(digitTimer){ clearTimeout(digitTimer); digitTimer = null; }
+  showForced();
+}
+function handleDigitKey(d){
+  if(digitTimer){ clearTimeout(digitTimer); digitTimer = null; }
+  if(digitBuf==='1'){
+    if(d==='0'||d==='1'||d==='2'){ armForcedTotal(10+parseInt(d,10)); return; }
+    digitBuf = '';
+  }
+  if(d==='1'){
+    digitBuf = '1';
+    // 1 seul n'est pas un total : on attend 0/1/2 pendant une seconde
+    digitTimer = setTimeout(()=>{ digitBuf=''; digitTimer=null; }, 1000);
+    return;
+  }
+  const n = parseInt(d,10);
+  if(n>=2 && n<=9) armForcedTotal(n);
+}
+function forcedPair(total){
+  const pairs = [];
+  for(let a=1;a<=6;a++){ const b=total-a; if(b>=1&&b<=6) pairs.push({a,b}); }
+  const nonDouble = pairs.filter(p=>p.a!==p.b);
+  const pool = nonDouble.length ? nonDouble : pairs;
+  return pool[Math.floor(Math.random()*pool.length)];
+}
 function computeCardDraw(){
   // Un seul tirage de 2 cartes par clic. Sur un double, l'hôte
   // relance lui-même manuellement (nouveau clic sur "TIRER LES
   // CARTES") pour la paire bonus, au lieu d'un enchaînement
   // automatique dans le logiciel.
-  const a = 1+Math.floor(Math.random()*6);
-  const b = 1+Math.floor(Math.random()*6);
+  let a, b;
+  if(forcedTotal!=null){
+    ({a,b} = forcedPair(forcedTotal));
+    forcedTotal = null;
+  } else {
+    a = 1+Math.floor(Math.random()*6);
+    b = 1+Math.floor(Math.random()*6);
+  }
   return { pairs: [{a,b}], total: a+b, isDouble: a===b, slotOrder: shuffledSlots() };
 }
 async function playCardDrawAnimation(draw){
@@ -4387,6 +4438,7 @@ function restart(){
   rollsUsed = 0;
   rollsAllowed = 3;
   pendingOutcome = null;
+  manualGame = false; forcedTotal = null; digitBuf = '';
   walk = null;
   currentIndex = -1;
   player.root.scale.set(1,1,1);
@@ -4421,13 +4473,26 @@ async function drawAndMove(){
   // Premier lancer d'une partie (le pion est encore sur Départ) : une
   // partie complète = une mise, créditée automatiquement à la
   // cagnotte interne, sans aucune saisie manuelle.
+  const manualRoll = forcedTotal != null;
   if(currentIndex===-1){
     totalMise += AVG_MISE;
     saveTotals();
+    manualGame = false;
     // Le lot de cette mise est décidé maintenant, tiré du lot
     // pré-calculé — les dés qui vont suivre restent honnêtes à
     // l'écran, mais ne décident plus du lot réellement remporté.
-    pendingOutcome = nextPredeterminedOutcome();
+    // Sauf si l'hôte impose le tirage : la mise sort de la file.
+    pendingOutcome = manualRoll ? null : nextPredeterminedOutcome();
+  }
+  if(manualRoll && !manualGame){
+    manualGame = true;
+    // un lot pré-tiré pour cette mise ? il retourne dans la file, il
+    // servira à la prochaine mise jouée normalement
+    if(pendingOutcome){
+      outcomeState.batch.splice(outcomeState.pos, 0, pendingOutcome);
+      saveOutcomeState();
+      pendingOutcome = null;
+    }
   }
   // On continue plutôt que de garder le lot affiché : l'aperçu (ou le
   // lot validé) de la case précédente s'efface avant le nouveau tirage.
@@ -4550,7 +4615,14 @@ async function claimCurrentLot(){
   // jamais une version dégradée vers un palier moins cher.
   const paidBefore = totalPaid;
   const rollsUsedBefore = rollsUsed;
-  fundedCategory(realCat);
+  if(manualGame){
+    // tirage imposé par l'hôte : on compte le vrai coût de la case,
+    // sans passer par le plafond (c'est l'hôte qui tient les comptes)
+    totalPaid += OUTCOME_COST[realCat] || 0;
+    saveTotals();
+  } else {
+    fundedCategory(realCat);
+  }
   celebrate(realCat, null, {locked:true});
   broadcastSync({type:'celebrate', catKey:realCat});
   lastWinUndo = { amountAdded: totalPaid - paidBefore, rollsUsedBefore };
@@ -4590,6 +4662,9 @@ window.addEventListener('keydown', (e)=>{
   const tag = (document.activeElement && document.activeElement.tagName) || '';
   if(tag==='INPUT' || tag==='TEXTAREA') return;
   const k = e.key.toLowerCase();
+  if(!isDisplay && /^[0-9]$/.test(k)){ handleDigitKey(k); return; }
+  if(!isDisplay && k==='escape'){ forcedTotal = null; digitBuf = '';
+    if(statusEl) statusEl.textContent = 'Tirage imposé annulé.'; return; }
   if(k==='a'){ if(startBtn && !startBtn.hidden) startBtn.click(); }
   else if(k==='b'){ if(!validate.disabled) validate.click(); }
   else if(k==='c'){ resetBtn.click(); }
