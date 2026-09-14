@@ -25,27 +25,39 @@ const isDisplay = document.documentElement.classList.contains('display-mode');
 const syncChannel = ('BroadcastChannel' in window) ? new BroadcastChannel('pikajackpot-sync') : null;
 function broadcastSync(msg){ if(syncChannel && !isDisplay) syncChannel.postMessage(msg); }
 
-/* ---------- Disposition des 40 cases sur l'anneau 11x11 (coins tous
-   les 10 cases, comme un plateau façon Monopoly). tiles[0] = Case 1
-   ... tiles[39] = Case 40 (jackpot final) : pas de case "Départ"
-   séparée, les 40 cases sont toutes des lots réels. ---------- */
+/* ---------- Disposition des cases sur l'anneau N_SIDE x N_SIDE ----------
+   Un tour de plateau rectangulaire compte toujours 4·(N_SIDE−1) cases,
+   donc un nombre pair : 36 pour 10 par côté, 32 pour 9. tiles[0] =
+   Case 1 ... tiles[N_TILES−1] = dernière case (jackpot final) : pas de
+   case "Départ" séparée, toutes les cases sont des lots réels.
+   Le plateau est passé de 40 à 36 cases (une commune retirée par côté)
+   pour que chaque case soit ~10 % plus grande à l'écran. La recette de
+   rentabilité ne dépend PAS des cases (le lot est tiré dans la file de
+   résultats, puis le pion est amené sur une case correspondante) : elle
+   est strictement inchangée. Passer à 32 cases = changer N_SIDE et
+   retirer une commune de plus par côté dans BOARD_DATA. */
+const N_SIDE  = 10;
+const N_TILES = 4*(N_SIDE-1);
+const LAST    = N_TILES-1;
+const SIDE    = N_SIDE-1;               // cases par côté, un coin compris
 function ringPos(i){
-  if(i===0) return {r:11,c:11};
-  if(i<=10) return {r:11,c:11-i};
-  if(i<=20) return {r:21-i,c:1};
-  if(i<=30) return {r:1,c:i-19};
-  return {r:i-29,c:11};
+  if(i===0)        return {r:N_SIDE, c:N_SIDE};
+  if(i<=SIDE)      return {r:N_SIDE, c:N_SIDE-i};
+  if(i<=2*SIDE)    return {r:N_SIDE-(i-SIDE), c:1};
+  if(i<=3*SIDE)    return {r:1, c:1+(i-2*SIDE)};
+  return {r:1+(i-3*SIDE), c:N_SIDE};
 }
 const CELL = 1;
-function toWorld(r,c){ return new THREE.Vector3((c-6)*CELL, 0, (r-6)*CELL); }
+const GRID_C = (N_SIDE+1)/2;            // centre de la grille
+function toWorld(r,c){ return new THREE.Vector3((c-GRID_C)*CELL, 0, (r-GRID_C)*CELL); }
 /* Oriente chaque case pour que le "bas" de la carte (le bandeau prix)
    pointe toujours vers l'extérieur du plateau, sur les 4 côtés — pas
    seulement sur la rangée du bas (orientation par défaut). */
 function outwardYaw(r,c){
-  if(r===11) return 0;
-  if(c===1)  return -Math.PI/2;
-  if(r===1)  return Math.PI;
-  return Math.PI/2; // c===11
+  if(r===N_SIDE) return 0;
+  if(c===1)      return -Math.PI/2;
+  if(r===1)      return Math.PI;
+  return Math.PI/2; // c===N_SIDE
 }
 
 /* =========================================================================
@@ -137,12 +149,15 @@ function drawCard(deck){
 }
 
 /* Case 1 -> Case 40, dans l'ordre (index 0-based). */
+// 'commune*' = la commune "Prison, simple visite" (thématique uniquement).
+// Chaque ligne = un côté (coin compris en tête) : 9 cases par côté.
 const BOARD_DATA = [
-  'booster8','alternative','chest','commune','commune','commune','commune','chance','commune','commune',
-  'gradee','booster8','alternative','gradee','commune','commune','chest','commune','commune','commune',
-  'commune','chance','commune','commune','commune','commune','gradee','commune','booster50','prison',
-  'commune','commune','commune','commune','booster8','booster8','chance','commune','etb','jackpot300',
-].map((cat,i)=>({ cat, isVisite: i===9 })); // case 10 (index 9) = "Prison, simple visite" (thématique uniquement)
+  'booster8','alternative','chest','commune','commune','commune','chance','commune','commune*',
+  'gradee','booster8','alternative','gradee','commune','commune','chest','commune','commune',
+  'commune','chance','commune','commune','commune','gradee','commune','booster50','prison',
+  'commune','commune','commune','booster8','booster8','chance','commune','etb','jackpot300',
+].map(tok=>({ cat: tok.replace('*',''), isVisite: tok.endsWith('*') }));
+if(BOARD_DATA.length !== N_TILES) throw new Error('BOARD_DATA: '+BOARD_DATA.length+' cases pour N_TILES='+N_TILES);
 // NB : cases 5 et 22 remises en commune/chance (au lieu de gradée) car
 // ça cassait la rentabilité même à risque maximal (marge 20%). En
 // attente d'une solution de compensation pour les réintroduire.
@@ -150,13 +165,14 @@ const BOARD_DATA = [
 /* Lieux Pokémon mythiques affichés à la place des noms de rues type
    Monopoly ("vous marchez vers ..."). */
 const POKEMON_PLACES = [
-  'Bourg Palette','Route 1','Jadielle','Centre Pokémon','Forêt de Jade','Mont Sélénite','Argenta','Azuria',
+  'Bourg Palette','Route 1','Jadielle','Centre Pokémon','Forêt de Jade','Mont Sélénite','Azuria',
   'Cascade d\'Azuria','Carmin-sur-Mer','Route 24','Lavanville','Tour Pokémon','Zone Safari','Céladopole',
-  'Casino de Céladopole','Fuchsia','Île Écume','Parmanie','Manoir Pokémon','Île Cramoisie','Route 21',
-  'Doublonville','Centrale Électrique','Ligue Pokémon','Plateau Indigo','Grotte Taupiqueur','Route 11',
-  'Chenaptôme','Verdaphage','Bourg Geon','Écorcia','Rosalia','Cerisia','Blackthorn','Route 46','Grotte Sombre',
+  'Casino de Céladopole','Fuchsia','Île Écume','Parmanie','Île Cramoisie','Route 21',
+  'Doublonville','Centrale Électrique','Ligue Pokémon','Grotte Taupiqueur','Route 11',
+  'Chenaptôme','Verdaphage','Bourg Geon','Écorcia','Rosalia','Blackthorn','Route 46','Grotte Sombre',
   'Antre Draco','Salle du Conseil des 4','Ligue Pokémon — Salle du Champion',
 ];
+if(POKEMON_PLACES.length !== N_TILES) throw new Error('POKEMON_PLACES: '+POKEMON_PLACES.length+' noms pour N_TILES='+N_TILES);
 
 /* ---------- Chargement des vraies photos des lots ---------- */
 const LOT_IMAGE_URLS = {
@@ -785,7 +801,7 @@ composer.addPass(bloomPass);
    les 4 coins restent visibles sous l'angle courant, et on revient à
    BASE_FOV dès que l'angle redevient sûr (vue de face par défaut =
    plateau au maximum, comme avant). */
-const BOARD_CORNER_R = 5.65;
+const BOARD_CORNER_R = (N_SIDE*CELL)/2 + 0.15;
 const boardCorners = [
   new THREE.Vector3(-BOARD_CORNER_R, 0.5, -BOARD_CORNER_R),
   new THREE.Vector3( BOARD_CORNER_R, 0.5, -BOARD_CORNER_R),
@@ -837,7 +853,10 @@ controls.autoRotateSpeed = 0.55;
 {
   const aspect0 = wrap.clientWidth / wrap.clientHeight;
   if(aspect0 > 0 && aspect0 < 1){
-    const factor = Math.min(Math.pow(1/aspect0, 0.5), 1.6);
+    /* Exposant abaissé de 0,5 à 0,38 : on recule moins sur téléphone,
+       le plateau occupe davantage la largeur de l'écran. Le garde-fou
+       anti-rognage des coins (updateCornerSafety) rattrape ce qu'il faut. */
+    const factor = Math.min(Math.pow(1/aspect0, 0.38), 1.6);
     const dir = camera.position.clone().sub(controls.target).normalize();
     const dist = camera.position.distanceTo(controls.target) * factor;
     camera.position.copy(controls.target).add(dir.multiplyScalar(dist));
@@ -955,7 +974,7 @@ const brightGoldTex = makeGlowDotTexture('rgba(255,245,210,1)');
 const trimLights = [];
 const perimeterPts = [];
 {
-  const half = (11*CELL+0.7)/2;
+  const half = (N_SIDE*CELL+0.7)/2;
   const perEdge = 13;
   for(let i=0;i<perEdge;i++){ perimeterPts.push([-half+(i/(perEdge-1))*half*2, -half]); }
   for(let i=1;i<perEdge;i++){ perimeterPts.push([half, -half+(i/(perEdge-1))*half*2]); }
@@ -1172,7 +1191,7 @@ function makeCenterPlateTexture(){
   return tex;
 }
 const centerPlate = new THREE.Mesh(
-  new THREE.BoxGeometry(9*CELL,0.14,9*CELL),
+  new THREE.BoxGeometry((N_SIDE-2)*CELL,0.14,(N_SIDE-2)*CELL),
   new THREE.MeshStandardMaterial({map:makeCenterPlateTexture(),roughness:.7,metalness:.1,transparent:true})
 );
 centerPlate.position.y = 0.07;
@@ -1238,7 +1257,7 @@ function makeCornerOrnamentTexture(){
 {
   const ornTex = makeCornerOrnamentTexture();
   const ornSize = 2.1;
-  const cornerHalf = (11*CELL+0.7)/2;
+  const cornerHalf = (N_SIDE*CELL+0.7)/2;
   [[1,1],[-1,1],[-1,-1],[1,-1]].forEach(([sx,sz])=>{
     const mat = new THREE.MeshBasicMaterial({map:ornTex, transparent:true, depthWrite:false});
     const orn = new THREE.Mesh(new THREE.PlaneGeometry(ornSize,ornSize), mat);
@@ -1314,21 +1333,21 @@ const RIVET_OFFSETS = [[-1,-1],[1,-1],[-1,1],[1,1]];
 // ça, le moteur peut faire disparaître tout le lot (collerette,
 // liseré, rivets) selon l'angle de caméra, d'où des cases qui
 // "deviennent noires" par intermittence en tournant la vue.
-const tileCollarInst = new THREE.InstancedMesh(tileCollarGeo, tileGoldMat, 40);
+const tileCollarInst = new THREE.InstancedMesh(tileCollarGeo, tileGoldMat, N_TILES);
 tileCollarInst.castShadow = false; tileCollarInst.receiveShadow = false;
 tileCollarInst.frustumCulled = false;
 boardGroup.add(tileCollarInst);
-const tileBezelInst = new THREE.InstancedMesh(tileBezelGeo, tileBezelMat, 40);
+const tileBezelInst = new THREE.InstancedMesh(tileBezelGeo, tileBezelMat, N_TILES);
 tileBezelInst.receiveShadow = false;
 tileBezelInst.frustumCulled = false;
 boardGroup.add(tileBezelInst);
-const tileRivetInst = new THREE.InstancedMesh(tileRivetGeo, tileGoldMat, 40*RIVET_OFFSETS.length);
+const tileRivetInst = new THREE.InstancedMesh(tileRivetGeo, tileGoldMat, N_TILES*RIVET_OFFSETS.length);
 tileRivetInst.frustumCulled = false;
 boardGroup.add(tileRivetInst);
 const _instDummy = new THREE.Object3D();
 const _yAxis = new THREE.Vector3(0,1,0);
 
-for(let i=0;i<40;i++){
+for(let i=0;i<N_TILES;i++){
   const {r,c} = ringPos(i);
   const world = toWorld(r,c);
   const data = BOARD_DATA[i];
@@ -1563,7 +1582,7 @@ boardShards.frustumCulled = false;
 scene.add(boardShards);
 const shardState = [];
 {
-  const span = 11*CELL, cell = span/SHARD_ROWS, half = (SHARD_ROWS-1)/2;
+  const span = N_SIDE*CELL, cell = span/SHARD_ROWS, half = (SHARD_ROWS-1)/2;
   for(let row=0; row<SHARD_ROWS; row++){
     for(let col=0; col<SHARD_ROWS; col++){
       const x0=(col-half)*cell, z0=(row-half)*cell;
@@ -2877,7 +2896,7 @@ let walk = null;
    simplement là (pas de tour en arrière). */
 function landingIndex(fromIdx, count){
   const start = fromIdx === -1 ? 0 : fromIdx;
-  return count>=0 ? (start+count) % 40 : Math.max(0, start+count);
+  return count>=0 ? (start+count) % N_TILES : Math.max(0, start+count);
 }
 
 /* Distance couverte par UN cycle complet (deux pas), en cases.
@@ -2914,7 +2933,7 @@ function startWalk(fromIdx, count, stepDuration){
   let idx = startPos;
   let steps = 0;
   for(let i=0;i<n;i++){
-    idx = dir>0 ? (idx+1)%40 : idx-1;
+    idx = dir>0 ? (idx+1)%N_TILES : idx-1;
     path.push(tiles[idx]);
     indices.push(idx);
     steps++;
@@ -3961,7 +3980,7 @@ function revealImpact(){
    pour le texte de statut, qui a plus de place. */
 function shortPlaceName(idx){
   if(idx<0) return 'Départ';
-  if(idx===39) return 'Salle du Champion';
+  if(idx===LAST) return 'Salle du Champion';
   return POKEMON_PLACES[idx];
 }
 
@@ -4215,8 +4234,8 @@ async function move(forcedCount, forcedCard){
     placeTokenInstant(destIdx);
     setActive(destIdx);
   }
-  if(currentIndex===39){
-    statusEl.textContent = '🏆 Arrivé à '+placeLabel(39)+' — JACKPOT FINAL !';
+  if(currentIndex===LAST){
+    statusEl.textContent = '🏆 Arrivé à '+placeLabel(LAST)+' — JACKPOT FINAL !';
     finished = true;
   } else {
     statusEl.textContent = 'Le joueur est arrivé à '+placeLabel(currentIndex)+' !';
@@ -4273,8 +4292,8 @@ async function resolveChanceChest(myGen, forcedCard){
       placeTokenInstant(expectedIdx);
       setActive(expectedIdx);
     }
-    if(currentIndex===39){
-      statusEl.textContent = '🏆 Arrivé à '+placeLabel(39)+' — JACKPOT FINAL !';
+    if(currentIndex===LAST){
+      statusEl.textContent = '🏆 Arrivé à '+placeLabel(LAST)+' — JACKPOT FINAL !';
       finished = true;
     } else {
       statusEl.textContent = 'Le joueur est arrivé à '+placeLabel(currentIndex)+' !';
@@ -4385,8 +4404,8 @@ async function forceOutcomeArrival(targetCat){
   if(!candidates || !candidates.length) return;
   let best = candidates[0], bestDist = Infinity;
   candidates.forEach(idx=>{
-    const dist = ((idx - currentIndex) % 40 + 40) % 40;
-    const d = dist===0 ? 40 : dist;
+    const dist = ((idx - currentIndex) % N_TILES + N_TILES) % N_TILES;
+    const d = dist===0 ? N_TILES : dist;
     if(d < bestDist){ bestDist = d; best = idx; }
   });
   moving = true;
@@ -4408,7 +4427,7 @@ async function forceOutcomeArrival(targetCat){
   setActive(best);
   updatePlaceBanner(best, false);
   if(targetCat==='jackpot300'){
-    statusEl.textContent = '🏆 Arrivé à '+placeLabel(39)+' — JACKPOT FINAL !';
+    statusEl.textContent = '🏆 Arrivé à '+placeLabel(LAST)+' — JACKPOT FINAL !';
     finished = true;
   } else {
     statusEl.textContent = 'Le joueur est arrivé à '+placeLabel(currentIndex)+' !';
