@@ -2018,6 +2018,22 @@ function measurePlayerTop(){
     // pour de bonnes raisons, et corriger là-dessus l'enfoncerait.
     const sole = minY - player.root.position.y;
     player.model.position.y -= sole * 0.6;
+    /* On profite de ce relevé, pris sur le pion réellement posé, pour
+       fixer la géométrie de marche : hauteur de hanche et hauteur de
+       pied AU REPOS, dans le repère de la racine. Les coder en dur
+       marchait tant que rien d'autre ne bougeait le modèle — or la
+       calibration ci-dessus le descend justement de quelques
+       centièmes, et la cinématique inverse visait alors un pied sous
+       la case. Mesurées ici, les deux valeurs restent cohérentes quoi
+       qu'il arrive au modèle. */
+    if(player.bones && player.bones.LeftFoot && player.bones.LeftUpLeg){
+      const _v = new THREE.Vector3();
+      player.root.updateWorldMatrix(true, true);
+      player.bones.LeftUpLeg.getWorldPosition(_v);
+      GAIT.hipY = _v.y - player.root.position.y;
+      player.bones.LeftFoot.getWorldPosition(_v);
+      GAIT.footY = _v.y - player.root.position.y;
+    }
     if(++footCalSamples >= 14) footCalDone = true;
   }
 }
@@ -2084,6 +2100,65 @@ function updateReaction(t){
    `buildBodyLayer` renvoie la fonction appelée après chaque mixer.update.
    Elle compose, dans cet ordre : pose de repos → respiration et report du
    poids → corrections posturales → regard → marche → réaction. */
+/* ---------- Géométrie de la foulée : SOURCE UNIQUE ----------
+   La couche d'animation (trajectoire du pied) et le moteur de
+   déplacement (avance de la phase) doivent employer exactement la même
+   foulée. Si les deux valeurs divergent d'un pour cent, le pied posé
+   patine. Elles sont donc calculées ici, à un seul endroit, à partir des
+   dimensions relevées sur le modèle.
+
+   Dimensions mesurées (pas estimées) : cuisse 0,1509, tibia 0,1746,
+   hanche à 0,3668 et pied à 0,0492 au-dessus de la racine. La jambe fait
+   0,3255 pour une hauteur hanche-pied de 0,3176 : elle est tendue à
+   98 % debout. Une case fait 1,0, soit trois longueurs de jambe — il
+   faut donc environ trois pas par case, et c'est cette contrainte qui
+   fixe la vitesse maximale au-delà de laquelle le pied patinerait.
+   On tient dans cette limite en allongeant la foulée avec la vitesse
+   (le bassin descend, la jambe s'ouvre) plutôt qu'en accélérant la
+   cadence : c'est ce qu'on fait en passant de la marche à la course. */
+const GAIT = {
+  thigh: 0.1509, shin: 0.1746, hipY: 0.3668, footY: 0.0492,
+  reach: (0.1509 + 0.1746) * 0.995,
+  // descente du bassin : sans elle, jambe tendue, aucun pas n'est possible
+  crouch: sp => 0.055 + 0.055*sp,
+  // part du cycle passée au sol : >0,5 on marche, <0,5 on court
+  duty:   sp => 0.46 - 0.08*sp,
+  lift:   sp => 0.068 + 0.085*sp,
+  // inclinaison du plan de jambe, relevée sur le modèle (voir plus bas)
+  tilt: 0.163,
+  /* Marge de sol. Relevé image par image pendant un appui : le pied
+     descendait jusqu'à 0,02 sous la hauteur qu'il a debout, donc la
+     semelle mordait légèrement la case. On relève la cible d'autant. */
+  clearance: 0.022,
+  // demi-foulée = ouverture maximale de la jambe à la hauteur de bassin donnée
+  /* Demi-foulée. On la calcule avec une allonge volontairement PLUS
+     COURTE que l'allonge réelle : la jambe garde ainsi une réserve
+     d'extension, et la micro-oscillation du bassin ne peut jamais la
+     mettre en butée. Une jambe en butée n'atteint pas sa cible, et le
+     pied rattrape la différence en glissant — c'était la principale
+     source de patinage restante. */
+  ext(sp){
+    const gh = this.hipY - this.footY - this.crouch(sp);
+    const r = this.reach * 0.965;
+    return Math.sqrt(Math.max(1e-4, r*r - gh*gh));
+  },
+  /* Distance parcourue par UN cycle (deux pas), en cases.
+     Pendant l'appui le pied recule de 2·ext par rapport à la hanche, et
+     cet appui dure `duty` du cycle : pour que le pied reste immobile au
+     sol, le corps doit donc avancer de 2·ext/duty sur le cycle entier.
+     Cette égalité est la condition exacte du non-patinage. */
+  stride(sp){ return 2*this.ext(sp)/this.duty(sp); },
+  // angles hanche/genou du pion simplement debout, jambes sous le bassin
+  standPose(){
+    const d = Math.min(this.hipY - this.footY, this.reach);
+    const c1 = (this.thigh*this.thigh + this.shin*this.shin - d*d)/(2*this.thigh*this.shin);
+    const knee = Math.PI - Math.acos(Math.max(-1, Math.min(1, c1)));
+    const c2 = (this.thigh*this.thigh + d*d - this.shin*this.shin)/(2*this.thigh*d);
+    const hip = Math.acos(Math.max(-1, Math.min(1, c2)));
+    return { hip, knee };
+  },
+};
+
 let updateBodyReset = null;
 function buildBodyLayer(bones, blink, model){
   /* Pose de référence, relevée AVANT que le moindre clip ne soit lu, et
@@ -2137,6 +2212,14 @@ function buildBodyLayer(bones, blink, model){
 
      Le buste, le cou et les jambes gardent une part large du clip :
      c'est lui qui donne l'appui au sol et la respiration du torse. */
+  /* Sens de rotation des os de jambe sur ce rig : la pose de liaison
+     porte des angles proches de ±pi sur les cuisses, le signe n'est donc
+     pas devinable — il est relevé sur le modèle. */
+  const LEG_DIR = -1, KNEE_DIR = 1;
+  /* Dimensions relevées sur le modèle (pas estimées) : la hanche est à
+     0,3176 au-dessus du pied pour une jambe de 0,3255 — tendue à 98 %. */
+  const LEG_THIGH = GAIT.thigh, LEG_SHIN = GAIT.shin;
+
   const CLIP_WEIGHT_IDLE = {
     LeftArm:0.10, RightArm:0.10, LeftForeArm:0.16, RightForeArm:0.16,
     LeftHand:0.22, RightHand:0.22, LeftShoulder:0.30, RightShoulder:0.30,
@@ -2148,6 +2231,9 @@ function buildBodyLayer(bones, blink, model){
     LeftArm:0.22, RightArm:0.22, LeftForeArm:0.28, RightForeArm:0.28,
     LeftHand:0.35, RightHand:0.35, LeftShoulder:0.45, RightShoulder:0.45,
     Spine:0.7, Chest:0.7, UpperChest:0.7, Neck:0.5, Head:0.4,
+    // jambes : 0, le clip n'y met qu'un tremblement (voir plus bas)
+    LeftUpLeg:0, RightUpLeg:0, LeftLeg:0, RightLeg:0,
+    LeftFoot:0, RightFoot:0, Hips:0,
   };
 
   let breathPhase = Math.random()*10;
@@ -2303,20 +2389,109 @@ function buildBodyLayer(bones, blink, model){
       const ph = stepPh * Math.PI * 2;
       const sw = Math.sin(ph);          // cycle complet (2 pas)
       const st = Math.sin(ph*2);        // 1 par pas
+      const sp = (ctx && ctx.speedK) || 0;   // 0 = marche, 1 = course
+
+      /* ---- jambes : cycle construit ici, de zéro, en cinématique inverse ----
+         Le clip "walk" livré avec le modèle ne marche pas. Mesuré os par
+         os sur un cycle complet : le pied avance de 0,0095 et se lève de
+         0,012, pour une jambe de 0,326 de long — 3 % de la longueur de
+         jambe. Ce n'est pas un pas, c'est un tremblement sur place, et
+         c'est exactement ce qu'on voyait. Aucun verrouillage de phase ne
+         pouvait en tirer une marche ; le bond de case en case n'était
+         qu'un contournement.
+
+         On ne fait donc pas tourner des angles en espérant que le pied
+         tombe juste : on décrit la TRAJECTOIRE DU PIED (posé au sol
+         pendant l'appui, arc en l'air pendant le transfert) et on résout
+         la hanche et le genou pour l'atteindre. C'est ce qui garantit
+         qu'un pied au sol y reste — pas de patinage — quelle que soit la
+         vitesse.
+
+         Debout, la jambe est tendue à 98 % : aucune longueur de pas
+         n'est atteignable sans fléchir. Le bassin descend donc un peu
+         pendant la marche (et davantage en course), ce qui ouvre la
+         foulée. C'est cette descente qui rend la marche possible. */
+      /* Hauteur de hanche RÉELLE : pendant la mise en route, la descente
+         du bassin s'installe progressivement. Si la cinématique inverse
+         raisonne sur la descente théorique alors que le bassin n'est pas
+         encore descendu, elle vise un pied trop bas et le pied traverse
+         la case. On lui transmet donc la valeur effectivement appliquée. */
+      const gh = GAIT.hipY - GAIT.footY
+               - (ctx && ctx.crouch != null ? ctx.crouch : GAIT.crouch(sp));
+      /* Pose debout de référence, recalculée à partir de la géométrie
+         relevée : les angles de la cinématique inverse sont absolus,
+         alors que la couche procédurale s'ajoute à la pose de liaison.
+         On retranche donc ce que vaut la pose debout. */
+      const stand = GAIT.standPose();
+      const LEG_HIP0 = stand.hip, LEG_KNEE0 = stand.knee;
+      const LEG_SHIN0 = LEG_HIP0 - LEG_KNEE0;
+      const reach = GAIT.reach;
+      const ext   = GAIT.ext(sp);         // demi-foulée
+      const lift  = GAIT.lift(sp);        // hauteur de passage du pied
+      const duty  = GAIT.duty(sp);        // part du cycle passée au sol
+
+      // résolution 2 os dans le plan sagittal, hanche à l'origine
+      const solve = (dz, dy)=>{
+        let d = Math.hypot(dz, dy);
+        d = Math.min(d, reach);
+        const c1 = (LEG_THIGH*LEG_THIGH + LEG_SHIN*LEG_SHIN - d*d)/(2*LEG_THIGH*LEG_SHIN);
+        const knee = Math.PI - Math.acos(Math.max(-1, Math.min(1, c1)));
+        const c2 = (LEG_THIGH*LEG_THIGH + d*d - LEG_SHIN*LEG_SHIN)/(2*LEG_THIGH*d);
+        const hip = Math.atan2(dz, dy) + Math.acos(Math.max(-1, Math.min(1, c2)));
+        return { hip, knee };
+      };
+
+      const legPose = (off)=>{
+        const t = ((stepPh + off) % 1 + 1) % 1;
+        let dz, up;
+        if(t < duty){                      // APPUI : le pied ne bouge pas du sol
+          dz = ext - 2*ext*(t/duty);
+          up = 0;
+        } else {                           // TRANSFERT : arc vers l'avant
+          const u = (t - duty)/(1 - duty);
+          const e = u*u*(3 - 2*u);
+          dz = -ext + 2*ext*e;
+          up = lift*Math.sin(u*Math.PI);
+        }
+        /* Correction de plan. La résolution ci-dessus raisonne dans un
+           plan sagittal parfait ; or sur ce rig les jambes sont
+           légèrement écartées et l'axe de la hanche n'est pas
+           rigoureusement horizontal. Résultat mesuré : le pied décrit un
+           arc au lieu d'une ligne, trop bas de 0,029 quand il est devant
+           et trop haut de 0,033 quand il est derrière — une inclinaison
+           d'environ 9° du plan de la jambe. L'écart étant proportionnel à
+           l'avancée du pied, on le corrige par un simple terme linéaire,
+           relevé sur le modèle. */
+        const r = solve(dz, gh - (up + GAIT.clearance + GAIT.tilt*dz));
+        return { hip: r.hip, knee: r.knee, shin: r.hip - r.knee };
+      };
+      const L = legPose(0), R = legPose(0.5);
+      // les angles sont ABSOLUS : on retranche la pose debout, car la
+      // couche procédurale s'ajoute à la pose de liaison
+      add('LeftUpLeg','x',  LEG_DIR*(L.hip - LEG_HIP0)*gait);
+      add('RightUpLeg','x', LEG_DIR*(R.hip - LEG_HIP0)*gait);
+      add('LeftLeg','x',    KNEE_DIR*(L.knee - LEG_KNEE0)*gait);
+      add('RightLeg','x',   KNEE_DIR*(R.knee - LEG_KNEE0)*gait);
+      // la cheville garde la semelle à plat au lieu de suivre le tibia
+      add('LeftFoot','x',   -KNEE_DIR*(L.shin - LEG_SHIN0)*0.8*gait);
+      add('RightFoot','x',  -KNEE_DIR*(R.shin - LEG_SHIN0)*0.8*gait);
+      // les hanches basculent du côté de la jambe d'appui
       add('Hips','z', sw*0.075*gait);
       add('Hips','y', sw*0.055*gait);
       add('Spine','y', -sw*0.045*gait);
       add('Chest','y', -sw*0.055*gait);
       add('UpperChest','y', -sw*0.030*gait);
       add('Chest','x', Math.abs(st)*0.020*gait);
-      // bras en opposition : gauche avec jambe droite
-      add('LeftArm','x',  -sw*0.30*gait);
-      add('RightArm','x',  sw*0.30*gait);
+      // bras en opposition : gauche avec jambe droite, plus ample en course
+      const armA = 0.30 + 0.36*sp;
+      add('LeftArm','x',  -sw*armA*gait);
+      add('RightArm','x',  sw*armA*gait);
       add('LeftArm','z',   sw*0.05*gait);
       add('RightArm','z',  sw*0.05*gait);
-      // le coude se ferme quand le bras avance
-      add('LeftForeArm','x',  -Math.max(0, -sw)*0.32*gait - 0.05*gait);
-      add('RightForeArm','x', -Math.max(0,  sw)*0.32*gait - 0.05*gait);
+      // le coude se ferme quand le bras avance, et reste plus fermé en course
+      const elbow = 0.32 + 0.34*sp;
+      add('LeftForeArm','x',  -Math.max(0, -sw)*elbow*gait - (0.05+0.30*sp)*gait);
+      add('RightForeArm','x', -Math.max(0,  sw)*elbow*gait - (0.05+0.30*sp)*gait);
       add('LeftShoulder','z', sw*0.020*gait);
       add('RightShoulder','z', sw*0.018*gait);
     }
@@ -2528,6 +2703,7 @@ loadPlayerModel(player).catch(err=>{
 });
 
 
+
 /* ---------- État de jeu ---------- */
 let currentIndex = -1; // -1 = au départ, pas encore sur le plateau
 let moving = false;
@@ -2583,11 +2759,23 @@ function landingIndex(fromIdx, count){
   return count>=0 ? (start+count) % 40 : Math.max(0, start+count);
 }
 
-/* Distance couverte par UN cycle complet du clip de marche (deux pas).
-   Réglée sur la longueur de jambe du pion : trop grande, les pieds
-   patinent vers l'avant ; trop petite, ils patinent vers l'arrière. */
-const WALK_STRIDE = 0.72;
+/* Distance couverte par UN cycle complet (deux pas), en cases.
+   Ce n'est plus une constante réglée à l'oreille : elle est DÉDUITE de la
+   longueur de jambe et de la descente du bassin, exactement comme la
+   trajectoire du pied dans la couche d'animation. Les deux se servent du
+   même calcul, donc le pied posé reste au sol par construction, de la
+   marche à la course.
+     jambe 0,3255 · hanche 0,3176 au-dessus du pied · case = 1,0 */
+const strideForSpeed = sp => GAIT.stride(sp);
+/* Vitesse de croisière : bornée par la physique du personnage. Il a des
+   jambes de 0,33 pour des cases de 1,0 — une case fait trois longueurs de
+   jambe, donc il faut ~3 pas par case. Au-delà de ~2,2 cases/s la cadence
+   dépasse celle d'un sprinteur et le pied se remet à patiner. On prend
+   toute la plage : trajet court = petite foulée tranquille, trajet long =
+   foulée de course, sans jamais franchir cette limite. */
+const WALK_V_MIN = 1.24, WALK_V_MAX = 2.35;
 let walkBank = 0, walkGait = 0, walkStepPhase = 0, hopGait = 0, hopPhase = 0;
+let walkSpeedK = 0, walkCrouch = 0;
 
 function startWalk(fromIdx, count, stepDuration){
   // Le pion démarre visuellement SUR la case 1 (pas sur une case
@@ -2627,18 +2815,23 @@ function startWalk(fromIdx, count, stepDuration){
          fait de toute façon, et qui reste honnête à grande vitesse.
      Le mode rapide (correction de fin de partie, jusqu'à 39 cases en
      1,4 s) garde la durée qu'on lui impose et bondit. */
-  const forcedFast = stepDuration < HOP_DURATION*0.9;
-  const gaitMode = (!forcedFast && steps > 0 && steps <= 3) ? 'walk' : 'hop';
-  if(!forcedFast){
-    stepDuration = gaitMode === 'walk' ? 0.85 : 0.30;
+  /* Une seule allure, qui s'étire de la marche à la course avec la
+     longueur du trajet : c'est la même mécanique de jambes, seules la
+     foulée et la cadence changent — comme un humain qui allonge le pas
+     quand il a du chemin à faire. Plus de bond de case en case. */
+  const forcedFast = stepDuration < 0.42;
+  const gaitMode = 'walk';
+  if(!forcedFast && steps > 0){
+    const v = Math.min(WALK_V_MAX, WALK_V_MIN + (steps-1)*0.20);
+    stepDuration = 1/v;
   }
   const vCruise = steps>0 ? 1/stepDuration : 0;
   const rampUnits = Math.min(0.5, steps/2);
   const accelTime = rampUnits>0 ? (2*rampUnits)/vCruise : 0;
   const cruiseUnits = steps - 2*rampUnits;
   const cruiseTime = vCruise>0 ? cruiseUnits/vCruise : 0;
-  const prepTime = steps>0 ? (gaitMode==='walk' ? 0.30 : 0.16) : 0;
-  const settleTime = steps>0 ? (gaitMode==='walk' ? 0.42 : 0.30) : 0;
+  const prepTime = steps>0 ? 0.22 : 0;
+  const settleTime = steps>0 ? 0.34 : 0;
   const moveTime = Math.max(0.001, accelTime*2+cruiseTime);
   walk = {
     path, indices, steps, vCruise, rampUnits, accelTime, cruiseTime,
@@ -2994,7 +3187,12 @@ function frameStep(dt, t){
        distance couverte par un cycle complet (deux pas) ; une valeur trop
        grande fait patiner vers l'avant, trop petite fait patiner vers
        l'arrière. */
-    walk.phase += Math.max(0, dist - walk.prevDist) / WALK_STRIDE;
+    /* La phase du cycle n'avance QUE de ce que les jambes ont réellement
+       parcouru, et la foulée employée est celle que la couche d'animation
+       va reproduire : c'est cette égalité, et elle seule, qui empêche le
+       pied posé de patiner. */
+    const spNow = Math.max(0, Math.min(1, (walk.vCruise - WALK_V_MIN)/(WALK_V_MAX - WALK_V_MIN)));
+    walk.phase += Math.max(0, dist - walk.prevDist) / strideForSpeed(spNow);
     walk.prevDist = dist;
 
     const segIdx = Math.min(Math.floor(dist), Math.max(0,walk.steps-1));
@@ -3009,11 +3207,28 @@ function frameStep(dt, t){
     /* Bond : arc parabolique par case. Le point bas est au contact
        (u=0 et u=1), le sommet au milieu du saut. En marche, simple
        oscillation du centre de masse calée sur le pas. */
-    const hopU = walk.gaitMode === 'hop' ? (dist - Math.floor(dist)) : 0;
-    const bob = reduceMotion ? 0
-      : (walk.gaitMode === 'hop'
-          ? Math.sin(Math.min(1, hopU) * Math.PI) * 0.105 * gaitAmp
-          : (-Math.abs(Math.cos(walk.phase*Math.PI*2)) * 0.022 + 0.022) * gaitAmp);
+    /* Le bassin descend pendant la locomotion : debout, la jambe est
+       tendue à 98 %, aucune longueur de pas n'est atteignable sans cette
+       descente. Elle s'installe et se retire avec l'amplitude de marche,
+       donc elle ne se voit pas à l'arrêt. On y ajoute une très légère
+       oscillation par pas — la cinématique inverse l'absorbe dans les
+       genoux sans décoller le pied. */
+    const hopU = 0;
+    /* La descente du bassin s'installe pendant l'ANTICIPATION, où le pion
+       ne se translate pas encore, et reste pleine pendant tout le
+       trajet. La faire suivre l'amplitude de marche paraissait naturel,
+       mais la foulée, elle, est calculée pour la descente complète : tant
+       que le bassin n'était pas descendu, la jambe ne pouvait pas
+       atteindre le sol et le pied rattrapait en glissant. */
+    const spC = Math.max(0, Math.min(1,
+                  (walk.vCruise - WALK_V_MIN)/(WALK_V_MAX - WALK_V_MIN)));
+    const crouchRamp = inPrep ? Math.min(1, te/Math.max(0.001, walk.prepTime))
+                     : inSettle ? Math.max(0, 1 - (tm - walk.moveTime)/walk.settleTime)
+                     : 1;
+    const crouch = GAIT.crouch(spC) * crouchRamp;
+    const osc = reduceMotion ? 0
+      : (-Math.abs(Math.cos(walk.phase*Math.PI*2)) * 0.012 + 0.012) * gaitAmp;
+    const bob = -crouch + osc;
 
     /* Transfert de poids pendant l'anticipation et la stabilisation :
        un petit creux avant de partir, un autre en posant le dernier pas. */
@@ -3036,10 +3251,16 @@ function frameStep(dt, t){
       dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
       const turnRate = 4.5 + 3.5*(1 - Math.min(1, Math.abs(dyaw)/1.2));
       player.root.rotation.y += dyaw*Math.min(1, dt*turnRate);
-      // le buste s'incline vers l'intérieur du virage
-      walkBank += ((-dyaw*0.22) - walkBank) * Math.min(1, dt*6);
+      /* PAS d'inclinaison dans le virage. Le pion se penchait vers
+         l'intérieur proportionnellement à l'angle restant : dans un
+         angle du plateau, l'écart de cap vaut 90°, ce qui donnait
+         jusqu'à 20° de bascule latérale. Vu d'une caméra basse, ça ne
+         se lit pas comme un virage mais comme un personnage qui tombe.
+         Un pion de plateau reste droit et PIVOTE : il ne s'incline
+         jamais. */
+      walkBank += (0 - walkBank) * Math.min(1, dt*8);
     } else {
-      walkBank += (0 - walkBank) * Math.min(1, dt*5);
+      walkBank += (0 - walkBank) * Math.min(1, dt*8);
     }
     player.root.rotation.z = walkBank;
 
@@ -3056,17 +3277,26 @@ function frameStep(dt, t){
     if(!reduceMotion){
       // le buste se penche en avant à l'accélération et se redresse en
       // décélérant : c'est l'inertie qui se lit, pas une inclinaison fixe
-      const leanTarget = -0.075*gaitAmp + (inSettle ? 0.03 : 0);
+      /* Le buste reste droit. Une inclinaison avant de 4° suffisait à
+         donner l'impression d'un personnage qui plonge ; on garde juste
+         de quoi lire l'élan, pas la chute. */
+      const leanTarget = -0.022*gaitAmp + (inSettle ? 0.010 : 0);
       player.root.rotation.x += (leanTarget - player.root.rotation.x)*Math.min(1,dt*8);
     }
     // Pendant un bond on laisse tourner le clip "idle" : les jambes sont
     // pilotées entièrement à la main (appel, envol, réception), le cycle
     // de marche n'aurait aucun sens à cette vitesse.
-    player.setWalking(walk.gaitMode === 'walk' && gaitAmp > 0.02, walk.phase);
-    walkGait = walk.gaitMode === 'walk' ? gaitAmp : 0;
+    /* Le clip du modèle ne pilote plus les jambes (il n'y met qu'un
+       tremblement) : on le laisse tourner pour le haut du corps
+       uniquement, les jambes sont entièrement calculées. */
+    player.setWalking(gaitAmp > 0.02, walk.phase);
+    walkGait = gaitAmp;
     walkStepPhase = walk.phase % 1;
-    hopGait = walk.gaitMode === 'hop' ? gaitAmp : 0;
-    hopPhase = hopU;
+    walkSpeedK = Math.max(0, Math.min(1,
+      (walk.vCruise - WALK_V_MIN)/(WALK_V_MAX - WALK_V_MIN)));
+    walkCrouch = crouch - osc;   // enfoncement réel du bassin
+    hopGait = 0;
+    hopPhase = 0;
 
     /* ---- arrivée : une seule séquence continue ----
        Les effets ne se déclenchent plus à l'instant où la translation
@@ -3110,6 +3340,7 @@ function frameStep(dt, t){
     player.root.rotation.x *= 0.85;
     player.root.rotation.z *= 0.85;
     walkGait += (0 - walkGait)*Math.min(1, dt*6);
+    walkCrouch += (0 - walkCrouch)*Math.min(1, dt*6);
     hopGait += (0 - hopGait)*Math.min(1, dt*7);
     player.setWalking(false);
   }
@@ -3148,6 +3379,8 @@ function frameStep(dt, t){
       walking: walkGait > 0.02 || hopGait > 0.02,
       gait: walkGait,
       stepPhase: walkStepPhase,
+      speedK: walkSpeedK,
+      crouch: walkCrouch,
       hop: hopGait,
       hopPhase: hopPhase,
       bodyYaw: player.root.rotation.y,
@@ -3813,9 +4046,7 @@ function updateWinButton(){
   }
 }
 
-const wait = ms => new Promise(r=>{
-  setTimeout(r, ms);
-});
+const wait = ms => new Promise(r=>setTimeout(r,ms));
 const HOP_DURATION = 0.36;
 
 async function move(forcedCount, forcedCard){
