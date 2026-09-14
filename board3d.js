@@ -688,7 +688,11 @@ try{
      direct hors du plateau) — revenu au comportement par défaut
      (true), plus fidèle en couleur pour la composition avec la photo
      derrière. */
-  renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true, powerPreference:'high-performance' });
+  /* antialias:false : avec l'EffectComposer, la scène est rendue dans
+     une texture intermédiaire SANS multi-échantillonnage, et le canvas
+     ne reçoit qu'un quad plein écran ; le MSAA du canvas ne lissait donc
+     rien et coûtait un tampon plein écran de plus. Rendu identique. */
+  renderer = new THREE.WebGLRenderer({ canvas, antialias:false, alpha:true, powerPreference:'high-performance' });
 }catch(e){
   const fb = document.createElement('div');
   fb.className = 'gl-fallback';
@@ -696,7 +700,8 @@ try{
   wrap.appendChild(fb);
   throw e;
 }
-renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+const DPR_MAX = Math.min(window.devicePixelRatio||1, 2);
+renderer.setPixelRatio(DPR_MAX);
 /* alpha:true permet la transparence mais ne l'active pas : Three.js
    efface quand même chaque image en noir opaque (alpha 1) par
    défaut. Sans ceci, le canvas reste un rectangle noir plein là où
@@ -3712,8 +3717,47 @@ function frameStep(dt, t){
   composer.render();
 }
 
+/* ---------- Qualité adaptative ----------
+   Mesuré : le flou lumineux (bloom) coûte à lui seul ~17 fois le reste
+   du rendu, et son coût grimpe avec la résolution (écrans 2x). Sur une
+   machine qui suit, RIEN ne change. Si la cadence réelle reste sous
+   ~32 images/s pendant 3 s, on descend d'un cran, cran par cran, jamais
+   plus d'un toutes les 3 s, sans jamais remonter (pas d'oscillation) :
+     1. bloom calculé en demi-résolution (le flou reste un flou)
+     2. rendu à 1,5x max au lieu de 2x
+     3. rendu à 1x
+     4. bloom en quart de résolution
+   Le jeu, les règles, les animations et les lots ne changent pas. */
+const QUALITY = { level:0, samples:0, slow:0, last:0, armedAt:0 };
+const QUALITY_LEVELS = 4;
+function applyQuality(level){
+  QUALITY.level = level;
+  const dpr = level>=3 ? 1 : level>=2 ? Math.min(DPR_MAX, 1.5) : DPR_MAX;
+  if(renderer.getPixelRatio() !== dpr) renderer.setPixelRatio(dpr);
+  resize();
+}
+function bloomScaleForLevel(level){ return level>=4 ? 0.25 : level>=1 ? 0.5 : 1; }
+function qualityTick(realDt, now){
+  if(QUALITY.level >= QUALITY_LEVELS) return;
+  if(!QUALITY.armedAt){ QUALITY.armedAt = now + 6; return; }   // 6 s de grâce (chargement)
+  if(now < QUALITY.armedAt) return;
+  QUALITY.samples++;
+  if(realDt > 1/32) QUALITY.slow++;
+  if(QUALITY.samples >= 90){                       // ~3 s à 30 i/s
+    if(QUALITY.slow > QUALITY.samples*0.6 && now - QUALITY.last > 3){
+      QUALITY.last = now;
+      applyQuality(QUALITY.level + 1);
+    }
+    QUALITY.samples = 0; QUALITY.slow = 0;
+  }
+}
+let _lastFrameAt = 0;
 function animate(){
   requestAnimationFrame(animate);
+  const nowMs = performance.now();
+  const realDt = _lastFrameAt ? (nowMs - _lastFrameAt)/1000 : 0;
+  _lastFrameAt = nowMs;
+  if(!document.hidden && realDt > 0 && realDt < 1) qualityTick(realDt, nowMs/1000);
   frameStep(Math.min(clock.getDelta(), 0.05), clock.getElapsedTime());
 }
 animate();
@@ -3724,6 +3768,8 @@ function resize(){
   if(w===0||h===0) return;
   renderer.setSize(w,h,false);
   composer.setSize(w,h);
+  const bs = bloomScaleForLevel(QUALITY.level);
+  if(bs < 1) bloomPass.setSize(Math.round(w*bs), Math.round(h*bs));
   camera.aspect = w/h;
   camera.updateProjectionMatrix();
 }

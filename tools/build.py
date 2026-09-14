@@ -139,14 +139,49 @@ def build(out_path):
         mime = mimetypes.guess_type(full)[0] or 'application/octet-stream'
         data_uris[p] = f'data:{mime};base64,{data}'
 
-    def inline(text):
-        for p, uri in data_uris.items():
-            text = text.replace(p, uri)
+    # ---- chaque fichier n'est incrusté qu'UNE fois ----
+    # Avant, chaque occurrence du chemin était remplacée par le data: URI
+    # complet : le fond (CSS x2 + JS) pesait 3 fois, chaque lot 2 fois
+    # (tableau JS + vignette HTML) — 4 Mo de doublons dans le fichier.
+    #   • JS   : 'chemin' entre quotes  -> window.__ASSETS["chemin"]
+    #   • CSS  : url("chemin")          -> var(--asset-N), défini une fois dans :root
+    #   • HTML : <img src="chemin">      -> <img data-asset="chemin">, src posé au chargement
+    css_vars = {}
+    def inline_js(text):
+        for p in data_uris:
+            # une seule passe (regex) : sinon la forme "p" produite par la
+            # première passe se faisait re-remplacer par la seconde
+            pat = re.compile('([\'"])' + re.escape(p) + '\\1')
+            text = pat.sub(lambda m, p=p: 'window.__ASSETS[' + json.dumps(p) + ']', text)
         return text
-
-    head = inline(head)
-    body = inline(body)
-    entry_js = inline(entry_js)
+    def inline_css(text):
+        for i, (p, uri) in enumerate(data_uris.items()):
+            var = '--asset-%d' % i
+            for form in ('url("%s")' % p, "url('%s')" % p, 'url(%s)' % p):
+                if form in text:
+                    css_vars[var] = uri
+                    text = text.replace(form, 'var(%s)' % var)
+        return text
+    def inline_html(text):
+        for p in data_uris:
+            text = text.replace('src="%s"' % p, 'data-asset="%s"' % p)
+        return text
+    # ordre important : CSS (url("p")) puis HTML (src="p") AVANT le JS
+    # ('p' / "p"), sinon la forme JS avale les deux autres
+    head = inline_css(head)
+    body = inline_js(inline_html(inline_css(body)))
+    entry_js = inline_js(entry_js)
+    # aucune référence ne doit rester sous une forme non prévue
+    for p in data_uris:
+        for name, text in (('head', head), ('body', body), ('board3d.js', entry_js)):
+            rest = text.count(p) - text.count('__ASSETS[' + json.dumps(p) + ']') - text.count('data-asset="%s"' % p)
+            if rest:
+                raise SystemExit('build.py: référence non gérée à %s dans %s (x%d)' % (p, name, rest))
+    assets_script = ('<script>window.__ASSETS = ' + json.dumps(data_uris) + ';</script>\n'
+        + '<style>:root{' + ''.join('%s:url("%s");' % (k, v) for k, v in css_vars.items()) + '}</style>')
+    head = head.replace('</head>', assets_script + '\n</head>')
+    body = body + ('<script>document.querySelectorAll("img[data-asset]").forEach(function(i){'
+                   ' i.src = window.__ASSETS[i.getAttribute("data-asset")] || ""; });</script>\n')
 
     # ---- resolve every module's own imports to blob-token placeholders ----
     entry_js = rewrite_imports(entry_js, ENTRY)
