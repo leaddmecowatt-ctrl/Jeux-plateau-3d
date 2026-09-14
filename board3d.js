@@ -2235,6 +2235,26 @@ function buildBodyLayer(bones, blink, model){
     for(const n of RIG_BONES) d[n] = { x:0, y:0, z:0, py:0 };
   };
   const add = (n, ax, v)=>{ if(d[n]) d[n][ax] += v; };
+  /* Les deux bras de ce rig n'ont PAS des axes miroirs. Mesuré en
+     déplaçant la main pour +0,5 rad sur chaque axe :
+       LeftArm  x : main +13,9 cm devant, 0 latéral   (sagittal pur)
+       RightArm x : main 11,1 cm DERRIÈRE, 7 cm dehors ; z : 7,8 cm devant, 11 cm dehors
+       LeftForeArm  x : main 7,4 cm devant (coude se plie vers l'avant)
+       RightForeArm x : main 5,8 cm DERRIÈRE (même signe = coude vers l'arrière)
+     Le code appliquait le même signe aux deux : le coude gauche se pliait
+     à l'envers et le bras gauche balançait presque uniquement vers
+     l'arrière (mesuré : +4° devant / −52° derrière, contre +39°/−13° à
+     droite). Ces deux aides expriment un mouvement « vers l'avant » en
+     radians et le traduisent en rotations propres à chaque côté, avec
+     la composante latérale annulée à droite. */
+  const armFwd = (side, s)=>{
+    if(side==='L'){ add('LeftArm','x', s); }
+    else { add('RightArm','x', -0.86*s); add('RightArm','z', 0.55*s); }
+  };
+  const elbowFwd = (side, b)=>{
+    if(side==='L'){ add('LeftForeArm','x', b); }
+    else { add('RightForeArm','x', -0.80*b); add('RightForeArm','z', 0.63*b); }
+  };
 
   /* Poids du clip par os.
 
@@ -2611,16 +2631,20 @@ function buildBodyLayer(bones, blink, model){
       const legFwdL = Math.cos(stepPh*Math.PI*2);   // +1 = jambe gauche devant
       const armFwdL = -legFwdL * 1;  // bras gauche = jambe droite
       const armFwdR =  legFwdL * 1;
-      const armA = 0.30 + 0.36*sp;
-      const AD = 1;
-      add('LeftArm','x',  AD*armFwdL*armA*gait);
-      add('RightArm','x', AD*armFwdR*armA*gait);
-      add('LeftArm','z',   sw*0.04*gait);
-      add('RightArm','z',  sw*0.04*gait);
-      // le coude se ferme quand le bras avance
-      const elbow = 0.32 + 0.34*sp;
-      add('LeftForeArm','x',  -Math.max(0, armFwdL)*elbow*gait - (0.05+0.30*sp)*gait);
-      add('RightForeArm','x', -Math.max(0, armFwdR)*elbow*gait - (0.05+0.30*sp)*gait);
+      /* Amplitude asymétrique comme une vraie marche : le bras monte
+         plus haut devant (jusqu'à ~30°) qu'il ne recule derrière (~18°),
+         un bras qui part loin en arrière donne l'impression d'être
+         déboîté. */
+      const armA = 0.21 + 0.19*sp;
+      const BACK = 0.60;
+      const swingL = armFwdL > 0 ? armFwdL*armA : armFwdL*armA*BACK;
+      const swingR = armFwdR > 0 ? armFwdR*armA : armFwdR*armA*BACK;
+      armFwd('L', swingL*gait);
+      armFwd('R', swingR*gait);
+      // le coude se ferme (main vers l'avant) quand le bras avance
+      const elbow = 0.18 + 0.22*sp;
+      elbowFwd('L', (Math.max(0, armFwdL)*elbow + 0.10 + 0.15*sp)*gait);
+      elbowFwd('R', (Math.max(0, armFwdR)*elbow + 0.10 + 0.15*sp)*gait);
       add('LeftShoulder','z', sw*0.020*gait);
       add('RightShoulder','z', sw*0.018*gait);
     }
@@ -2652,10 +2676,10 @@ function buildBodyLayer(bones, blink, model){
       add('Spine','x', comp*0.13 - tuck*0.05);
       add('Chest','x', comp*0.08 - tuck*0.03);
       // bras : en arrière à l'appel, portés en avant en l'air
-      add('LeftArm','x',  comp*0.34 - tuck*0.44);
-      add('RightArm','x', comp*0.30 - tuck*0.40);
-      add('LeftForeArm','x',  -tuck*0.30 - comp*0.12);
-      add('RightForeArm','x', -tuck*0.26 - comp*0.10);
+      armFwd('L', -comp*0.34 + tuck*0.44);
+      armFwd('R', -comp*0.30 + tuck*0.40);
+      elbowFwd('L', tuck*0.30 + comp*0.12);
+      elbowFwd('R', tuck*0.26 + comp*0.10);
       // la tête encaisse la réception avec un temps de retard
       add('Neck','x', land*hop*0.10);
       add('Head','x', land*hop*0.08);
@@ -2664,12 +2688,12 @@ function buildBodyLayer(bones, blink, model){
     /* ---- 6. Réaction ---- */
     if(reactArm > 0.0005 || reactNod > 0.0005){
       const a = reactArm, wv = reactWave;
-      add('RightArm','x', -a*(1 + wv));
-      add('LeftArm','x',  -a*(1 - wv));
-      add('RightArm','z', -a*0.30);
-      add('LeftArm','z',   a*0.34);
-      add('RightForeArm','x', -a*0.55);
-      add('LeftForeArm','x',  -a*0.50);
+      armFwd('R', a*(1 + wv));
+      armFwd('L', a*(1 - wv));
+      add('RightArm','z', a*0.30);   // z positif = bras qui s'écarte, des deux côtés
+      add('LeftArm','z',  a*0.34);
+      elbowFwd('R', a*0.55);
+      elbowFwd('L', a*0.50);
       add('Head','x', -reactNod*1.5);
       add('Neck','x', -reactNod*0.8);
       add('Chest','x', -reactNod*0.9);
@@ -2858,8 +2882,13 @@ function tileAt(idx){ return idx===-1 ? START_NODE : tiles[idx]; }
    carte montait sous ses pieds, il se retrouvait dedans — c'est très
    exactement « les pieds se noient dans le plateau ». Il doit se tenir
    sur la surface telle qu'elle est À CET INSTANT. */
+/* L'image de la carte (face) est posée à tileTopY+0,02 dans le topGroup ;
+   le pion était calé sur tileTopY, donc 2 cm DANS l'image, et le liseré
+   passait par la cheville. Il doit se tenir sur la face visible.
+   +0,008 : enfoncement résiduel de la semelle mesuré au repos. */
+const CARD_FACE_LIFT = 0.02 + 0.008;
 function tileSurfOffset(tile){
-  return (tile && tile.topGroup) ? tile.topGroup.position.y : 0;
+  return CARD_FACE_LIFT + ((tile && tile.topGroup) ? tile.topGroup.position.y : 0);
 }
 
 function setActive(index){
