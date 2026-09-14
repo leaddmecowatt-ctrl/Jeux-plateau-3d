@@ -2164,12 +2164,15 @@ const GAIT = {
      marche) : c'est le pendule inversé de la marche, jambe d'appui
      presque tendue au passage à la verticale. Mesuré avant : genou
      entre 71° et 132° tout le cycle, jamais tendu. */
-  crouch: sp => (0.028 + 0.004*sp) ,
+  crouch: sp => (0.033 + 0.003*sp) ,
   rise: 0.026,
   // pied : longueur cheville→orteils et angle sous l'horizontale, relevés
   footL: 0.085, footA: 0.663,
   // part du cycle passée au sol : >0,5 on marche, <0,5 on court
-  duty:   sp => 0.46 - 0.08*sp,
+  /* Part du cycle passée au sol : constante, pour que la foulée reste
+     EXACTEMENT 2/3 de case (3 pas par case) quelle que soit l'allure —
+     chaque centre de case tombe sur une pose de pied. */
+  duty:   sp => 0.42,
   lift:   sp => 0.035 + 0.025*sp,
   // inclinaison du plan de jambe, relevée sur le modèle (voir plus bas)
   tilt: 0.25,
@@ -2198,7 +2201,11 @@ const GAIT = {
        ouvre les pieds d'environ 85 % de la longueur de jambe : on
        plafonne la demi-foulée, la jambe garde une vraie réserve de
        flexion et le genou ne claque plus en butée. */
-    return Math.min(geo, 0.135 + 0.010*sp);
+    /* Foulée verrouillée : 3 pas par case, soit un cycle = 2/3 case,
+       donc demi-foulée = duty/3. Avant, la foulée dépendait de l'allure
+       (0,60 à 0,64 case par cycle) : le nombre de pas par case n'était
+       pas entier, il finissait en plein pas, à cheval sur deux cases. */
+    return Math.min(geo, this.duty(sp)/3);
   },
   /* Distance parcourue par UN cycle (deux pas), en cases.
      Pendant l'appui le pied recule de 2·ext par rapport à la hanche, et
@@ -2272,7 +2279,16 @@ function buildBodyLayer(bones, blink, model){
   };
   const elbowFwd = (side, b)=>{
     if(side==='L'){ add('LeftForeArm','x', b); }
-    else { add('RightForeArm','x', -0.80*b); add('RightForeArm','z', 0.63*b); }
+    else {
+      add('RightForeArm','x', -0.80*b); add('RightForeArm','z', 0.63*b);
+      /* La flexion du coude droit vrille l'avant-bras : mesuré, la
+         normale de la main droite pointait à 79 % vers le ciel en marche
+         (paume vers le haut), contre 0 % à gauche. Une rotation de −1,0
+         sur l'axe long de l'avant-bras pour une flexion de 1,2 la remet
+         horizontale, vers le corps, pouce en haut (vérifié sur l'os du
+         pouce). Proportionnelle à la flexion : rien au repos. */
+      add('RightForeArm','y', -0.85*b);
+    }
   };
 
   /* Poids du clip par os.
@@ -3001,7 +3017,7 @@ const strideForSpeed = sp => GAIT.stride(sp);
    écart), 1,24–2,35 cases/s imposait 3 à 5 pas par seconde : des jambes
    qui s'agitent, pas un homme qui marche. 0,95–1,45 garde un déplacement
    vif (12 cases en ~9 s) avec une cadence de marche rapide. */
-const WALK_V_MIN = 1.00, WALK_V_MAX = 1.35;
+const WALK_V_MIN = 0.90, WALK_V_MAX = 1.25;
 let walkBank = 0, walkGait = 0, walkStepPhase = 0, hopGait = 0, hopPhase = 0;
 let walkSpeedK = 0, walkCrouch = 0;
 
@@ -3054,7 +3070,9 @@ function startWalk(fromIdx, count, stepDuration){
     stepDuration = 1/v;
   }
   const vCruise = steps>0 ? 1/stepDuration : 0;
-  const rampUnits = Math.min(0.5, steps/2);
+  // rampes courtes : 0,3 case au départ et à l'arrivée, sinon les premiers
+  // et derniers pas s'étirent et la cadence paraît irrégulière
+  const rampUnits = Math.min(0.3, steps/2);
   const accelTime = rampUnits>0 ? (2*rampUnits)/vCruise : 0;
   const cruiseUnits = steps - 2*rampUnits;
   const cruiseTime = vCruise>0 ? cruiseUnits/vCruise : 0;
@@ -3066,7 +3084,11 @@ function startWalk(fromIdx, count, stepDuration){
     prepTime, settleTime, moveTime, gaitMode,
     totalTime: prepTime + moveTime + settleTime,
     t0: clock.getElapsedTime(), lastSeg:-1,
-    phase: 0, prevDist: 0, announced: false,
+    /* Départ à mi-appui (phase 0,25) : les deux pieds sont sous le
+       bassin, l'un au sol, l'autre qui passe. Avec 3 pas par case, la
+       phase d'arrivée vaut 0,25 + 1,5·N = 0,25 mod 0,5 pour tout N :
+       il s'arrête aussi pieds joints, net, sans glisser. */
+    phase: 0.25, prevDist: 0, announced: false,
   };
   // le regard part en avant AVANT le corps
   if(steps>0) lookAtTile(path[path.length-1], prepTime + moveTime*0.5);
