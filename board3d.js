@@ -4164,49 +4164,38 @@ function shuffledSlots(){
   return a;
 }
 /* ---------- Tirage imposé au clavier ----------
-   L'hôte tape un total de 2 à 12 AVANT de tirer : les deux cartes se
-   retournent sur une paire qui fait ce total (choisie au hasard parmi
-   les paires possibles, pour que la même valeur ne montre pas toujours
-   les mêmes cartes), et le pion avance d'autant. Le lot est alors celui
-   de la case atteinte, point : la file de résultats pré-calculée et le
-   plafond de reversement ne s'appliquent plus à cette mise — la
-   rentabilité est tenue par l'hôte, pas par le code. Rien n'apparaît
-   sur l'écran public ; l'hôte voit juste « Prochain tirage : N » sur
-   son propre écran, et Échap l'annule.
-     2 à 9  → immédiat.   1 puis 0/1/2 → 10, 11, 12.
-   Les doubles donnent un lancer supplémentaire : un total imposé n'en
-   produit jamais, sauf 2 et 12 qui ne peuvent être que des doubles. */
-let forcedTotal = null, digitBuf = '', digitTimer = null, manualGame = false;
-function showForced(){
-  if(isDisplay || !statusEl) return;
-  if(forcedTotal!=null) statusEl.textContent = 'Prochain tirage : '+forcedTotal+'  (B pour tirer, Échap pour annuler)';
-}
-function armForcedTotal(n){
-  forcedTotal = n; digitBuf = '';
-  if(digitTimer){ clearTimeout(digitTimer); digitTimer = null; }
-  showForced();
-}
-function handleDigitKey(d){
-  if(digitTimer){ clearTimeout(digitTimer); digitTimer = null; }
-  if(digitBuf==='1'){
-    if(d==='0'||d==='1'||d==='2'){ armForcedTotal(10+parseInt(d,10)); return; }
-    digitBuf = '';
-  }
-  if(d==='1'){
-    digitBuf = '1';
-    // 1 seul n'est pas un total : on attend 0/1/2 pendant une seconde
-    digitTimer = setTimeout(()=>{ digitBuf=''; digitTimer=null; }, 1000);
-    return;
-  }
-  const n = parseInt(d,10);
-  if(n>=2 && n<=9) armForcedTotal(n);
-}
+   L'hôte appuie sur une touche et le tirage part TOUT DE SUITE, avec
+   exactement le même déroulé qu'un tirage normal (roulement de tambour,
+   deux cartes qui se retournent, le pion qui avance) — sauf que les deux
+   cartes font le total demandé.
+     touches 2 à 9  → total 2 à 9 (touche physique : avec ou sans Maj
+                       sur clavier français, pavé numérique compris)
+     F, G, H        → 10, 11, 12 (lettres libres, à côté de D)
+   La paire est tirée au hasard parmi celles qui font le total, pour que
+   la même valeur ne montre pas toujours les mêmes cartes. Un total PAIR
+   sort en double une fois sur six (5+5 pour 10 → lancer bonus, comme la
+   règle le prévoit) ; 2 et 12 ne peuvent être que des doubles.
+   Le lot est alors celui de la case atteinte : la mise sort de la file
+   de résultats pré-calculée et du plafond de reversement — la
+   rentabilité est tenue par l'hôte. Rien n'apparaît côté public. */
+let forcedTotal = null, manualGame = false;
+const LETTER_TOTALS = { f:10, g:11, h:12 };
+const DOUBLE_ODDS = 1/6;
 function forcedPair(total){
   const pairs = [];
   for(let a=1;a<=6;a++){ const b=total-a; if(b>=1&&b<=6) pairs.push({a,b}); }
-  const nonDouble = pairs.filter(p=>p.a!==p.b);
-  const pool = nonDouble.length ? nonDouble : pairs;
-  return pool[Math.floor(Math.random()*pool.length)];
+  const doubles = pairs.filter(p=>p.a===p.b);
+  const singles = pairs.filter(p=>p.a!==p.b);
+  if(!singles.length) return doubles[0];                       // 2 et 12
+  if(doubles.length && Math.random() < DOUBLE_ODDS) return doubles[0];
+  return singles[Math.floor(Math.random()*singles.length)];
+}
+function forcedDraw(total){
+  if(isDisplay) return;
+  if(startBtn && !startBtn.hidden) return;          // partie pas démarrée
+  if(moving || finished || rollsUsed>=rollsAllowed) return;
+  forcedTotal = total;
+  drawAndMove();
 }
 function computeCardDraw(){
   // Un seul tirage de 2 cartes par clic. Sur un double, l'hôte
@@ -4438,7 +4427,7 @@ function restart(){
   rollsUsed = 0;
   rollsAllowed = 3;
   pendingOutcome = null;
-  manualGame = false; forcedTotal = null; digitBuf = '';
+  manualGame = false; forcedTotal = null;
   walk = null;
   currentIndex = -1;
   player.root.scale.set(1,1,1);
@@ -4662,14 +4651,15 @@ window.addEventListener('keydown', (e)=>{
   const tag = (document.activeElement && document.activeElement.tagName) || '';
   if(tag==='INPUT' || tag==='TEXTAREA') return;
   const k = e.key.toLowerCase();
-  if(!isDisplay && /^[0-9]$/.test(k)){ handleDigitKey(k); return; }
-  if(!isDisplay && k==='escape'){ forcedTotal = null; digitBuf = '';
-    if(statusEl) statusEl.textContent = 'Tirage imposé annulé.'; return; }
+  // chiffres : touche PHYSIQUE (e.code), donc « é » = 2 sur clavier
+  // français sans avoir à faire Maj, et le pavé numérique marche aussi
+  const dm = /^(?:Digit|Numpad)([2-9])$/.exec(e.code || '');
+  if(dm){ forcedDraw(parseInt(dm[1],10)); return; }
+  if(LETTER_TOTALS[k]){ forcedDraw(LETTER_TOTALS[k]); return; }
   if(k==='a'){ if(startBtn && !startBtn.hidden) startBtn.click(); }
   else if(k==='b'){ if(!validate.disabled) validate.click(); }
   else if(k==='c'){ resetBtn.click(); }
   else if(k==='d'){ if(winBtn && !winBtn.hidden) winBtn.click(); }
-  else if(k==='e'){ if(resetBankBtn && !resetBankBtn.hidden) resetBankBtn.click(); }
   else if(k==='z'){ if(undoBtn && !undoBtn.hidden) undoBtn.click(); }
 });
 
