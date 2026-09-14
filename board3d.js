@@ -2832,6 +2832,16 @@ let rollsAllowed = 3;
 let pendingOutcome = null;
 
 function tileAt(idx){ return idx===-1 ? START_NODE : tiles[idx]; }
+/* Décalage vertical courant de la carte d'une case. Les cartes ne sont
+   pas immobiles : une vague de ±5 cm parcourt les 40 cases en continu,
+   et la case sur laquelle le pion arrive rebondit de 16 cm. Le pion
+   était posé sur la hauteur FIXE de la case (tileTopY) : dès que la
+   carte montait sous ses pieds, il se retrouvait dedans — c'est très
+   exactement « les pieds se noient dans le plateau ». Il doit se tenir
+   sur la surface telle qu'elle est À CET INSTANT. */
+function tileSurfOffset(tile){
+  return (tile && tile.topGroup) ? tile.topGroup.position.y : 0;
+}
 
 function setActive(index){
   tiles.forEach((t,i)=>{
@@ -3352,7 +3362,10 @@ function frameStep(dt, t){
       const u = Math.min(1, (tm - walk.moveTime)/walk.settleTime);
       settleDip = -Math.sin(u*Math.PI) * 0.020 * (1-u*0.3);
     }
-    player.root.position.set(x, aTile.tileTopY + bob + settleDip, z);
+    // il marche sur la carte telle qu'elle est maintenant, pas sur sa
+    // hauteur nominale : entre deux cases on interpole les deux surfaces
+    const surf = tileSurfOffset(aTile) + (tileSurfOffset(bTile) - tileSurfOffset(aTile))*localP;
+    player.root.position.set(x, aTile.tileTopY + surf + bob + settleDip, z);
 
     /* ---- virage étagé ----
        Le corps ne pivote pas d'un bloc : la tête a déjà tourné (système de
@@ -3499,9 +3512,13 @@ function frameStep(dt, t){
       hopPhase: hopPhase,
       bodyYaw: player.root.rotation.y,
     });
-    if(reactSettle && !walk){
-      player.root.position.y = playerBaseY + reactHopY;
-      if(reactT0 < 0) reactSettle = false;
+    if(!walk){
+      // à l'arrêt il RESTE posé sur la carte, qui continue d'onduler et
+      // rebondit sous lui à l'arrivée : sa hauteur suit la surface réelle
+      player.root.position.y = playerBaseY
+        + tileSurfOffset(tileAt(currentIndex))
+        + reactHopY;
+      if(reactSettle && reactT0 < 0) reactSettle = false;
     }
   }
 
