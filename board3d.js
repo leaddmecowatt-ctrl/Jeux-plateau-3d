@@ -2159,10 +2159,10 @@ const GAIT = {
   thigh: 0.1509, shin: 0.1746, hipY: 0.3668, footY: 0.0492,
   reach: (0.1509 + 0.1746) * 0.995,
   // descente du bassin : sans elle, jambe tendue, aucun pas n'est possible
-  crouch: sp => (0.055 + 0.055*sp) ,
+  crouch: sp => (0.040 + 0.015*sp) ,
   // part du cycle passée au sol : >0,5 on marche, <0,5 on court
   duty:   sp => 0.46 - 0.08*sp,
-  lift:   sp => 0.068 + 0.085*sp,
+  lift:   sp => 0.035 + 0.025*sp,
   // inclinaison du plan de jambe, relevée sur le modèle (voir plus bas)
   tilt: 0.163,
   /* Marge de sol. Relevé image par image pendant un appui : le pied
@@ -2179,7 +2179,14 @@ const GAIT = {
   ext(sp){
     const gh = this.hipY - this.footY - this.crouch(sp);
     const r = this.reach * 0.965;
-    return Math.sqrt(Math.max(1e-4, r*r - gh*gh));
+    const geo = Math.sqrt(Math.max(1e-4, r*r - gh*gh));
+    /* Mesuré : à l'ouverture géométrique maximale, l'écart entre les
+       deux pieds atteignait 0,49 pour une jambe de 0,33 — un grand
+       écart, jambe tendue à chaque extrémité. Une marche rapide humaine
+       ouvre les pieds d'environ 85 % de la longueur de jambe : on
+       plafonne la demi-foulée, la jambe garde une vraie réserve de
+       flexion et le genou ne claque plus en butée. */
+    return Math.min(geo, 0.135 + 0.010*sp);
   },
   /* Distance parcourue par UN cycle (deux pas), en cases.
      Pendant l'appui le pied recule de 2·ext par rapport à la hanche, et
@@ -2635,16 +2642,19 @@ function buildBodyLayer(bones, blink, model){
          plus haut devant (jusqu'à ~30°) qu'il ne recule derrière (~18°),
          un bras qui part loin en arrière donne l'impression d'être
          déboîté. */
-      const armA = 0.21 + 0.19*sp;
-      const BACK = 0.60;
+      /* Marche rapide : coudes pliés en permanence (~65°), les bras
+         pompent d'avant en arrière près du corps, un peu plus loin
+         devant que derrière. */
+      const armA = 0.34 + 0.12*sp;
+      const BACK = 0.75;
       const swingL = armFwdL > 0 ? armFwdL*armA : armFwdL*armA*BACK;
       const swingR = armFwdR > 0 ? armFwdR*armA : armFwdR*armA*BACK;
       armFwd('L', swingL*gait);
       armFwd('R', swingR*gait);
       // le coude se ferme (main vers l'avant) quand le bras avance
-      const elbow = 0.18 + 0.22*sp;
-      elbowFwd('L', (Math.max(0, armFwdL)*elbow + 0.10 + 0.15*sp)*gait);
-      elbowFwd('R', (Math.max(0, armFwdR)*elbow + 0.10 + 0.15*sp)*gait);
+      const elbow = 0.20 + 0.15*sp;
+      elbowFwd('L', (Math.max(0, armFwdL)*elbow + 1.05 + 0.15*sp)*gait);
+      elbowFwd('R', (Math.max(0, armFwdR)*elbow + 1.05 + 0.15*sp)*gait);
       add('LeftShoulder','z', sw*0.020*gait);
       add('RightShoulder','z', sw*0.018*gait);
     }
@@ -2942,7 +2952,11 @@ const strideForSpeed = sp => GAIT.stride(sp);
    dépasse celle d'un sprinteur et le pied se remet à patiner. On prend
    toute la plage : trajet court = petite foulée tranquille, trajet long =
    foulée de course, sans jamais franchir cette limite. */
-const WALK_V_MIN = 1.24, WALK_V_MAX = 2.35;
+/* Vitesse en cases/s. Avec une foulée de marche (et non de grand
+   écart), 1,24–2,35 cases/s imposait 3 à 5 pas par seconde : des jambes
+   qui s'agitent, pas un homme qui marche. 0,95–1,45 garde un déplacement
+   vif (12 cases en ~9 s) avec une cadence de marche rapide. */
+const WALK_V_MIN = 1.00, WALK_V_MAX = 1.35;
 let walkBank = 0, walkGait = 0, walkStepPhase = 0, hopGait = 0, hopPhase = 0;
 let walkSpeedK = 0, walkCrouch = 0;
 
@@ -4343,7 +4357,11 @@ function updateWinButton(){
 }
 
 const wait = ms => new Promise(r=>setTimeout(r,ms));
-const HOP_DURATION = 0.36;
+/* 0,36 passait SOUS le seuil forcedFast (0,42) de startWalk : chaque
+   trajet normal était donc traité comme une correction de fin de partie
+   et courait à 2,8 cases/s, sans jamais passer par l'allure de marche
+   WALK_V_MIN..MAX. À 0,50, seuls les vrais rattrapages restent forcés. */
+const HOP_DURATION = 0.50;
 
 async function move(forcedCount, forcedCard){
   if(moving || finished) return;
