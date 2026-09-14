@@ -3647,7 +3647,7 @@ function triggerLightning(){
 const TOTAL_MISE_KEY = 'pika_total_mise';
 const TOTAL_PAID_KEY = 'pika_total_paid';
 const AVG_MISE = 9;
-const CEILING_RATIO = 0.50;  // plafond de reversement cible (~50%, vérifié par simulation)
+const CEILING_RATIO = 0.60;  // plafond de reversement cible : 60 % reversés = 40 % de marge (vérifié par simulation)
 let totalMise = parseFloat(safeGetItem(TOTAL_MISE_KEY)) || 0;
 let totalPaid = parseFloat(safeGetItem(TOTAL_PAID_KEY)) || 0;
 function saveTotals(){
@@ -3731,15 +3731,27 @@ const OUTCOME_BATCH_SIZE = 1000;
 // du lot sur l'ensemble du batch tombe autour de CEILING_RATIO (50%) de
 // la mise moyenne (9€) : gros lots très rares, lots moyens raisonnables,
 // une case "prison" (aucun lot) et le reste en commune.
+/* Recette pour un plafond de 60 % (marge 40 %), mise moyenne 9 € :
+     jackpot 1/1000 · ETB 1/500 · tripack 1/83 · gradée 1/30 ·
+     booster 8 € 1/12 · alternative 1/3,2 · JAMAIS de partie à 0 €.
+   Espérance : 5,35 € par partie = 59,4 %, volontairement 0,6 point SOUS
+   le plafond — comme l'ancienne recette (49,7 pour 50). Sans cette
+   marge de manœuvre, le séquencement sous contrainte de couverture n'a
+   plus de jeu : le jackpot ne tient jamais sous le plafond et finit
+   forcé en dernière position (prévisible, et au-dessus du plafond).
+   Toutes les proportions donnent un compte ENTIER sur 1 000 : un
+   arrondi de 2,5 ETB → 3 suffisait à faire déborder le plafond.
+   La « prison » (0 €) reste une case du plateau mais ne fait plus
+   partie des résultats : un joueur repart toujours avec une carte. */
 const OUTCOME_RECIPE = [
   { cat:'jackpot300',  p:0.001 },
-  { cat:'etb',         p:0.004 },
-  { cat:'booster50',   p:0.01  },
-  { cat:'gradee',      p:0.038 },
-  { cat:'booster8',    p:0.095 },
-  { cat:'alternative', p:0.13  },
-  { cat:'prison',      p:0.15  },
-  // le reste (~57%) part en commune, calculé plus bas
+  { cat:'etb',         p:0.002 },
+  { cat:'booster50',   p:0.012 },
+  { cat:'gradee',      p:0.033 },
+  { cat:'booster8',    p:0.083 },
+  { cat:'alternative', p:0.312 },
+  { cat:'prison',      p:0     },
+  // le reste (55,7 %) part en commune, calculé plus bas
 ];
 
 // Coût réel de chaque catégorie (PAYOUT_LADDER + prison, qui n'y
@@ -3756,36 +3768,64 @@ function buildOutcomeBatch(size){
     assigned += n;
   });
   counts.commune = Math.max(0, size-assigned);
-  const remaining = [];
-  Object.keys(counts).forEach(cat=>{
-    for(let i=0;i<counts[cat];i++) remaining.push(cat);
-  });
 
-  // Séquencement sous contrainte de solvabilité : un mélange au hasard
-  // pur ne garantit le taux de reversement que sur l'ENSEMBLE du lot —
-  // rien n'empêcherait alors un gros lot (ETB, jackpot final) de
-  // tomber dès la 10e partie, quand seulement ~90€ de mises sont
-  // encaissées. Ici, à chaque position du lot, on ne tire au hasard
-  // que parmi les résultats restants qui tiennent ENCORE sous le
-  // plafond de reversement calculé sur les mises déjà "encaissées"
-  // jusqu'à cette position précise : impossible qu'un gros lot sorte
-  // avant d'avoir été effectivement couvert par assez de mises.
-  const arr = [];
-  let cumMise = 0, cumPaid = 0;
-  for(let pos=0; pos<size; pos++){
+  /* Deux familles :
+       - les GROS lots (≥ 100 €) : placés à part, à une position tirée au
+         sort parmi toutes celles où les mises déjà encaissées les
+         couvrent — sinon le tirage au hasard les enterre parmi des
+         centaines d'autres cartes et ils finissent systématiquement en
+         toute fin de file (mesuré : jackpot à la partie n° 989 dans 10
+         files sur 10, prévisible) ;
+       - le reste : séquencé avec la règle de rythme ci-dessous. */
+  const BIG = 100;
+  const bigs = [], remaining = [];
+  Object.keys(counts).forEach(cat=>{
+    for(let i=0;i<counts[cat];i++) (OUTCOME_COST[cat] >= BIG ? bigs : remaining).push(cat);
+  });
+  bigs.sort((a,b)=>OUTCOME_COST[b]-OUTCOME_COST[a]);   // le plus cher d'abord
+
+  /* ---- 1. séquence des lots courants, sous contrainte de couverture
+          et de rythme ----
+     Rythme : jamais plus de MAX_SMALL_RUN petits lots (commune) d'affilée,
+     et ce jusqu'à la DERNIÈRE partie de la file. Un simple tirage
+     proportionnel ne suffit pas : le hasard finit par épuiser les vraies
+     cartes quelques dizaines de parties avant la fin (mesuré : série
+     finale de 62 communes). On vérifie donc à chaque position que ce
+     qu'il reste peut ENCORE être disposé sans dépasser la règle :
+       petits restants ≤ (MAX − série en cours) + MAX × vraies cartes restantes
+     et on ne tire au sort qu'entre les choix qui préservent cette
+     garantie. Couverture : un lot n'est éligible que si les mises
+     encaissées jusqu'ici le paient sous le plafond. */
+  const MAX_SMALL_RUN = 2;
+  const isSmall = cat => cat==='commune' || cat==='prison';
+  let goodsLeft = remaining.filter(c=>!isSmall(c)).length;
+  let smallsLeft = remaining.length - goodsLeft;
+  const seq = [];
+  let cumMise = 0, cumPaid = 0, smallRun = 0;
+  const nSeq = remaining.length;
+  for(let pos=0; pos<nSeq; pos++){
     cumMise += AVG_MISE;
     const headroom = cumMise*CEILING_RATIO - cumPaid;
-    const eligible = [];
+    const affGood = [], affSmall = [];
     for(let i=0;i<remaining.length;i++){
-      if(OUTCOME_COST[remaining[i]] <= headroom) eligible.push(i);
+      if(OUTCOME_COST[remaining[i]] > headroom) continue;
+      (isSmall(remaining[i]) ? affSmall : affGood).push(i);
     }
+    // ce qui reste possible SANS casser la règle de rythme jusqu'au bout
+    const okSmall = affSmall.length && smallRun < MAX_SMALL_RUN
+                 && (smallsLeft-1) <= (MAX_SMALL_RUN-smallRun-1) + MAX_SMALL_RUN*goodsLeft;
+    const okGood  = affGood.length
+                 && smallsLeft <= MAX_SMALL_RUN*goodsLeft;   // après ce lot, série remise à 0
+    let pool;
+    if(okSmall && okGood) pool = Math.random() < goodsLeft/remaining.length ? affGood : affSmall;
+    else if(okGood)  pool = affGood;
+    else if(okSmall) pool = affSmall;
+    else pool = affGood.length ? affGood : affSmall;   // filet : on préserve au moins la couverture
     let pickAt;
-    if(eligible.length){
-      pickAt = eligible[Math.floor(Math.random()*eligible.length)];
+    if(pool.length){
+      pickAt = pool[Math.floor(Math.random()*pool.length)];
     } else {
-      // Filet de sécurité (ne devrait jamais arriver avec la recette
-      // calibrée) : on place le moins cher restant plutôt que de
-      // risquer de dépasser le plafond.
+      // rien de couvert (ne devrait pas arriver) : le moins cher restant
       pickAt = 0;
       for(let i=1;i<remaining.length;i++){
         if(OUTCOME_COST[remaining[i]] < OUTCOME_COST[remaining[pickAt]]) pickAt = i;
@@ -3793,8 +3833,45 @@ function buildOutcomeBatch(size){
     }
     const cat = remaining.splice(pickAt,1)[0];
     cumPaid += OUTCOME_COST[cat];
-    arr.push(cat);
+    if(isSmall(cat)){ smallRun++; smallsLeft--; } else { smallRun = 0; goodsLeft--; }
+    seq.push(cat);
   }
+
+  /* ---- 2. insertion des gros lots ----
+     Pour chaque gros lot, on liste TOUTES les positions où, une fois
+     inséré, chaque préfixe de la file reste sous le plafond (le lot est
+     donc payé par des mises déjà encaissées, jamais avancé), et on en
+     tire une au sort. Le jackpot peut ainsi tomber n'importe quand
+     entre le moment où il est couvert et la fin — plus jamais toujours
+     au même endroit. */
+  const prefixOK = (arr)=>{
+    let mise=0, paid=0;
+    for(let k=0;k<arr.length;k++){
+      mise += AVG_MISE; paid += OUTCOME_COST[arr[k]];
+      if(paid > mise*CEILING_RATIO + 1e-9) return false;
+    }
+    return true;
+  };
+  const arr = seq;
+  bigs.forEach(cat=>{
+    const cost = OUTCOME_COST[cat];
+    // position minimale : premier préfixe dont la réserve couvre le lot
+    const candidates = [];
+    let mise=0, paid=0;
+    for(let p=0; p<=arr.length; p++){
+      // insérer à p = payer `cost` à la partie p+1, avant les suivantes
+      if((mise+AVG_MISE)*CEILING_RATIO - paid >= cost) candidates.push(p);
+      if(p<arr.length){ mise += AVG_MISE; paid += OUTCOME_COST[arr[p]]; }
+    }
+    // on garde celles qui laissent TOUS les préfixes suivants sous le plafond
+    const ok = [];
+    for(const p of candidates){
+      const trial = arr.slice(0,p).concat([cat], arr.slice(p));
+      if(prefixOK(trial)) ok.push(p);
+    }
+    const p = ok.length ? ok[Math.floor(Math.random()*ok.length)] : arr.length;
+    arr.splice(p, 0, cat);
+  });
   return arr;
 }
 
