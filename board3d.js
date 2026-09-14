@@ -4180,7 +4180,7 @@ function shuffledSlots(){
    rentabilité est tenue par l'hôte. Rien n'apparaît côté public. */
 let forcedTotal = null, manualGame = false;
 const LETTER_TOTALS = { f:10, g:11, h:12 };
-const DOUBLE_ODDS = 1/6;
+const DOUBLE_ODDS = 1/3;
 function forcedPair(total){
   const pairs = [];
   for(let a=1;a<=6;a++){ const b=total-a; if(b>=1&&b<=6) pairs.push({a,b}); }
