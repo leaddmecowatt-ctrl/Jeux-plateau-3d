@@ -1740,7 +1740,108 @@ const PLAYER_TARGET_HEIGHT = 0.82; // hauteur visée sur le plateau (mêmes prop
    prêt, sans jamais bloquer le reste du jeu si ce chargement échoue ou
    traîne (réseau lent, navigateur qui bute sur le GLB, etc.). */
 function createPlayer(){
-  return { root: new THREE.Group(), mixer: { update(){} }, setWalking(){}, updateIdleLife(){} };
+  return { root: new THREE.Group(), mixer: { update(){} }, setWalking(){}, updateBody(){} };
+}
+
+/* ============================================================================
+   COUCHE D'ANIMATION PROCÉDURALE DU PION
+   ----------------------------------------------------------------------------
+   Tout ce qui suit se superpose aux clips du modèle (idle / walk) au lieu de
+   les remplacer. Le principe tient en une ligne, appliquée à chaque os et à
+   chaque frame :
+
+       final = bind + (clip - bind) * poidsDuClip + repos + procédural
+
+   `bind` est la pose du squelette relevée une fois, avant toute lecture de
+   clip. Passer par elle règle deux défauts de la version précédente :
+
+   — La DÉRIVE. Les micro-mouvements étaient ajoutés avec `+=` à la valeur
+     courante de l'os. Sur les os que le clip ne pilote pas, rien ne remettait
+     la valeur à zéro : elle s'accumulait sans limite (le bassin atteignait
+     4 radians et le personnage finissait couché).
+   — L'ÉPOUVANTAIL. La pose de repos était une rotation fixe de ±78° cuite
+     dans les images-clés du SEUL clip idle, sur la seule épaule. Les coudes
+     n'étaient jamais fléchis et, à la marche, les bras reprenaient la pose
+     en T du rig. Ici le repos est une couche vivante, appliquée aux deux
+     clips, épaules ET coudes ET poignets, volontairement asymétrique.
+   ========================================================================== */
+
+const RIG_BONES = [
+  'Hips','Spine','Chest','UpperChest','Neck','Head',
+  'LeftShoulder','RightShoulder','LeftArm','RightArm',
+  'LeftForeArm','RightForeArm','LeftHand','RightHand',
+  'LeftUpLeg','RightUpLeg','LeftLeg','RightLeg','LeftFoot','RightFoot',
+];
+
+/* Pose de repos. Les bras descendent le long du corps (z ≈ ∓1.45 rad, là où
+   l'ancienne correction s'arrêtait à 1.36 sans fléchir les coudes), les
+   coudes sont fléchis, les poignets relâchés. Le côté gauche et le côté
+   droit ne sont JAMAIS identiques : une pose parfaitement symétrique est ce
+   qui fait lire un mannequin plutôt qu'un être vivant. */
+const REST_POSE = {
+  LeftShoulder:  { z:  0.06, x: -0.02 },
+  RightShoulder: { z: -0.05, x: -0.03 },
+  LeftArm:       { z: -1.46, x:  0.10, y:  0.05 },
+  RightArm:      { z:  1.41, x:  0.06, y: -0.04 },
+  LeftForeArm:   { x: -0.30, y:  0.12 },
+  RightForeArm:  { x: -0.24, y: -0.09 },
+  LeftHand:      { x: -0.12, z:  0.07 },
+  RightHand:     { x: -0.09, z: -0.05 },
+  Spine:         { x:  0.030 },
+  Chest:         { x: -0.018 },
+  UpperChest:    { x:  0.012 },
+  Neck:          { x:  0.022 },
+  Head:          { x:  0.014, y: -0.02 },
+  LeftUpLeg:     { x: -0.02 },
+  RightUpLeg:    { x:  0.01 },
+  LeftLeg:       { x:  0.05 },
+  RightLeg:      { x:  0.04 },
+};
+
+/* Bruit lisse apériodique : somme de sinus aux périodes volontairement non
+   harmoniques. Aucune de ces sommes ne se répète à une échelle que l'œil
+   puisse retenir — c'est ce qui remplace l'ancienne boucle de 6,4 s, dont
+   on voyait le début et la fin. */
+function smoothNoise(t, seed){
+  return (Math.sin(t*0.6180 + seed*1.7) * 0.55
+        + Math.sin(t*0.2411 + seed*4.1) * 0.30
+        + Math.sin(t*1.1279 + seed*2.3) * 0.15);
+}
+
+/* Rampe douce 0→1→0 sur [0,1], utilisée pour les gestes ponctuels. */
+function bell(u){
+  if(u <= 0 || u >= 1) return 0;
+  const s = Math.sin(u*Math.PI);
+  return s*s;
+}
+function smoothstep(a, b, v){
+  const k = Math.max(0, Math.min(1, (v-a)/(b-a)));
+  return k*k*(3-2*k);
+}
+
+/* ---------- Attention : ce que le personnage regarde ----------
+   Le regard est ce qui donne l'impression que le pion COMPREND ce qui se
+   passe. Une cible peut être posée par le jeu (la case visée, le lot qui
+   vient d'apparaître) ; en l'absence de cible, il regarde de lui-même
+   autour de lui, à intervalles irréguliers.
+   Le modèle n'a pas d'yeux mobiles — ce sont deux ellipses peintes dans la
+   texture, et les redessiner décalées reviendrait à retoucher un visage
+   que je dois laisser intact. Le regard passe donc par la tête et la nuque,
+   la tête menant toujours d'un cran sur le torse. */
+const _lookTarget = new THREE.Vector3();
+const _lookTmp = new THREE.Vector3();
+let lookActive = false, lookUntil = 0, lookWeight = 0;
+let glanceYaw = 0, glancePitch = 0, glanceNext = 3;
+let gazeYaw = 0, gazePitch = 0, gazeYawV = 0, gazePitchV = 0;
+
+function lookAtPoint(x, y, z, holdSec){
+  _lookTarget.set(x, y, z);
+  lookActive = true;
+  lookUntil = clock.getElapsedTime() + (holdSec || 1.6);
+}
+function lookAtTile(tile, holdSec){
+  if(!tile) return;
+  lookAtPoint(tile.world.x, tile.tileTopY + 0.55, tile.world.z, holdSec);
 }
 
 /* ---------- Petite "vie" du pion au repos (respiration, regard,
@@ -1822,10 +1923,29 @@ function setupBlink(material, srcTexture){
     }
     tex.needsUpdate = true;
   }
+  /* Clignement à intervalles IRRÉGULIERS. L'ancienne version clignait à
+     deux instants fixes de la boucle de 6,4 s : au bout de quelques
+     secondes l'œil anticipait le prochain. Ici l'attente suit une loi
+     exponentielle (comme un vrai clignement, imprévisible), avec parfois
+     un double clignement rapproché. */
+  let closeFor = 0, nextIn = 1.5 + Math.random()*3, burst = 0;
   return {
-    update(ph){
-      const blinking = pulse(ph, 0.16, 0.018) > 0.15 || pulse(ph, 0.63, 0.018) > 0.15;
-      setClosed(blinking);
+    update(dt){
+      if(closeFor > 0){
+        closeFor -= dt;
+        if(closeFor <= 0){
+          setClosed(false);
+          if(burst > 0){ burst--; nextIn = 0.10 + Math.random()*0.06; }
+          else nextIn = 1.1 - Math.log(Math.random() + 1e-6) * 2.6;
+        }
+        return;
+      }
+      nextIn -= dt;
+      if(nextIn <= 0){
+        setClosed(true);
+        closeFor = 0.075 + Math.random()*0.055;
+        if(burst === 0 && Math.random() < 0.18) burst = 1;
+      }
     },
   };
 }
@@ -1869,96 +1989,277 @@ function measurePlayerTop(){
   }
 }
 
-/* ---------- Réaction de joie du pion sur un gros lot ----------
-   Une couche ponctuelle par-dessus la "vie au repos" : bras levés,
-   tête relevée et deux petits sauts. Réservée aux gros lots (niveau
-   3 et plus) : si le pion sautait de joie pour une pioche commune,
-   le geste ne voudrait plus rien dire quand un vrai gros lot tombe.
-   Comme la vie au repos, tout est additif et recalculé à partir du
-   temps, donc sans dérive d'une frame à l'autre. Le saut, lui, ne
-   passe pas par les os mais par la hauteur de `root` : les os sont
-   remis à zéro par le mixer à chaque frame, la position du pion sur
-   le plateau non — d'où `playerBaseY`, la hauteur au sol de la case
-   où il vient d'arriver. */
-const CHEER_DUR = 1.3;
-let cheerT0 = -1, cheerStrength = 1, cheerAmt = 0, cheerHopY = 0, cheerWave = 0, playerBaseY = 0;
-/* Reste vrai une frame de plus que le saut lui-même : sans ça le pion
-   resterait figé en l'air à la hauteur du dernier saut calculé. */
-let cheerSettle = false;
-function triggerCheer(strength){
+/* ---------- Réactions, calibrées sur l'importance réelle de l'événement
+   ----------------------------------------------------------------------
+   L'ancienne version levait les bras de 1,15 rad multipliés par une force
+   allant jusqu'à 1,6, soit 105° par bras : un geste de théâtre pour une
+   case de plateau. Ici l'amplitude est plafonnée à ~0,55 rad (31°) même
+   pour le jackpot, et les petits événements ne produisent QUE du regard et
+   un changement de posture. Le geste doit rester rare pour vouloir dire
+   quelque chose. */
+const REACTIONS = {
+  // niveau : [durée, levée de bras, hochement, saut, nb de sauts]
+  1: { dur:1.10, arm:0.00, nod:0.055, hop:0.000, hops:0 },
+  2: { dur:1.25, arm:0.10, nod:0.075, hop:0.000, hops:0 },
+  3: { dur:1.45, arm:0.26, nod:0.090, hop:0.022, hops:1 },
+  4: { dur:1.70, arm:0.42, nod:0.105, hop:0.038, hops:2 },
+  5: { dur:1.95, arm:0.55, nod:0.120, hop:0.050, hops:2 },
+};
+let reactT0 = -1, reactSpec = null, reactSettle = false;
+let reactArm = 0, reactNod = 0, reactWave = 0, reactHopY = 0, playerBaseY = 0;
+
+function triggerReaction(level){
   if(reduceMotion) return;
-  cheerT0 = clock.getElapsedTime();
-  cheerSettle = true;
-  cheerStrength = Math.max(0.6, Math.min(1.6, strength || 1));
+  const spec = REACTIONS[Math.max(1, Math.min(5, Math.round(level)))] || REACTIONS[1];
+  reactSpec = spec;
+  reactT0 = clock.getElapsedTime();
+  reactSettle = true;
 }
-function updateCheer(t){
-  if(cheerT0 < 0) return;
-  const u = (t - cheerT0)/CHEER_DUR;
-  if(u >= 1){ cheerT0 = -1; cheerAmt = 0; cheerHopY = 0; cheerWave = 0; return; }
-  cheerAmt  = Math.min(1, u/0.15) * Math.min(1, (1-u)/0.28) * cheerStrength;
-  cheerHopY = Math.abs(Math.sin(u*Math.PI*2)) * 0.10 * cheerStrength * (1 - u*0.45);
-  // les deux bras s'agitent en opposition : deux bras figés à la même
-  // hauteur donnent une pose raide, pas un personnage qui exulte
-  cheerWave = Math.sin(u*Math.PI*6);
+/* Ancien nom conservé : le reste du jeu l'appelle encore. La force reçue
+   est retraduite en niveau d'événement. */
+function triggerCheer(strength){
+  triggerReaction(Math.round(2 + (strength || 1) * 1.9));
 }
 
-function buildIdleLife(bones, blink){
-  const twoPi = Math.PI*2;
-  return function updateIdleLife(t){
-    const ph = (t % IDLE_LIFE_PERIOD) / IDLE_LIFE_PERIOD;
+function updateReaction(t){
+  if(reactT0 < 0) return;
+  const s = reactSpec;
+  const u = (t - reactT0) / s.dur;
+  if(u >= 1){ reactT0 = -1; reactArm = 0; reactNod = 0; reactWave = 0; reactHopY = 0; return; }
 
-    // Respiration douce (2 cycles par boucle) : la cage thoracique se
-    // soulève/penche à peine, le buste haut compense un peu à
-    // l'inverse pour rester naturel.
-    const breathe = Math.sin(ph*twoPi*2);
-    if(bones.chest) bones.chest.rotation.x += breathe*0.026;
-    if(bones.upperChest) bones.upperChest.rotation.x -= breathe*0.013;
+  /* Anticipation : avant de lever quoi que ce soit, le corps se tasse very
+     légèrement — c'est ce contre-mouvement qui donne du poids au geste.
+     Sans lui, un bras qui monte part de nulle part. */
+  const antic = u < 0.13 ? -Math.sin(u/0.13 * Math.PI) * 0.30 : 0;
+  const rise  = smoothstep(0.08, 0.34, u) * (1 - smoothstep(0.62, 1.0, u));
 
-    // Tête curieuse qui regarde autour d'elle : un grand mouvement de
-    // balayage par boucle + un petit temps d'arrêt/reprise (2e
-    // harmonique) pour que ça ne ressemble pas à un métronome.
-    const yaw = Math.sin(ph*twoPi)*0.20 + Math.sin(ph*twoPi*2+1.1)*0.08;
-    const pitch = Math.sin(ph*twoPi + 0.6)*0.06 + pulse(ph,0.5,0.05)*0.05;
-    if(bones.neck){ bones.neck.rotation.y += yaw*0.35; bones.neck.rotation.x += pitch*0.35; }
-    if(bones.head){ bones.head.rotation.y += yaw*0.65; bones.head.rotation.x += pitch*0.65; }
+  reactArm = s.arm * (rise + antic*0.5);
+  reactNod = s.nod * (rise + antic);
+  // les deux bras ne montent pas exactement pareil ni en même temps
+  reactWave = Math.sin(u*Math.PI*3.7) * 0.16 + 0.09;
 
-    // Léger balancement du corps (transfert de poids d'un pied à
-    // l'autre, sans bouger les pieds eux-mêmes).
-    const sway = Math.sin(ph*twoPi + 0.3);
-    if(bones.hips){ bones.hips.rotation.z += sway*0.032; bones.hips.position.y += Math.abs(breathe)*0.003; }
-    if(bones.spine) bones.spine.rotation.z -= sway*0.016;
+  if(s.hops > 0){
+    const hopPhase = u * s.hops * 1.9;
+    const k = hopPhase < s.hops ? Math.abs(Math.sin(hopPhase*Math.PI)) : 0;
+    reactHopY = k * s.hop * (1 - u*0.35);
+  } else {
+    reactHopY = 0;
+  }
+}
 
-    // Petits mouvements de bras au repos, légèrement déphasés du
-    // corps pour un rendu organique plutôt que synchronisé.
-    const armL = Math.sin(ph*twoPi*1.5 + 2.1);
-    const armR = Math.sin(ph*twoPi*1.5 + 0.4);
-    if(bones.leftArm) bones.leftArm.rotation.z += armL*0.045;
-    if(bones.rightArm) bones.rightArm.rotation.z += armR*0.045;
-    if(bones.leftForeArm) bones.leftForeArm.rotation.x += armL*0.035;
-    if(bones.rightForeArm) bones.rightForeArm.rotation.x += armR*0.035;
+/* ---------- Le corps, frame par frame ----------
+   `buildBodyLayer` renvoie la fonction appelée après chaque mixer.update.
+   Elle compose, dans cet ordre : pose de repos → respiration et report du
+   poids → corrections posturales → regard → marche → réaction. */
+function buildBodyLayer(bones, blink, model){
+  // Pose de référence, relevée AVANT que le moindre clip ne soit lu.
+  const bind = {};
+  for(const n of RIG_BONES){
+    const b = bones[n];
+    if(b) bind[n] = { x:b.rotation.x, y:b.rotation.y, z:b.rotation.z, py:b.position.y };
+  }
 
-    // Un petit geste spontané par boucle : la main droite se lève un
-    // instant, comme une réaction curieuse et attendrissante, avant
-    // de retomber — un vrai début/milieu/fin, pas une oscillation
-    // continue.
-    const gesture = pulse(ph, 0.5, 0.14, 3);
-    if(bones.rightArm) bones.rightArm.rotation.x -= gesture*0.55;
-    if(bones.rightForeArm) bones.rightForeArm.rotation.x -= gesture*0.4;
-    if(bones.head) bones.head.rotation.x -= gesture*0.12;
+  // deltas de la frame courante
+  const d = {};
+  const resetDeltas = ()=>{
+    for(const n of RIG_BONES) d[n] = { x:0, y:0, z:0, py:0 };
+  };
+  const add = (n, ax, v)=>{ if(d[n]) d[n][ax] += v; };
 
-    // Joie ponctuelle (gros lot) : se superpose au reste plutôt que de
-    // le remplacer, la respiration et le balancement continuent.
-    if(cheerAmt > 0.001){
-      const c = cheerAmt, w = cheerWave*0.16;
-      if(bones.rightArm) bones.rightArm.rotation.x -= c*(1.15 + w);
-      if(bones.leftArm) bones.leftArm.rotation.x -= c*(1.15 - w);
-      if(bones.rightForeArm) bones.rightForeArm.rotation.x -= c*(0.55 + w);
-      if(bones.leftForeArm) bones.leftForeArm.rotation.x -= c*(0.55 - w);
-      if(bones.head) bones.head.rotation.x -= c*0.22;
-      if(bones.chest) bones.chest.rotation.x -= c*0.14;
+  // Poids du clip par os : à la marche on garde la jambe telle que
+  // l'animation la pose (c'est elle qui donne l'appui au sol) mais on
+  // atténue le balancement des bras, beaucoup trop ample sur ce rig.
+  const CLIP_WEIGHT_WALK = {
+    LeftArm:0.42, RightArm:0.42, LeftForeArm:0.5, RightForeArm:0.5,
+    LeftHand:0.5, RightHand:0.5, LeftShoulder:0.6, RightShoulder:0.6,
+    Spine:0.7, Chest:0.7, UpperChest:0.7, Neck:0.5, Head:0.4,
+  };
+
+  let breathPhase = Math.random()*10;
+  let weightSide = 0, weightTarget = 0, weightNext = 2 + Math.random()*3;
+  let postureT = 0;
+  let lastT = 0;
+
+  return function updateBody(t, ctx){
+    const dt = Math.max(0, Math.min(0.05, t - lastT));
+    lastT = t;
+    resetDeltas();
+
+    const walking = ctx && ctx.walking;
+    const gait    = ctx && ctx.gait || 0;     // 0..1, intensité de la marche
+    const stepPh  = ctx && ctx.stepPhase || 0; // 0..1 sur un cycle complet
+
+    /* ---- 1. Respiration ----
+       Deux fréquences légèrement décalées pour que l'inspiration et
+       l'expiration n'aient pas exactement la même durée, comme une vraie
+       respiration. Amplitude volontairement minuscule : on doit la
+       deviner, pas la voir. */
+    breathPhase += dt * (0.26 + gait*0.22);
+    const breath = Math.sin(breathPhase*Math.PI*2) * 0.55
+                 + Math.sin(breathPhase*Math.PI*2*2.03 + 1.1) * 0.18;
+    add('Chest','x', breath*0.019);
+    add('UpperChest','x', -breath*0.009);
+    add('Spine','x', breath*0.006);
+    add('LeftShoulder','z', breath*0.012);
+    add('RightShoulder','z', -breath*0.010);
+
+    /* ---- 2. Report du poids d'un pied sur l'autre ----
+       Au repos, personne ne tient son poids réparti également très
+       longtemps. Le report change de côté à intervalles IRRÉGULIERS, et le
+       genou du côté déchargé fléchit un peu : c'est ce détail qui fait
+       lire un corps qui tient debout plutôt qu'un objet posé. */
+    if(!walking){
+      weightNext -= dt;
+      if(weightNext <= 0){
+        weightTarget = (Math.random()<0.5 ? -1 : 1) * (0.35 + Math.random()*0.65);
+        weightNext = 2.6 + Math.random()*4.5;
+      }
+    } else {
+      weightTarget = 0;
+    }
+    weightSide += (weightTarget - weightSide) * Math.min(1, dt*1.1);
+    const w = weightSide * (1 - gait);
+    add('Hips','z', w*0.045);
+    add('Hips','y', w*0.02);
+    d.Hips.py += -Math.abs(w)*0.004 + Math.abs(breath)*0.002;
+    add('Spine','z', -w*0.022);
+    add('Chest','z', -w*0.012);
+    add('Neck','z', w*0.010);
+    // le genou du côté déchargé fléchit
+    add(w > 0 ? 'LeftLeg' : 'RightLeg', 'x', Math.abs(w)*0.10);
+    add(w > 0 ? 'LeftUpLeg' : 'RightUpLeg', 'x', -Math.abs(w)*0.03);
+    // les bras suivent le bassin avec un temps de retard (inertie)
+    add('LeftArm','z', -w*0.030);
+    add('RightArm','z', -w*0.028);
+
+    /* ---- 3. Corrections posturales ----
+       Bruit apériodique de très faible amplitude sur la colonne et la
+       nuque. C'est ce qui empêche la silhouette de se figer entre deux
+       gestes, sans jamais ressembler à un mouvement voulu. */
+    postureT += dt;
+    const pn = postureT * 0.55;
+    add('Spine','x', smoothNoise(pn, 1)*0.010);
+    add('Spine','y', smoothNoise(pn, 2)*0.014);
+    add('Chest','y', smoothNoise(pn, 3)*0.010);
+    add('Neck','x', smoothNoise(pn, 4)*0.012);
+    add('Neck','y', smoothNoise(pn, 5)*0.016);
+    add('LeftForeArm','x', smoothNoise(pn, 6)*0.020);
+    add('RightForeArm','x', smoothNoise(pn, 7)*0.018);
+    add('LeftHand','z', smoothNoise(pn, 8)*0.030);
+    add('RightHand','z', smoothNoise(pn, 9)*0.026);
+
+    /* ---- 4. Regard ----
+       Une cible posée par le jeu l'emporte ; sinon le pion jette des coups
+       d'œil autour de lui à intervalles irréguliers. La tête va plus loin
+       que la nuque, qui va plus loin que le torse : le mouvement se
+       propage au lieu de partir d'un bloc. */
+    let wantYaw = 0, wantPitch = 0;
+    const now = t;
+    if(lookActive && now < lookUntil && bones.Head){
+      bones.Head.updateWorldMatrix(true, false);
+      _lookTmp.setFromMatrixPosition(bones.Head.matrixWorld);
+      const dx = _lookTarget.x - _lookTmp.x;
+      const dy = _lookTarget.y - _lookTmp.y;
+      const dz = _lookTarget.z - _lookTmp.z;
+      const horiz = Math.max(0.001, Math.hypot(dx, dz));
+      const worldYaw = Math.atan2(dx, dz);
+      wantYaw = Math.atan2(Math.sin(worldYaw - ctx.bodyYaw), Math.cos(worldYaw - ctx.bodyYaw));
+      wantPitch = -Math.atan2(dy, horiz);
+      lookWeight += (1 - lookWeight) * Math.min(1, dt*4.5);
+    } else {
+      if(lookActive && now >= lookUntil) lookActive = false;
+      lookWeight += (0 - lookWeight) * Math.min(1, dt*2.2);
+      // coups d'œil spontanés, jamais à intervalle régulier
+      glanceNext -= dt;
+      if(glanceNext <= 0){
+        glanceYaw = (Math.random()*2-1) * 0.55;
+        glancePitch = (Math.random()*2-1) * 0.13;
+        // une fois sur cinq il ne fait que revenir au centre
+        if(Math.random() < 0.2){ glanceYaw *= 0.15; glancePitch *= 0.2; }
+        glanceNext = 1.8 + Math.random()*5.2;
+      }
+      wantYaw = glanceYaw; wantPitch = glancePitch;
+    }
+    if(walking){
+      // en marchant il regarde plutôt où il va
+      wantYaw *= 0.35; wantPitch = wantPitch*0.3 - 0.02;
+    }
+    // amortisseur à ressort : la tête ne se téléporte pas sur sa cible
+    const kSpring = 26, kDamp = 9.5;
+    gazeYawV   += ((wantYaw   - gazeYaw)   * kSpring - gazeYawV   * kDamp) * dt;
+    gazePitchV += ((wantPitch - gazePitch) * kSpring - gazePitchV * kDamp) * dt;
+    gazeYaw   += gazeYawV * dt;
+    gazePitch += gazePitchV * dt;
+    gazeYaw   = Math.max(-0.95, Math.min(0.95, gazeYaw));
+    gazePitch = Math.max(-0.35, Math.min(0.40, gazePitch));
+    add('Head','y', gazeYaw*0.62);  add('Head','x', gazePitch*0.66);
+    add('Neck','y', gazeYaw*0.28);  add('Neck','x', gazePitch*0.26);
+    add('Chest','y', gazeYaw*0.09);
+    add('UpperChest','y', gazeYaw*0.07);
+    // la tête s'incline légèrement du côté où elle tourne — un réflexe
+    // qu'on ne remarque que quand il manque
+    add('Head','z', -gazeYaw*0.10);
+
+    /* ---- 5. Marche ----
+       Le cycle du clip fournit les jambes ; on ajoute ici ce que le clip
+       ne fait pas : bassin qui accompagne le pas, torse qui contrebalance,
+       bras en opposition franche aux jambes, coudes qui restent fléchis. */
+    if(gait > 0.001){
+      const ph = stepPh * Math.PI * 2;
+      const sw = Math.sin(ph);          // cycle complet (2 pas)
+      const st = Math.sin(ph*2);        // 1 par pas
+      add('Hips','z', sw*0.075*gait);
+      add('Hips','y', sw*0.055*gait);
+      add('Spine','y', -sw*0.045*gait);
+      add('Chest','y', -sw*0.055*gait);
+      add('UpperChest','y', -sw*0.030*gait);
+      add('Chest','x', Math.abs(st)*0.020*gait);
+      // bras en opposition : gauche avec jambe droite
+      add('LeftArm','x',  -sw*0.30*gait);
+      add('RightArm','x',  sw*0.30*gait);
+      add('LeftArm','z',   sw*0.05*gait);
+      add('RightArm','z',  sw*0.05*gait);
+      // le coude se ferme quand le bras avance
+      add('LeftForeArm','x',  -Math.max(0, -sw)*0.32*gait - 0.05*gait);
+      add('RightForeArm','x', -Math.max(0,  sw)*0.32*gait - 0.05*gait);
+      add('LeftShoulder','z', sw*0.020*gait);
+      add('RightShoulder','z', sw*0.018*gait);
     }
 
-    blink.update(ph);
+    /* ---- 6. Réaction ---- */
+    if(reactArm > 0.0005 || reactNod > 0.0005){
+      const a = reactArm, wv = reactWave;
+      add('RightArm','x', -a*(1 + wv));
+      add('LeftArm','x',  -a*(1 - wv));
+      add('RightArm','z', -a*0.30);
+      add('LeftArm','z',   a*0.34);
+      add('RightForeArm','x', -a*0.55);
+      add('LeftForeArm','x',  -a*0.50);
+      add('Head','x', -reactNod*1.5);
+      add('Neck','x', -reactNod*0.8);
+      add('Chest','x', -reactNod*0.9);
+      add('Spine','x', -reactNod*0.4);
+    }
+
+    /* ---- application ----
+       final = bind + (clip - bind)*poids + repos + procédural */
+    for(const n of RIG_BONES){
+      const b = bones[n];
+      if(!b) continue;
+      const bd = bind[n], rest = REST_POSE[n];
+      const cw = walking ? (CLIP_WEIGHT_WALK[n] != null ? CLIP_WEIGHT_WALK[n] : 1) : 1;
+      const cx = bd.x + (b.rotation.x - bd.x)*cw;
+      const cy = bd.y + (b.rotation.y - bd.y)*cw;
+      const cz = bd.z + (b.rotation.z - bd.z)*cw;
+      b.rotation.set(
+        cx + (rest && rest.x || 0) + d[n].x,
+        cy + (rest && rest.y || 0) + d[n].y,
+        cz + (rest && rest.z || 0) + d[n].z
+      );
+      b.position.y = bd.py + d[n].py;
+    }
+
+    blink.update(dt);
   };
 }
 
@@ -2031,21 +2332,12 @@ async function loadPlayerModel(player){
   // (pose de liaison du squelette) : on corrige juste cette animation,
   // bras le long du corps, sans toucher à la marche/saut qui sont déjà
   // naturelles.
+  // Plus de correction cuite dans les images-clés : la pose de repos
+  // (bras le long du corps, coudes fléchis, asymétrie gauche/droite) est
+  // appliquée à chaque frame par la couche procédurale, donc aussi
+  // pendant la marche — là où l'ancienne correction ne s'appliquait pas
+  // et laissait les bras revenir à l'horizontale.
   const idleClip = clip('idle');
-  if(idleClip){
-    const armFix = { RightArm: 78, LeftArm: -78 };
-    idleClip.tracks.forEach(track=>{
-      const boneName = track.name.split('.')[0];
-      const deg = armFix[boneName];
-      if(!deg || !track.name.endsWith('.quaternion')) return;
-      const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1), THREE.MathUtils.degToRad(deg));
-      for(let i=0;i<track.values.length;i+=4){
-        const v = track.values;
-        const orig = new THREE.Quaternion(v[i],v[i+1],v[i+2],v[i+3]).multiply(q);
-        v[i]=orig.x; v[i+1]=orig.y; v[i+2]=orig.z; v[i+3]=orig.w;
-      }
-    });
-  }
 
   const actions = {
     idle: idleClip && mixer.clipAction(idleClip),
@@ -2055,32 +2347,37 @@ async function loadPlayerModel(player){
   if(actions.idle) actions.idle.setEffectiveWeight(1);
   if(actions.walk) actions.walk.setEffectiveWeight(0);
   let activeAction = actions.idle || actions.walk;
-  function setWalking(isWalking, speedScale){
+  /* Le clip de marche n'avance plus tout seul : son temps est ÉCRIT à
+     chaque frame à partir de la distance réellement parcourue (voir
+     STRIDE et walkPhase). C'est la seule façon d'éliminer le glissement
+     des pieds — tant que la vitesse des jambes est une fraction
+     arbitraire de la vitesse de translation, le pied patine forcément. */
+  if(actions.walk) actions.walk.paused = true;
+  const walkDur = actions.walk ? actions.walk.getClip().duration : 1;
+  function setWalking(isWalking, phase01){
     const target = isWalking ? actions.walk : actions.idle;
     if(target && target!==activeAction){
-      activeAction.fadeOut(0.15);
-      target.reset().fadeIn(0.15);
+      activeAction.fadeOut(0.22);
+      target.reset().fadeIn(0.22);
+      if(isWalking) target.paused = true;
       activeAction = target;
     }
-    if(isWalking && actions.walk) actions.walk.timeScale = Math.max(0.2, speedScale||1);
+    if(isWalking && actions.walk){
+      actions.walk.paused = true;
+      actions.walk.time = ((phase01 % 1) + 1) % 1 * walkDur;
+    }
   }
+  player.walkClipDuration = walkDur;
 
   player.mixer = mixer;
   player.setWalking = setWalking;
 
-  const bones = {
-    hips: findBone(model, 'Hips'),
-    spine: findBone(model, 'Spine'),
-    chest: findBone(model, 'Chest'),
-    upperChest: findBone(model, 'UpperChest'),
-    neck: findBone(model, 'Neck'),
-    head: findBone(model, 'Head'),
-    leftArm: findBone(model, 'LeftArm'),
-    rightArm: findBone(model, 'RightArm'),
-    leftForeArm: findBone(model, 'LeftForeArm'),
-    rightForeArm: findBone(model, 'RightForeArm'),
-  };
-  player.updateIdleLife = buildIdleLife(bones, blink);
+  // tout le rig, indexé par son nom exact : la couche procédurale a
+  // besoin des épaules, des poignets et des jambes, pas seulement des bras
+  const bones = {};
+  for(const n of RIG_BONES) bones[n] = findBone(model, n);
+  player.updateBody = buildBodyLayer(bones, blink, model);
+  player.bones = bones;
 }
 
 const player = createPlayer();
@@ -2144,6 +2441,12 @@ function landingIndex(fromIdx, count){
   return count>=0 ? (start+count) % 40 : Math.max(0, start+count);
 }
 
+/* Distance couverte par UN cycle complet du clip de marche (deux pas).
+   Réglée sur la longueur de jambe du pion : trop grande, les pieds
+   patinent vers l'avant ; trop petite, ils patinent vers l'arrière. */
+const WALK_STRIDE = 0.72;
+let walkBank = 0, walkGait = 0, walkStepPhase = 0;
+
 function startWalk(fromIdx, count, stepDuration){
   // Le pion démarre visuellement SUR la case 1 (pas sur une case
   // "0" séparée) : un lancer de N doit donc avancer de N cases
@@ -2165,16 +2468,30 @@ function startWalk(fromIdx, count, stepDuration){
     indices.push(idx);
     steps++;
   }
+  /* Profil de déplacement complet :
+        anticipation → démarrage → accélération → marche → décélération
+        → dernier pas → stabilisation
+     L'anticipation et la stabilisation sont comptées dans totalTime, car
+     le reste du jeu attend cette durée pour enchaîner. Pendant
+     l'anticipation le pion ne se translate pas encore : il tourne le
+     regard vers sa destination et transfère son poids. */
   const vCruise = steps>0 ? 1/stepDuration : 0;
   const rampUnits = Math.min(0.5, steps/2);
   const accelTime = rampUnits>0 ? (2*rampUnits)/vCruise : 0;
   const cruiseUnits = steps - 2*rampUnits;
   const cruiseTime = vCruise>0 ? cruiseUnits/vCruise : 0;
+  const prepTime = steps>0 ? 0.26 : 0;
+  const settleTime = steps>0 ? 0.40 : 0;
+  const moveTime = Math.max(0.001, accelTime*2+cruiseTime);
   walk = {
     path, indices, steps, vCruise, rampUnits, accelTime, cruiseTime,
-    totalTime: Math.max(0.001, accelTime*2+cruiseTime),
-    t0: clock.getElapsedTime(), lastSeg:-1
+    prepTime, settleTime, moveTime,
+    totalTime: prepTime + moveTime + settleTime,
+    t0: clock.getElapsedTime(), lastSeg:-1,
+    phase: 0, prevDist: 0, announced: false,
   };
+  // le regard part en avant AVANT le corps
+  if(steps>0) lookAtTile(path[path.length-1], prepTime + moveTime*0.5);
   return walk;
 }
 
@@ -2243,10 +2560,11 @@ function updateAmbientSparkles(dt){
   }
 }
 
-function animate(){
-  requestAnimationFrame(animate);
-  const dt = Math.min(clock.getDelta(), 0.05);
-  const t = clock.getElapsedTime();
+/* Le corps de la frame est isolé de la boucle d'affichage : la boucle
+   fournit le temps réel, mais on peut aussi l'avancer pas à pas depuis
+   l'extérieur (enregistrement d'une séquence à cadence régulière sur une
+   machine qui ne tient pas le temps réel). */
+function frameStep(dt, t){
 
   controls.update();
   updateCornerSafety(dt);
@@ -2365,36 +2683,77 @@ function animate(){
   // marche continue du pion sur tout le trajet demandé
   if(walk){
     const te = t - walk.t0;
+    /* ---- phase 1 : anticipation, le corps n'avance pas encore ---- */
+    const inPrep = te < walk.prepTime;
+    const tm = te - walk.prepTime;              // temps dans la translation
+    const inSettle = tm > walk.moveTime;
+
     let dist, vel;
-    if(walk.steps===0 || te >= walk.totalTime){
-      dist = walk.steps; vel = 0; walk.done = true;
-    } else if(walk.accelTime>0 && te < walk.accelTime){
-      vel = walk.vCruise*(te/walk.accelTime);
-      dist = 0.5*walk.vCruise*te*te/walk.accelTime;
-    } else if(te < walk.accelTime+walk.cruiseTime){
+    if(walk.steps===0){ dist = 0; vel = 0; }
+    else if(inPrep){ dist = 0; vel = 0; }
+    else if(tm >= walk.moveTime){ dist = walk.steps; vel = 0; }
+    else if(walk.accelTime>0 && tm < walk.accelTime){
+      vel = walk.vCruise*(tm/walk.accelTime);
+      dist = 0.5*walk.vCruise*tm*tm/walk.accelTime;
+    } else if(tm < walk.accelTime+walk.cruiseTime){
       vel = walk.vCruise;
-      dist = walk.rampUnits + walk.vCruise*(te-walk.accelTime);
+      dist = walk.rampUnits + walk.vCruise*(tm-walk.accelTime);
     } else {
-      const te2 = Math.max(0, walk.totalTime - te);
+      const te2 = Math.max(0, walk.moveTime - tm);
       vel = walk.accelTime>0 ? walk.vCruise*(te2/walk.accelTime) : 0;
       dist = walk.steps - 0.5*walk.vCruise*te2*te2/walk.accelTime;
     }
     dist = Math.max(0, Math.min(walk.steps, dist));
+
+    /* ---- phase du cycle de marche VERROUILLÉE SUR LA DISTANCE ----
+       C'est le cœur de la correction du glissement : le clip n'avance que
+       de ce que les jambes ont réellement à parcourir. STRIDE est la
+       distance couverte par un cycle complet (deux pas) ; une valeur trop
+       grande fait patiner vers l'avant, trop petite fait patiner vers
+       l'arrière. */
+    walk.phase += Math.max(0, dist - walk.prevDist) / WALK_STRIDE;
+    walk.prevDist = dist;
+
     const segIdx = Math.min(Math.floor(dist), Math.max(0,walk.steps-1));
     const localP = walk.steps>0 ? dist - segIdx : 0;
     const aTile = walk.path[segIdx], bTile = walk.path[Math.min(segIdx+1, walk.path.length-1)];
     const x = aTile.world.x + (bTile.world.x-aTile.world.x)*localP;
     const z = aTile.world.z + (bTile.world.z-aTile.world.z)*localP;
-    const gaitAmp = walk.vCruise>0 ? vel/walk.vCruise : 0;
-    const bob = reduceMotion ? 0 : Math.abs(Math.sin(dist*Math.PI*2))*0.028*gaitAmp;
-    player.root.position.set(x, aTile.tileTopY + bob, z);
+    const gaitAmp = walk.vCruise>0 ? Math.min(1, vel/walk.vCruise) : 0;
 
+    /* Oscillation verticale du centre de masse, calée sur le pas : deux
+       creux par cycle, au moment où le pied se pose. */
+    const bob = reduceMotion ? 0
+              : (-Math.abs(Math.cos(walk.phase*Math.PI*2)) * 0.022
+                 + 0.022) * gaitAmp;
+
+    /* Transfert de poids pendant l'anticipation et la stabilisation :
+       un petit creux avant de partir, un autre en posant le dernier pas. */
+    let settleDip = 0;
+    if(inPrep) settleDip = -Math.sin(te/walk.prepTime*Math.PI) * 0.016;
+    else if(inSettle){
+      const u = Math.min(1, (tm - walk.moveTime)/walk.settleTime);
+      settleDip = -Math.sin(u*Math.PI) * 0.020 * (1-u*0.3);
+    }
+    player.root.position.set(x, aTile.tileTopY + bob + settleDip, z);
+
+    /* ---- virage étagé ----
+       Le corps ne pivote pas d'un bloc : la tête a déjà tourné (système de
+       regard), le bassin suit avec du retard. Plus l'écart est grand, plus
+       la rotation prend de temps — un demi-tour ne se fait pas à la même
+       vitesse qu'une correction de trajectoire. */
     if(bTile!==aTile){
       const targetYaw = Math.atan2(bTile.world.x-aTile.world.x, bTile.world.z-aTile.world.z);
       let dyaw = targetYaw - player.root.rotation.y;
       dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
-      player.root.rotation.y += dyaw*Math.min(1,dt*16);
+      const turnRate = 4.5 + 3.5*(1 - Math.min(1, Math.abs(dyaw)/1.2));
+      player.root.rotation.y += dyaw*Math.min(1, dt*turnRate);
+      // le buste s'incline vers l'intérieur du virage
+      walkBank += ((-dyaw*0.22) - walkBank) * Math.min(1, dt*6);
+    } else {
+      walkBank += (0 - walkBank) * Math.min(1, dt*5);
     }
+    player.root.rotation.z = walkBank;
 
     if(segIdx !== walk.lastSeg){
       if(walk.lastSeg >= 0){
@@ -2407,33 +2766,57 @@ function animate(){
     }
 
     if(!reduceMotion){
-      const leanTarget = -0.09*gaitAmp;
-      player.root.rotation.x += (leanTarget - player.root.rotation.x)*Math.min(1,dt*10);
+      // le buste se penche en avant à l'accélération et se redresse en
+      // décélérant : c'est l'inertie qui se lit, pas une inclinaison fixe
+      const leanTarget = -0.075*gaitAmp + (inSettle ? 0.03 : 0);
+      player.root.rotation.x += (leanTarget - player.root.rotation.x)*Math.min(1,dt*8);
     }
-    player.setWalking(true, gaitAmp);
+    player.setWalking(gaitAmp > 0.02, walk.phase);
+    walkGait = gaitAmp;
+    walkStepPhase = walk.phase % 1;
 
-    if(walk.done){
+    /* ---- arrivée : une seule séquence continue ----
+       Les effets ne se déclenchent plus à l'instant où la translation
+       s'arrête, mais une fois le dernier pas posé — le temps que le poids
+       soit transféré. */
+    if(!walk.announced && tm >= walk.moveTime){
+      walk.announced = true;
       currentIndex = walk.indices[walk.indices.length-1];
       setActive(currentIndex);
       const landedTile = walk.path[walk.path.length-1];
+      playerBaseY = landedTile.tileTopY;
+      // il regarde ce sur quoi il vient de tomber
+      lookAtTile(landedTile, 2.4);
       if(!reduceMotion){
         const lvl = TIER_LEVEL[landedTile.catKey] ?? 1;
         spawnSparkles(landedTile.world.x, landedTile.tileTopY+0.4, landedTile.world.z,
                       12 + lvl*11, 1.3 + lvl*0.38, 2.9 + lvl*0.55, 0.5, 0.9);
         winShock(landedTile, lvl);
         cameraPunch(0.65 + lvl*0.28);
-        // le pion ne fête que les gros lots — voir triggerCheer
-        if(lvl >= 3) triggerCheer(0.8 + (lvl-3)*0.35);
+        // la réaction arrive APRÈS la stabilisation : il regarde, il
+        // comprend, puis il réagit
+        walk.reactAt = t + walk.settleTime*0.55;
+        walk.reactLevel = lvl;
       }
-      playerBaseY = landedTile.tileTopY;
+    }
+    if(walk.reactAt && t >= walk.reactAt){
+      triggerReaction(walk.reactLevel);
+      walk.reactAt = 0;
+    }
+
+    if(te >= walk.totalTime){
+      walk.done = true;
       walk = null;
+      walkGait = 0;
     }
   } else if(!reduceMotion){
-    // au repos : la marche revient doucement en position neutre,
-    // l'animation "idle" du modèle prend le relais.
-    player.root.rotation.x *= 0.8;
+    // au repos : le buste revient droit, la marche s'efface
+    player.root.rotation.x *= 0.85;
+    player.root.rotation.z *= 0.85;
+    walkGait += (0 - walkGait)*Math.min(1, dt*6);
     player.setWalking(false);
   }
+
   if(shockT0 >= 0){
     const se = t - shockT0;
     const sdur = 0.40 + shockLevel*0.10;
@@ -2455,14 +2838,23 @@ function animate(){
       impactGlow.scale.set(fs, fs, fs);
     }
   }
-  updateCheer(t);
+  updateReaction(t);
   player.mixer.update(dt);
   measurePlayerTop();
-  if(!walk && !reduceMotion){
-    player.updateIdleLife(t);
-    if(cheerSettle){
-      player.root.position.y = playerBaseY + cheerHopY;
-      if(cheerT0 < 0) cheerSettle = false;
+  /* La couche procédurale tourne TOUJOURS, marche comprise : c'est elle
+     qui tient la pose de repos (bras le long du corps), le regard et le
+     report du poids. L'ancienne version ne l'appelait qu'à l'arrêt, d'où
+     des bras qui repartaient à l'horizontale dès le premier pas. */
+  if(!reduceMotion){
+    player.updateBody(t, {
+      walking: walkGait > 0.02,
+      gait: walkGait,
+      stepPhase: walkStepPhase,
+      bodyYaw: player.root.rotation.y,
+    });
+    if(reactSettle && !walk){
+      player.root.position.y = playerBaseY + reactHopY;
+      if(reactT0 < 0) reactSettle = false;
     }
   }
 
@@ -2512,6 +2904,11 @@ function animate(){
   }
 
   composer.render();
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+  frameStep(Math.min(clock.getDelta(), 0.05), clock.getElapsedTime());
 }
 animate();
 
