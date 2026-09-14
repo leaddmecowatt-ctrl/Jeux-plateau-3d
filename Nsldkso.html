@@ -38,6 +38,19 @@ body{overflow:hidden;color:#fff}
   z-index:0; pointer-events:none;
   animation:dragonGlow 9s ease-in-out infinite;
 }
+/* Écran large (ordinateur) : l'image de fond est au format portrait ;
+   en « cover » on n'en voyait que le tiers central. Sur écran large les
+   bandes affichent l'image ENTIÈRE en hauteur (voir layout()), et ce
+   calque en dessous remplit les côtés avec la même image floutée et
+   assombrie, pour ne jamais laisser de zone vide. Invisible en portrait
+   (les bandes couvrent tout). */
+#bgFill{
+  position:absolute; inset:-6%; z-index:0; pointer-events:none; display:none;
+  background-image:url("./assets/bg/dragon_sky.jpg");
+  background-repeat:no-repeat; background-size:cover; background-position:center;
+  filter:blur(22px) brightness(0.45) saturate(1.15);
+}
+@media (min-aspect-ratio: 1/1){ #bgFill{ display:block; } }
 @keyframes dragonGlow{
   0%,100%{ filter:brightness(1) saturate(1); }
   50%{ filter:brightness(1.08) saturate(1.12); }
@@ -732,6 +745,7 @@ if(new URLSearchParams(location.search).get('view')==='display'){
 }
 </script>
 <div id="app">
+  <div id="bgFill" aria-hidden="true"></div>
   <div id="bgBands" aria-hidden="true">
     <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
     <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
@@ -904,7 +918,10 @@ if(new URLSearchParams(location.search).get('view')==='display'){
     // (jamais l'inverse sur ce format portrait/téléphone) — la marge
     // horizontale ainsi créée est ce qui permet à chaque bande de se
     // décaler de quelques px sans jamais révéler de bord vide.
-    var scale = Math.max(cw/iw, ch/ih);
+    // Écran large (ordinateur) : l'image tient ENTIÈRE en hauteur, les
+    // côtés sont couverts par #bgFill (même image floutée). Portrait :
+    // « cover » comme avant.
+    var scale = (cw > ch) ? (ch/ih) : Math.max(cw/iw, ch/ih);
     var drawW = iw*scale, drawH = ih*scale;
     var offsetX = (cw-drawW)/2;
     var n = bands.length;
