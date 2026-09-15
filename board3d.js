@@ -3827,8 +3827,19 @@ function triggerLightning(){
    s'afficher. */
 const TOTAL_MISE_KEY = 'pika_total_mise';
 const TOTAL_PAID_KEY = 'pika_total_paid';
-const AVG_MISE = 9;
-const CEILING_RATIO = 0.60;  // plafond de reversement cible : 60 % reversés = 40 % de marge (vérifié par simulation)
+/* ---------- Règle métier de rentabilité ----------
+   Pour chaque cycle de CA_CYCLE euros de chiffre d'affaires (mise moyenne
+   AVG_MISE), la marge doit être d'au moins MARGIN_TARGET. Cette marge est
+   tenue À CHAQUE INSTANT, pas seulement en fin de cycle : à tout moment,
+   le total reversé ne dépasse jamais (1 − marge) de ce qui a été
+   encaissé — un gros lot ne tombe donc que lorsque la cagnotte déjà
+   encaissée le paie. Les statistiques de chute de chaque lot
+   (OUTCOME_RECIPE) sont une affaire séparée, réglable sans toucher à
+   cette garantie. */
+const AVG_MISE = 9;              // mise moyenne (euros)
+const CA_CYCLE = 3000;           // chiffre d'affaires d'un cycle (euros)
+const MARGIN_TARGET = 0.50;      // marge garantie sur le cycle et à chaque instant
+const CEILING_RATIO = 1 - MARGIN_TARGET;  // part maximale reversée (dérivée, ne pas régler ici)
 let totalMise = parseFloat(safeGetItem(TOTAL_MISE_KEY)) || 0;
 let totalPaid = parseFloat(safeGetItem(TOTAL_PAID_KEY)) || 0;
 function saveTotals(){
@@ -3907,32 +3918,20 @@ function fundedCategory(catKey){
    au lot déjà décidé, pour que la photo affichée corresponde toujours
    exactement à la case sur laquelle il est posé. */
 const OUTCOME_BATCH_KEY = 'pika_outcome_batch';
-const OUTCOME_BATCH_SIZE = 1000;
-// Proportions calibrées (vérifiées par simulation) pour que la moyenne
-// du lot sur l'ensemble du batch tombe autour de CEILING_RATIO (50%) de
-// la mise moyenne (9€) : gros lots très rares, lots moyens raisonnables,
-// une case "prison" (aucun lot) et le reste en commune.
-/* Recette pour un plafond de 60 % (marge 40 %), mise moyenne 9 € :
-     jackpot 1/1000 · ETB 1/500 · tripack 1/83 · gradée 1/30 ·
-     booster 8 € 1/12 · alternative 1/3,2 · JAMAIS de partie à 0 €.
-   Espérance : 5,35 € par partie = 59,4 %, volontairement 0,6 point SOUS
-   le plafond — comme l'ancienne recette (49,7 pour 50). Sans cette
-   marge de manœuvre, le séquencement sous contrainte de couverture n'a
-   plus de jeu : le jackpot ne tient jamais sous le plafond et finit
-   forcé en dernière position (prévisible, et au-dessus du plafond).
-   Toutes les proportions donnent un compte ENTIER sur 1 000 : un
-   arrondi de 2,5 ETB → 3 suffisait à faire déborder le plafond.
-   La « prison » (0 €) reste une case du plateau mais ne fait plus
-   partie des résultats : un joueur repart toujours avec une carte. */
+const OUTCOME_BATCH_SIZE = Math.round(CA_CYCLE/AVG_MISE);   // 333 parties = un cycle de 3000 €
+/* Nombre de lots de chaque sorte PAR CYCLE de 333 parties (3000 €).
+   PROVISOIRE : à régler avec l'hôte (statistiques de chute). Le total ne
+   doit pas dépasser CA_CYCLE × (1 − MARGIN_TARGET) = 1500 € ; ici 1478 €
+   (jackpot 300 + ETB 150 + 4×50 + 9×26 + 25×8 + 30×7,2 + 263×0,68).
+   Le reste des 333 parties part en commune. */
 const OUTCOME_RECIPE = [
-  { cat:'jackpot300',  p:0.001 },
-  { cat:'etb',         p:0.002 },
-  { cat:'booster50',   p:0.012 },
-  { cat:'gradee',      p:0.033 },
-  { cat:'booster8',    p:0.083 },
-  { cat:'alternative', p:0.312 },
-  { cat:'prison',      p:0     },
-  // le reste (55,7 %) part en commune, calculé plus bas
+  { cat:'jackpot300',  n:1  },
+  { cat:'etb',         n:1  },
+  { cat:'booster50',   n:4  },
+  { cat:'gradee',      n:9  },
+  { cat:'booster8',    n:25 },
+  { cat:'alternative', n:30 },
+  { cat:'prison',      n:0  },
 ];
 
 // Coût réel de chaque catégorie (PAYOUT_LADDER + prison, qui n'y
@@ -3944,11 +3943,17 @@ function buildOutcomeBatch(size){
   const counts = {};
   let assigned = 0;
   OUTCOME_RECIPE.forEach(r=>{
-    const n = Math.round(r.p*size);
+    const n = Math.round(r.n * size / OUTCOME_BATCH_SIZE);
     counts[r.cat] = n;
     assigned += n;
   });
   counts.commune = Math.max(0, size-assigned);
+  // garde-fou : le cycle entier doit tenir sous la part reversée
+  {
+    let tot = 0; Object.keys(counts).forEach(c=>{ tot += counts[c]*(OUTCOME_COST[c]||0); });
+    const cap = size*AVG_MISE*CEILING_RATIO;
+    if(tot > cap + 1e-9) throw new Error('OUTCOME_RECIPE : '+tot.toFixed(0)+' € de lots pour un plafond de '+cap.toFixed(0)+' €');
+  }
 
   /* Deux familles :
        - les GROS lots (≥ 100 €) : placés à part, à une position tirée au
@@ -3977,10 +3982,11 @@ function buildOutcomeBatch(size){
      et on ne tire au sort qu'entre les choix qui préservent cette
      garantie. Couverture : un lot n'est éligible que si les mises
      encaissées jusqu'ici le paient sous le plafond. */
-  const MAX_SMALL_RUN = 2;
   const isSmall = cat => cat==='commune' || cat==='prison';
   let goodsLeft = remaining.filter(c=>!isSmall(c)).length;
   let smallsLeft = remaining.length - goodsLeft;
+  // série maximale de communes : la plus courte que la recette permet
+  const MAX_SMALL_RUN = Math.max(2, Math.ceil(smallsLeft / Math.max(1, goodsLeft)));
   const seq = [];
   let cumMise = 0, cumPaid = 0, smallRun = 0;
   const nSeq = remaining.length;
@@ -4059,7 +4065,7 @@ function buildOutcomeBatch(size){
 /* Version de la file. Une file laissée en mémoire du navigateur par une
    version précédente du jeu (autre recette, autre ordonnancement) n'a
    pas les mêmes garanties : elle est reconstruite. */
-const OUTCOME_BATCH_VERSION = 'v3-marge40-des-pipes';
+const OUTCOME_BATCH_VERSION = 'v4-cycle3000-marge50';
 function loadOutcomeState(){
   try{
     const raw = safeGetItem(OUTCOME_BATCH_KEY);
