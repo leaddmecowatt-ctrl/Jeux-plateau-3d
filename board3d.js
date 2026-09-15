@@ -86,22 +86,21 @@ const CATS = {
    rentabilité (le q nécessaire remonte légèrement, 80,1% au lieu de
    79,6%, mais la marge reste pile à 50%, vérifié). */
 const RARE_GRADEE_CARD = { text: '★ CARTE GRADÉE OFFERTE (20-80€) — TRÈS RARE ★', weight: 1, rare: true, effect:{type:'prize', cat:'gradee'} };
+/* Chance et Caisse : uniquement des lots offerts (plus de déplacement ni
+   de relance, qui cassaient le plan des dés et la marge). Elles sont des
+   lots de la recette comme les autres, tombent seulement en case finale,
+   et la carte tirée est le lot de la partie. Coût moyen d'un tirage
+   (pondéré) : Chance ≈ 6,7 €, Caisse ≈ 6,1 € ; maximum 26 € (gradée). */
 const CHANCE_DECK = [
-  { text: 'Avancez de 3 cases', weight: 4, effect:{type:'move', delta:3} },
-  { text: 'Reculez de 2 cases', weight: 4, effect:{type:'move', delta:-2} },
-  { text: 'Rejouez gratuitement (relance bonus sans risque)', weight: 4, effect:{type:'replay'} },
-  { text: 'Carte commune offerte (~0,68€)', weight: 4, effect:{type:'prize', cat:'commune'} },
-  { text: "Prochain «je continue» : risque réduit de moitié", weight: 4, effect:{type:'riskHalved'} },
-  { text: 'Carte alternative offerte (~7,20€ en moyenne)', weight: 4, effect:{type:'prize', cat:'alternative'} },
+  { text: 'Carte commune offerte', weight: 4, effect:{type:'prize', cat:'commune'} },
+  { text: 'Carte alternative offerte', weight: 4, effect:{type:'prize', cat:'alternative'} },
+  { text: 'Booster à 8 € offert', weight: 2, effect:{type:'prize', cat:'booster8'} },
   RARE_GRADEE_CARD,
 ];
 const CHEST_DECK = [
-  { text: 'Carte commune offerte (~0,68€)', weight: 4, effect:{type:'prize', cat:'commune'} },
-  { text: 'Rejouez gratuitement', weight: 4, effect:{type:'replay'} },
-  { text: 'Avancez de 2 cases', weight: 4, effect:{type:'move', delta:2} },
-  { text: 'Booster à 8€ offert', weight: 4, effect:{type:'prize', cat:'booster8'} },
-  { text: 'Reculez de 1 case', weight: 4, effect:{type:'move', delta:-1} },
-  { text: 'Rien de spécial', weight: 4, effect:{type:'none'} },
+  { text: 'Carte commune offerte', weight: 5, effect:{type:'prize', cat:'commune'} },
+  { text: 'Carte alternative offerte', weight: 3, effect:{type:'prize', cat:'alternative'} },
+  { text: 'Booster à 8 € offert', weight: 2, effect:{type:'prize', cat:'booster8'} },
   RARE_GRADEE_CARD,
 ];
 /* Garde-fou "pitié" : la carte rare (grosse carte gradée) tombe en
@@ -3922,17 +3921,21 @@ const OUTCOME_BATCH_SIZE = Math.round(CA_CYCLE/AVG_MISE);   // 333 parties = un 
 /* Nombre de lots de chaque sorte PAR CYCLE de 333 parties (3000 €).
    PROVISOIRE : à régler avec l'hôte (statistiques de chute). Le total ne
    doit pas dépasser CA_CYCLE × (1 − MARGIN_TARGET) = 1500 € ; ici 1478 €
-   (jackpot 300 + ETB 150 + 4×50 + 9×26 + 25×8 + 30×7,2 + 263×0,68).
+   (jackpot 300 + ETB 150 + 4×50 + 9×26 + 21×8 + 20×7,2 + 10 prisons,
+   8 Chance ≈ 6,7 et 8 Caisse ≈ 6,1, le reste en commune à 0,68).
    Le reste des 333 parties part en commune. */
 const OUTCOME_RECIPE = [
   { cat:'jackpot300',  n:1  },
   { cat:'etb',         n:1  },
   { cat:'booster50',   n:4  },
   { cat:'gradee',      n:9  },
-  { cat:'booster8',    n:25 },
-  { cat:'alternative', n:30 },
+  { cat:'booster8',    n:21 },
+  { cat:'alternative', n:20 },
   // Prison : fin de partie immédiate, carte commune de consolation
   { cat:'prison',      n:10 },
+  // Chance / Caisse : la carte tirée est le lot (≈ 6,7 € / 6,1 € en moyenne)
+  { cat:'chance',      n:8  },
+  { cat:'chest',       n:8  },
 ];
 
 // Coût réel de chaque catégorie (PAYOUT_LADDER + prison, qui n'y
@@ -3940,6 +3943,12 @@ const OUTCOME_RECIPE = [
 // Prison paie tout de même une carte commune de consolation
 const OUTCOME_COST = { prison: 0.68 };
 PAYOUT_LADDER.forEach(t=>{ OUTCOME_COST[t.cat] = t.cost; });
+const deckExpected = deck => deck.reduce((a,c)=>a+c.weight*OUTCOME_COST[c.effect.cat],0) / deck.reduce((a,c)=>a+c.weight,0);
+const deckMax = deck => Math.max(...deck.map(c=>OUTCOME_COST[c.effect.cat]));
+OUTCOME_COST.chance = deckExpected(CHANCE_DECK);   // ≈ 6,7 € (recette)
+OUTCOME_COST.chest  = deckExpected(CHEST_DECK);    // ≈ 6,1 € (recette)
+// pire cas d'un tirage de carte : sert au contrôle en direct de la cagnotte
+const OUTCOME_MAX_COST = { chance: deckMax(CHANCE_DECK), chest: deckMax(CHEST_DECK) };
 
 function buildOutcomeBatch(size){
   const counts = {};
@@ -4095,7 +4104,7 @@ function saveOutcomeState(){
    valider, validation anticipée, ancienne file…) : ce contrôle en direct
    est la garantie finale. */
 function outcomeCovered(cat){
-  const cost = OUTCOME_COST[cat];
+  const cost = OUTCOME_MAX_COST[cat] !== undefined ? OUTCOME_MAX_COST[cat] : OUTCOME_COST[cat];
   if(cost===undefined) return true;
   return totalPaid + cost <= CEILING_RATIO*totalMise + 1e-9;
 }
@@ -4563,7 +4572,12 @@ async function move(forcedCount, forcedCard){
   const rollsExhausted = rollsUsed>=rollsAllowed;
   const finalCat = currentIndex>=0 ? tiles[currentIndex].catKey : null;
   const canClaim = currentIndex>0 && finalCat!=='chance' && finalCat!=='chest';
-  if(finalCat==='prison' && !finished && canClaim){
+  if(!finished && (finalCat==='chance' || finalCat==='chest')){
+    // la carte tirée est le lot de la partie : plus aucun lancer
+    rollsUsed = rollsAllowed;
+    validate.disabled = true;
+    pendingOutcome = null;
+  } else if(finalCat==='prison' && !finished && canClaim){
     // Prison : fin de partie immédiate, plus aucun lancer, carte de
     // consolation distribuée sans action de l'animateur
     rollsUsed = rollsAllowed;
@@ -4732,7 +4746,8 @@ const DICE_W = {2:1,3:2,4:3,5:4,6:5,7:6,8:5,9:4,10:3,11:2,12:1};
 function landable(idx, targetCat){
   if(idx===0) return false;                 // Départ : jamais de lot
   const cat = tiles[idx].catKey;
-  if(cat==='prison') return false;          // Prison finit la partie : jamais en cours de route
+  // Prison, Chance et Caisse finissent la partie : jamais en cours de route
+  if(cat==='prison' || cat==='chance' || cat==='chest') return false;
   if(cat===targetCat) return true;
   if(NEUTRAL_FORBIDDEN.has(cat)) return false;
   const c = OUTCOME_COST[cat], t = OUTCOME_COST[targetCat];
