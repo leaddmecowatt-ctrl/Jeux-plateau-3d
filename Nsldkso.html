@@ -918,11 +918,13 @@ if(new URLSearchParams(location.search).get('view')==='display'){
     // (jamais l'inverse sur ce format portrait/téléphone) — la marge
     // horizontale ainsi créée est ce qui permet à chaque bande de se
     // décaler de quelques px sans jamais révéler de bord vide.
-    // Écran large (ordinateur) : l'image tient ENTIÈRE en hauteur, les
-    // côtés sont couverts par #bgFill (même image floutée). Portrait :
-    // « cover » comme avant.
-    var scale = (cw > ch) ? (ch/ih) : Math.max(cw/iw, ch/ih);
-    var drawW = iw*scale, drawH = ih*scale;
+    // Écran large (ordinateur) : l'image ENTIÈRE remplit toute la page,
+    // élargie sans être coupée (le ciel et le dragon supportent bien
+    // l'étirement, vérifié visuellement ; les bandes floues sur les côtés
+    // ne convenaient pas). Portrait : « cover » comme avant.
+    var wide = cw > ch;
+    var scale = Math.max(cw/iw, ch/ih);
+    var drawW = wide ? cw : iw*scale, drawH = wide ? ch : ih*scale;
     var offsetX = (cw-drawW)/2;
     var n = bands.length;
     var bandH = ch/n;
