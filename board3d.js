@@ -4843,9 +4843,11 @@ function planTotal(pos, rollsLeft, targetCat){
         }
       }
     }
-    if(via.length && (!now.length || Math.random() < CARD_ROUTE_P)){
-      const nd = via.filter(v=>v.t!==2 && v.t!==12);
-      const pick = (nd.length ? nd : via)[Math.floor(Math.random()*(nd.length ? nd : via).length)];
+    // un détour ne se fait jamais sur 2 ou 12 (double forcé = lancer de
+    // plus, le pion quitterait la case du lot après la carte)
+    const viaOK = via.filter(v=>v.t!==2 && v.t!==12);
+    if(viaOK.length && (!now.length || Math.random() < CARD_ROUTE_P)){
+      const pick = viaOK[Math.floor(Math.random()*viaOK.length)];
       return { total: pick.t, onTarget: true, wantDouble: false, cardDelta: pick.d };
     }
     if(now.length){
