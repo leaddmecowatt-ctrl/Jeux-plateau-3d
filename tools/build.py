@@ -103,6 +103,51 @@ for p in VENDOR_MODULES:
     PATH_TO_TOKEN[p] = token_for(p)
 
 
+
+def inline_glb_images(raw):
+    """Réécrit un GLB pour que ses images embarquées (bufferView) deviennent
+    des data: URI dans le JSON du modèle. GLTFLoader charge alors chaque
+    texture depuis un data: URI, comme les images des cases, au lieu d'une
+    URL blob: temporaire — bloquée par la politique de sécurité de
+    l'hébergement des artefacts sur certains navigateurs (iPhone : le
+    personnage apparaissait tout blanc, sans tee-shirt ni cicatrices)."""
+    import struct
+    magic, version, total = struct.unpack('<III', raw[:12])
+    if magic != 0x46546C67:
+        return raw
+    off = 12
+    chunks = []
+    while off < len(raw):
+        clen, ctype = struct.unpack('<II', raw[off:off+8])
+        chunks.append((ctype, raw[off+8:off+8+clen]))
+        off += 8 + clen
+    jchunk = next(c for c in chunks if c[0] == 0x4E4F534A)
+    bchunk = next((c for c in chunks if c[0] == 0x004E4942), None)
+    gltf = json.loads(jchunk[1].decode('utf-8'))
+    n = 0
+    if bchunk is not None:
+        for img in gltf.get('images', []):
+            if 'bufferView' in img:
+                bv = gltf['bufferViews'][img['bufferView']]
+                start = bv.get('byteOffset', 0)
+                blob = bchunk[1][start:start+bv['byteLength']]
+                mime = img.get('mimeType', 'image/png')
+                img['uri'] = 'data:%s;base64,%s' % (mime, base64.b64encode(blob).decode('ascii'))
+                del img['bufferView']
+                n += 1
+    if not n:
+        return raw
+    jbytes = json.dumps(gltf, separators=(',', ':')).encode('utf-8')
+    jbytes += b' ' * ((4 - len(jbytes) % 4) % 4)
+    out = b''
+    out += struct.pack('<II', len(jbytes), 0x4E4F534A) + jbytes
+    if bchunk is not None:
+        b = bchunk[1] + b'\0' * ((4 - len(bchunk[1]) % 4) % 4)
+        out += struct.pack('<II', len(b), 0x004E4942) + b
+    header = struct.pack('<III', 0x46546C67, version, 12 + len(out))
+    print('build.py: %d image(s) du modèle 3D converties en data: URI' % n)
+    return header + out
+
 def build(out_path):
     html = load('Nsldkso.html')
     # The previous version of this script kept only the <style> block and
@@ -126,7 +171,10 @@ def build(out_path):
     for p in asset_paths:
         full = os.path.join(ROOT, p.lstrip('./'))
         with open(full, 'rb') as imgf:
-            data = base64.b64encode(imgf.read()).decode('ascii')
+            raw = imgf.read()
+        if full.endswith('.glb'):
+            raw = inline_glb_images(raw)
+        data = base64.b64encode(raw).decode('ascii')
         if full.endswith('.glb'):
             # Le modèle 3D n'est PAS incrusté en data: URI « model/gltf-binary » :
             # ce type de fichier ne passe pas la vérification du partage public
