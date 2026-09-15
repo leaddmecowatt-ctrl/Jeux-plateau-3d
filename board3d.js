@@ -4056,17 +4056,22 @@ function buildOutcomeBatch(size){
   return arr;
 }
 
+/* Version de la file. Une file laissée en mémoire du navigateur par une
+   version précédente du jeu (autre recette, autre ordonnancement) n'a
+   pas les mêmes garanties : elle est reconstruite. */
+const OUTCOME_BATCH_VERSION = 'v3-marge40-des-pipes';
 function loadOutcomeState(){
   try{
     const raw = safeGetItem(OUTCOME_BATCH_KEY);
     if(raw){
       const parsed = JSON.parse(raw);
-      if(parsed && Array.isArray(parsed.batch) && typeof parsed.pos==='number' && parsed.pos < parsed.batch.length){
+      if(parsed && parsed.version===OUTCOME_BATCH_VERSION && Array.isArray(parsed.batch)
+         && typeof parsed.pos==='number' && parsed.pos < parsed.batch.length){
         return parsed;
       }
     }
   }catch(e){}
-  return { batch: buildOutcomeBatch(OUTCOME_BATCH_SIZE), pos: 0 };
+  return { version: OUTCOME_BATCH_VERSION, batch: buildOutcomeBatch(OUTCOME_BATCH_SIZE), pos: 0 };
 }
 let outcomeState = loadOutcomeState();
 function saveOutcomeState(){
@@ -4075,17 +4080,38 @@ function saveOutcomeState(){
 // Un nouveau lot de résultats est régénéré automatiquement à
 // l'épuisement du précédent (jamais de rupture de stock) et à chaque
 // remise à zéro de la cagnotte (nouveau direct = nouveau lot).
+/* Un lot est « couvert » si, une fois payé, le total reversé reste sous
+   le plafond de la cagnotte RÉELLEMENT encaissée (la mise en cours
+   comprise). La file est construite pour respecter ce plafond à 9 € par
+   partie, mais la réalité peut diverger (parties recommencées sans
+   valider, validation anticipée, ancienne file…) : ce contrôle en direct
+   est la garantie finale. */
+function outcomeCovered(cat){
+  const cost = OUTCOME_COST[cat];
+  if(cost===undefined) return true;
+  return totalPaid + cost <= CEILING_RATIO*totalMise + 1e-9;
+}
 function nextPredeterminedOutcome(){
   if(outcomeState.pos >= outcomeState.batch.length){
-    outcomeState = { batch: buildOutcomeBatch(OUTCOME_BATCH_SIZE), pos: 0 };
+    outcomeState = { version: OUTCOME_BATCH_VERSION, batch: buildOutcomeBatch(OUTCOME_BATCH_SIZE), pos: 0 };
   }
-  const cat = outcomeState.batch[outcomeState.pos];
+  const b = outcomeState.batch, pos = outcomeState.pos;
+  if(!outcomeCovered(b[pos])){
+    // pas encore assez de cagnotte pour ce lot : on l'échange avec le
+    // premier lot couvert plus loin dans la file (il reste dans la file,
+    // il tombera plus tard) — la composition de la file ne change pas
+    let j = pos+1;
+    while(j < b.length && !outcomeCovered(b[j])) j++;
+    if(j < b.length){ const t = b[pos]; b[pos] = b[j]; b[j] = t; }
+    else b[pos] = 'commune';   // file épuisée sans lot couvert : commune
+  }
+  const cat = b[pos];
   outcomeState.pos++;
   saveOutcomeState();
   return cat;
 }
 function resetOutcomeBatch(){
-  outcomeState = { batch: buildOutcomeBatch(OUTCOME_BATCH_SIZE), pos: 0 };
+  outcomeState = { version: OUTCOME_BATCH_VERSION, batch: buildOutcomeBatch(OUTCOME_BATCH_SIZE), pos: 0 };
   saveOutcomeState();
 }
 
