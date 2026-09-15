@@ -4741,6 +4741,7 @@ const NEUTRAL_FORBIDDEN = new Set(['chance','chest','prison']);
 // Détours par Chance/Caisse : déplacements possibles de la carte, et part
 // des arrivées qui passent par un détour quand c'est possible
 const CARD_DELTAS = [1,2,3,4,5,6,-1,-2,-3];
+const INTERMEDIATE_MAX_COST = 8;   // booster 8 € au maximum en cours de route
 let CARD_ROUTE_P = 0.08;
 const DICE_W = {2:1,3:2,4:3,5:4,6:5,7:6,8:5,9:4,10:3,11:2,12:1};
 function landable(idx, targetCat){
@@ -4752,7 +4753,11 @@ function landable(idx, targetCat){
   if(NEUTRAL_FORBIDDEN.has(cat)) return false;
   const c = OUTCOME_COST[cat], t = OUTCOME_COST[targetCat];
   if(c===undefined || t===undefined) return false;
-  return c <= t;
+  // En cours de route, seulement des petits lots (commune, alternative,
+  // booster 8 €), et jamais plus cher que le lot visé : le joueur peut
+  // choisir de s'arrêter dessus (règle « je garde ou je relance »), ça ne
+  // doit jamais lui donner un gros lot qui n'était pas prévu.
+  return c <= t && c <= INTERMEDIATE_MAX_COST;
 }
 /* Peut-on poser le pion sur une case du lot visé EXACTEMENT au dernier
    des k lancers restants, en ne posant que des cases neutres avant ?
@@ -4851,13 +4856,21 @@ async function claimCurrentLot(){
   const realCat = tiles[currentIndex].catKey;
   let requeued = null;
   if(pendingOutcome && realCat !== pendingOutcome){
-    // arrêt validé par l'hôte avant que les dés aient amené le pion sur
-    // la case prévue : le lot décidé d'avance retourne en tête de file,
-    // il servira à la prochaine mise (le lot de la case est moins cher,
-    // par construction du planificateur)
-    outcomeState.batch.splice(outcomeState.pos, 0, pendingOutcome);
-    saveOutcomeState();
-    requeued = pendingOutcome;
+    /* Le joueur s'arrête avant que les dés aient amené le pion sur la
+       case prévue (règle « je garde ou je relance »). Le lot de sa case
+       est moins cher, par construction. Le lot décidé d'avance :
+         • retourne en tête de file s'il est GROS (≥ 50 €) — il doit tomber
+           quoi qu'il arrive — ou si le joueur n'a pris qu'une commune ;
+         • est consommé sinon : le joueur a préféré un booster sûr à une
+           chance de gradée. Le remettre en file ferait payer les deux,
+           et la marge ne tiendrait plus. */
+    const big = (OUTCOME_COST[pendingOutcome]||0) >= 50;
+    const cheap = (OUTCOME_COST[realCat]||0) < 5;
+    if(big || cheap){
+      outcomeState.batch.splice(outcomeState.pos, 0, pendingOutcome);
+      saveOutcomeState();
+      requeued = pendingOutcome;
+    }
   }
   pendingOutcome = null;
   // Le plafond de reversement continue de calculer et suivre le
