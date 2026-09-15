@@ -867,6 +867,18 @@ controls.autoRotateSpeed = 0.55;
     camera.position.copy(controls.target).add(dir.multiplyScalar(dist));
     controls.minDistance *= factor;
     controls.maxDistance *= factor;
+  } else if(aspect0 > 1.15){
+    /* Écran large (ordinateur) : le cadre est bien plus large que haut,
+       le plateau n'occupait qu'un tiers de la largeur. On rapproche la
+       caméra (jusqu'à x0,72 sur du 16:9) ; le garde-fou anti-rognage
+       des coins (updateCornerSafety) élargit le champ si un coin devait
+       sortir, les 4 coins restent donc toujours visibles. */
+    const factor = Math.max(0.76, Math.pow(1/aspect0, 0.70));
+    const dir = camera.position.clone().sub(controls.target).normalize();
+    const dist = camera.position.distanceTo(controls.target) * factor;
+    camera.position.copy(controls.target).add(dir.multiplyScalar(dist));
+    controls.minDistance *= factor;
+    controls.maxDistance *= factor;
   }
 }
 controls.update();
