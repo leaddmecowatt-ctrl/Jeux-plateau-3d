@@ -4571,7 +4571,11 @@ async function move(forcedCount, forcedCard){
   const rollsExhausted = rollsUsed>=rollsAllowed;
   const finalCat = currentIndex>=0 ? tiles[currentIndex].catKey : null;
   const canClaim = currentIndex>0 && finalCat!=='chance' && finalCat!=='chest';
-  if(finalCat==='prison' && !finished && canClaim){
+  if(finalCat==='jackpot300' && finished && canClaim && !(winBtn && winBtn.disabled)){
+    // jackpot final : validé automatiquement, comme la fin des lancers
+    rollsUsed = rollsAllowed;
+    await claimCurrentLot();
+  } else if(finalCat==='prison' && !finished && canClaim){
     // Prison : fin de partie immédiate, plus aucun lancer, carte de
     // consolation distribuée sans action de l'animateur
     rollsUsed = rollsAllowed;
@@ -4633,6 +4637,12 @@ function restart(){
   finished = false;
   rollsUsed = 0;
   rollsAllowed = 3;
+  if(pendingOutcome){
+    // partie interrompue avant validation : le lot décidé d'avance n'est
+    // pas perdu, il retourne en tête de file (la mise, elle, reste comptée)
+    outcomeState.batch.splice(outcomeState.pos, 0, pendingOutcome);
+    saveOutcomeState();
+  }
   pendingOutcome = null;
   plannedCardDelta = null;
   walk = null;
@@ -4854,6 +4864,7 @@ async function claimCurrentLot(){
   // ce sont les dés (planTotal) qui l'y ont amené. Le pion ne bouge
   // jamais après un lancer.
   const realCat = tiles[currentIndex].catKey;
+  const pendingBefore = pendingOutcome;
   let requeued = null;
   if(pendingOutcome && realCat !== pendingOutcome){
     /* Le joueur s'arrête avant que les dés aient amené le pion sur la
@@ -4879,10 +4890,13 @@ async function claimCurrentLot(){
   // jamais une version dégradée vers un palier moins cher.
   const paidBefore = totalPaid;
   const rollsUsedBefore = rollsUsed;
-  fundedCategory(realCat);
+  // Comptabilité EXACTE : on ajoute le coût du lot réellement donné (la
+  // couverture par la cagnotte est garantie en amont, au tirage du lot).
+  // Prison : la commune de consolation est comptée par celebrate().
+  if(realCat !== 'prison'){ totalPaid += OUTCOME_COST[realCat] || 0; saveTotals(); }
   celebrate(realCat, null, {locked:true});
   broadcastSync({type:'celebrate', catKey:realCat});
-  lastWinUndo = { amountAdded: totalPaid - paidBefore, rollsUsedBefore, requeued };
+  lastWinUndo = { amountAdded: totalPaid - paidBefore, rollsUsedBefore, requeued, pending: pendingBefore };
   if(undoBtn) undoBtn.hidden = false;
   // Un lot gardé épuise le tour : plus aucun lancer sur cette mise.
   rollsUsed = rollsAllowed;
@@ -4908,8 +4922,10 @@ if(undoBtn) undoBtn.addEventListener('click', ()=>{
     // pour cette mise, les prochains lancers viseront de nouveau sa case
     outcomeState.batch.splice(outcomeState.pos, 1);
     saveOutcomeState();
-    pendingOutcome = lastWinUndo.requeued;
   }
+  // dans tous les cas la mise reprend son lot décidé d'avance : les
+  // lancers suivants restent pipés vers sa case
+  pendingOutcome = lastWinUndo.pending || null;
   if(!finished) validate.disabled = (rollsUsed>=rollsAllowed);
   clearWinUndo();
   updateWinButton();
