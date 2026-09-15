@@ -3035,7 +3035,7 @@ const strideForSpeed = sp => GAIT.stride(sp);
    écart), 1,24–2,35 cases/s imposait 3 à 5 pas par seconde : des jambes
    qui s'agitent, pas un homme qui marche. 0,95–1,45 garde un déplacement
    vif (12 cases en ~9 s) avec une cadence de marche rapide. */
-const WALK_V_MIN = 1.05, WALK_V_MAX = 1.45;
+const WALK_V_MIN = 1.50, WALK_V_MAX = 2.05;
 let walkBank = 0, walkGait = 0, walkStepPhase = 0, hopGait = 0, hopPhase = 0;
 let walkSpeedK = 0, walkCrouch = 0;
 
