@@ -146,13 +146,16 @@ def build(out_path):
     #   • JS   : 'chemin' entre quotes  -> window.__ASSETS["chemin"]
     #   • CSS  : url("chemin")          -> var(--asset-N), défini une fois dans :root
     #   • HTML : <img src="chemin">      -> <img data-asset="chemin">, src posé au chargement
-    css_vars = {}
+    css_vars = {}        # nom de variable CSS -> data: URI
+    css_var_of = {}      # chemin -> nom de variable CSS
+    js_used = set()      # chemins lus depuis JS/HTML (window.__ASSETS)
     def inline_js(text):
         for p in data_uris:
             # une seule passe (regex) : sinon la forme "p" produite par la
             # première passe se faisait re-remplacer par la seconde
             pat = re.compile('([\'"])' + re.escape(p) + '\\1')
-            text = pat.sub(lambda m, p=p: 'window.__ASSETS[' + json.dumps(p) + ']', text)
+            text, n = pat.subn(lambda m, p=p: 'window.__ASSETS[' + json.dumps(p) + ']', text)
+            if n: js_used.add(p)
         return text
     def inline_css(text):
         for i, (p, uri) in enumerate(data_uris.items()):
@@ -160,11 +163,14 @@ def build(out_path):
             for form in ('url("%s")' % p, "url('%s')" % p, 'url(%s)' % p):
                 if form in text:
                     css_vars[var] = uri
+                    css_var_of[p] = var
                     text = text.replace(form, 'var(%s)' % var)
         return text
     def inline_html(text):
         for p in data_uris:
-            text = text.replace('src="%s"' % p, 'data-asset="%s"' % p)
+            if ('src="%s"' % p) in text:
+                js_used.add(p)
+                text = text.replace('src="%s"' % p, 'data-asset="%s"' % p)
         return text
     # ordre important : CSS (url("p")) puis HTML (src="p") AVANT le JS
     # ('p' / "p"), sinon la forme JS avale les deux autres
@@ -177,8 +183,17 @@ def build(out_path):
             rest = text.count(p) - text.count('__ASSETS[' + json.dumps(p) + ']') - text.count('data-asset="%s"' % p)
             if rest:
                 raise SystemExit('build.py: référence non gérée à %s dans %s (x%d)' % (p, name, rest))
-    assets_script = ('<script>window.__ASSETS = ' + json.dumps(data_uris) + ';</script>\n'
-        + '<style>:root{' + ''.join('%s:url("%s");' % (k, v) for k, v in css_vars.items()) + '}</style>')
+    # window.__ASSETS ne contient que ce que le JS/HTML lit ; un fichier
+    # déjà porté par une variable CSS est relu depuis cette variable
+    # (accesseur) au lieu d'être incrusté une seconde fois.
+    assets_map = {p: uri for p, uri in data_uris.items() if p in js_used and p not in css_var_of}
+    getters = ''.join(
+        'Object.defineProperty(window.__ASSETS,%s,{get:function(){var v=getComputedStyle(document.documentElement)'
+        '.getPropertyValue(%s).trim();var m=/^url\\((["\']?)([\\s\\S]*)\\1\\)$/.exec(v);return m?m[2]:v;}});'
+        % (json.dumps(p), json.dumps(css_var_of[p]))
+        for p in sorted(js_used) if p in css_var_of)
+    assets_script = ('<style>:root{' + ''.join('%s:url("%s");' % (k, v) for k, v in css_vars.items()) + '}</style>\n'
+        + '<script>window.__ASSETS = ' + json.dumps(assets_map) + ';' + getters + '</script>')
     head = head.replace('</head>', assets_script + '\n</head>')
     body = body + ('<script>document.querySelectorAll("img[data-asset]").forEach(function(i){'
                    ' i.src = window.__ASSETS[i.getAttribute("data-asset")] || ""; });</script>\n')

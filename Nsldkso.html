@@ -51,6 +51,9 @@ body{overflow:hidden;color:#fff}
   filter:blur(22px) brightness(0.45) saturate(1.15);
 }
 @media (min-aspect-ratio: 1/1){ #bgFill{ display:block; } }
+/* Écran large : vraie version paysage de l'image (même scène, cadrée
+   large), avec le même découpage en bandes et la même ondulation. */
+.bg-band.wide, #bgFill.wide{ background-image:url("./assets/bg/dragon_sky_wide.jpg"); }
 @keyframes dragonGlow{
   0%,100%{ filter:brightness(1) saturate(1); }
   50%{ filter:brightness(1.08) saturate(1.12); }
@@ -906,25 +909,30 @@ if(new URLSearchParams(location.search).get('view')==='display'){
   var container = document.getElementById('bgBands');
   if(!container) return;
   var bands = container.querySelectorAll('.bg-band');
-  var img = new Image();
+  var fill = document.getElementById('bgFill');
+  var img = new Image();       // portrait (téléphone)
+  var imgWide = new Image();   // paysage (ordinateur) : même scène cadrée large
 
   function layout(){
-    var iw = img.naturalWidth, ih = img.naturalHeight;
-    if(!iw || !ih) return;
     var app = document.getElementById('app');
     var cw = app.clientWidth, ch = app.clientHeight;
     if(cw<=0 || ch<=0) return;
+    var wide = cw > ch;
+    var src = wide ? imgWide : img;
+    var iw = src.naturalWidth, ih = src.naturalHeight;
+    if(!iw || !ih) return;
+    for(var k=0;k<bands.length;k++) bands[k].classList.toggle('wide', wide);
+    if(fill) fill.classList.toggle('wide', wide);
     // "cover" : l'image remplit toute la hauteur et déborde en largeur
     // (jamais l'inverse sur ce format portrait/téléphone) — la marge
     // horizontale ainsi créée est ce qui permet à chaque bande de se
     // décaler de quelques px sans jamais révéler de bord vide.
-    // Écran large (ordinateur) : l'image ENTIÈRE remplit toute la page,
-    // élargie sans être coupée (le ciel et le dragon supportent bien
-    // l'étirement, vérifié visuellement ; les bandes floues sur les côtés
-    // ne convenaient pas). Portrait : « cover » comme avant.
-    var wide = cw > ch;
+    // « cover » : l'image choisie (portrait ou paysage) a quasiment le
+    // format de l'écran, elle remplit tout sans déformation ni coupe
+    // visible ; la marge horizontale laisse les bandes onduler de
+    // quelques px sans révéler de bord.
     var scale = Math.max(cw/iw, ch/ih);
-    var drawW = wide ? cw : iw*scale, drawH = wide ? ch : ih*scale;
+    var drawW = iw*scale, drawH = ih*scale;
     var offsetX = (cw-drawW)/2;
     var n = bands.length;
     var bandH = ch/n;
@@ -947,7 +955,9 @@ if(new URLSearchParams(location.search).get('view')==='display'){
   window.addEventListener('orientationchange', function(){ setTimeout(layout,150); }, {passive:true});
   if(window.ResizeObserver){ new ResizeObserver(layout).observe(document.getElementById('app')); }
   img.onload = layout;
+  imgWide.onload = layout;
   img.src = './assets/bg/dragon_sky.jpg';
+  imgWide.src = './assets/bg/dragon_sky_wide.jpg';
 })();
 </script>
 <script type="importmap">
