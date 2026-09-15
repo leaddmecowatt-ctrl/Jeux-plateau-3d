@@ -4344,13 +4344,27 @@ function shuffledSlots(){
   for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
   return a;
 }
-function computeCardDraw(){
+function computeCardDraw(total, wantDouble){
   // Un seul tirage de 2 cartes par clic. Sur un double, l'hôte
   // relance lui-même manuellement (nouveau clic sur "TIRER LES
   // CARTES") pour la paire bonus, au lieu d'un enchaînement
   // automatique dans le logiciel.
-  const a = 1+Math.floor(Math.random()*6);
-  const b = 1+Math.floor(Math.random()*6);
+  let a, b;
+  if(total==null){
+    a = 1+Math.floor(Math.random()*6);
+    b = 1+Math.floor(Math.random()*6);
+  } else {
+    // paire tirée au sort parmi celles qui font le total planifié ; le
+    // double (lancer bonus) est décidé par le planificateur, qui en tient
+    // compte dans ses lancers restants
+    const pairs = [];
+    for(let x=1;x<=6;x++){ const y=total-x; if(y>=1&&y<=6) pairs.push({a:x,b:y}); }
+    const doubles = pairs.filter(q=>q.a===q.b), singles = pairs.filter(q=>q.a!==q.b);
+    let pick;
+    if(!singles.length || (wantDouble && doubles.length)) pick = doubles[0];
+    else pick = singles[Math.floor(Math.random()*singles.length)];
+    a = pick.a; b = pick.b;
+  }
   return { pairs: [{a,b}], total: a+b, isDouble: a===b, slotOrder: shuffledSlots() };
 }
 async function playCardDrawAnimation(draw){
@@ -4619,7 +4633,9 @@ async function drawAndMove(){
   clearCelebration();
   clearWinUndo();
   validate.disabled = true;
-  const draw = computeCardDraw();
+  // rollsLeft compte le lancer en cours (rollsUsed n'est pas encore incrémenté)
+  const plan = planTotal(currentIndex, rollsAllowed - rollsUsed, pendingOutcome);
+  const draw = computeCardDraw(plan ? plan.total : null, plan ? plan.wantDouble : false);
   // Règle des 3 lancers (+1 par double, cumulable) : consommé dès le
   // lancer effectué, pas seulement à la validation du lot, sinon un
   // joueur pourrait enchaîner les lancers sans jamais les épuiser tant
@@ -4651,51 +4667,98 @@ function clearWinUndo(){
    joueur pourrait valider un lot puis continuer à lancer et en
    valider un second sur la même mise, ce qui double la rentabilité
    attendue par mise. */
-/* Amène visuellement le pion sur une case qui correspond VRAIMENT au
-   lot déjà décidé d'avance (pendingOutcome), quand la case sur
-   laquelle les dés l'ont posé ne correspond pas. La case la plus
-   proche en avançant (avec bouclage case 40 -> case 1, comme un tour
-   de plateau normal) est choisie, puis le pion y marche visuellement
-   à vitesse accélérée — jamais de téléportation silencieuse — pour
-   que la photo affichée corresponde toujours exactement à la case sur
-   laquelle il est posé. */
-async function forceOutcomeArrival(targetCat){
-  if(!targetCat || currentIndex<0) return;
-  if(tiles[currentIndex].catKey === targetCat) return;
-  const candidates = TILES_BY_CAT[targetCat];
-  if(!candidates || !candidates.length) return;
-  let best = candidates[0], bestDist = Infinity;
-  candidates.forEach(idx=>{
-    const dist = ((idx - currentIndex) % N_TILES + N_TILES) % N_TILES;
-    const d = dist===0 ? N_TILES : dist;
-    if(d < bestDist){ bestDist = d; best = idx; }
-  });
-  moving = true;
-  const myGen = ++generation;
-  if(winBtn) winBtn.hidden = true;
-  statusEl.textContent = 'Le pion termine sa course vers '+placeLabel(best)+'…';
-  updatePlaceBanner(best, true);
-  // Distance variable (1 à 39 cases) ramenée à une durée totale à peu
-  // près constante : une simple correction de fin de partie ne doit
-  // jamais sembler plus longue qu'un lancer de dés normal.
-  const targetTotal = 1.4;
-  const stepDuration = Math.min(HOP_DURATION, Math.max(0.045, targetTotal/bestDist));
-  const w = startWalk(currentIndex, bestDist, stepDuration);
-  await wait(w.totalTime*1000 + 30);
-  if(myGen!==generation) return;
-  currentIndex = best;
-  walk = null;
-  placeTokenInstant(best);
-  setActive(best);
-  updatePlaceBanner(best, false);
-  if(targetCat==='jackpot300'){
-    statusEl.textContent = '🏆 Arrivé à '+placeLabel(LAST)+' — JACKPOT FINAL !';
-    finished = true;
-  } else {
-    statusEl.textContent = 'Le joueur est arrivé à '+placeLabel(currentIndex)+' !';
+/* ---------- Dés pipés vers le lot décidé d'avance ----------
+   Avant, les dés étaient honnêtes et c'est au moment de « LOT REMPORTÉ »
+   que le pion était déplacé jusqu'à la case la plus proche du lot
+   prédéterminé : 2 cases pour une commune, jusqu'à un tour complet pour
+   une « alternative » (2 cases sur le plateau) — et la carte affichée ne
+   correspondait pas à la case où les dés l'avaient posé. C'était visible
+   et incompréhensible en direct.
+   Désormais ce sont les DÉS qui amènent le pion sur une case du lot décidé
+   d'avance, et le lot remporté est TOUJOURS celui de la case où il est.
+     • si une case du lot visé est atteignable (total 2 à 12) : on y va ;
+     • sinon on pose le pion sur une case « neutre » (commune, ou un lot
+       moins cher que le lot visé — jamais Chance, Caisse, Prison ni
+       Départ) d'où le lot visé reste atteignable avec les lancers qu'il
+       reste ;
+     • les totaux sont tirés au sort parmi les candidats avec les poids
+       réels de deux dés (7 plus fréquent que 2 ou 12), rien ne trahit.
+   Si l'hôte valide le lot AVANT que les dés aient amené le pion sur la
+   case prévue, le joueur gagne le lot de sa case (moins cher, par
+   construction) et le lot décidé d'avance retourne en tête de file : la
+   rentabilité est préservée, le pion ne bouge jamais après un lancer. */
+const NEUTRAL_FORBIDDEN = new Set(['chance','chest','prison']);
+const DICE_W = {2:1,3:2,4:3,5:4,6:5,7:6,8:5,9:4,10:3,11:2,12:1};
+function landable(idx, targetCat){
+  if(idx===0) return false;                 // Départ : jamais de lot
+  const cat = tiles[idx].catKey;
+  if(cat===targetCat) return true;
+  if(NEUTRAL_FORBIDDEN.has(cat)) return false;
+  const c = OUTCOME_COST[cat], t = OUTCOME_COST[targetCat];
+  if(c===undefined || t===undefined) return false;
+  return c <= t;
+}
+/* Peut-on poser le pion sur une case du lot visé EXACTEMENT au dernier
+   des k lancers restants, en ne posant que des cases neutres avant ?
+   (Atteindre la bonne case trop tôt ne sert à rien : si l'hôte continue
+   de lancer, le pion la quitte.) Les totaux 2 et 12 sont évités en
+   route : ce sont forcément des doubles, donc un lancer de plus. */
+function canReachTarget(pos, rollsLeft, targetCat, memo){
+  if(rollsLeft<=0) return false;
+  const key = pos+':'+rollsLeft;
+  if(memo.has(key)) return memo.get(key);
+  let ok = false;
+  for(let t=2;t<=12 && !ok;t++){
+    const idx = landingIndex(pos, t);
+    if(rollsLeft===1){ if(t!==2 && t!==12 && idx!==0 && tiles[idx].catKey===targetCat) ok = true; }
+    else if(t!==2 && t!==12 && landable(idx, targetCat) && canReachTarget(idx, rollsLeft-1, targetCat, memo)) ok = true;
   }
-  moving = false;
-  if(winBtn) winBtn.hidden = false;
+  memo.set(key, ok);
+  return ok;
+}
+function pickWeightedTotal(list){
+  let sum = 0; list.forEach(t=>{ sum += DICE_W[t]; });
+  let r = Math.random()*sum;
+  for(const t of list){ r -= DICE_W[t]; if(r<=0) return t; }
+  return list[list.length-1];
+}
+/* Total à faire sortir pour ce lancer (null = dés honnêtes). rollsLeft
+   compte le lancer en cours. */
+function planTotal(pos, rollsLeft, targetCat){
+  if(!targetCat || OUTCOME_COST[targetCat]===undefined || !TILES_BY_CAT[targetCat]) return null;
+  const memo = new Map();
+  if(rollsLeft<=1){
+    // DERNIER lancer : on pose le pion sur une case du lot visé
+    const now = [];
+    // Départ (case 0) porte une étiquette de lot mais n'en distribue jamais
+    for(let t=2;t<=12;t++){ const idx = landingIndex(pos,t); if(idx!==0 && tiles[idx].catKey===targetCat) now.push(t); }
+    if(now.length){
+      // 2 et 12 sont forcément des doubles (lancer bonus) : on les évite
+      // pour que le tour puisse finir là
+      const nd = now.filter(t=>t!==2 && t!==12);
+      return { total: pickWeightedTotal(nd.length ? nd : now), onTarget: true, wantDouble: false };
+    }
+  } else {
+    // lancer intermédiaire : case neutre d'où le lot visé tombe pile au
+    // dernier lancer ; on ne pose pas le pion sur la bonne case trop tôt.
+    // Un double (lancer bonus) est décidé ICI, une fois sur trois sur un
+    // total pair comme avec deux vrais dés, et le plan compte alors un
+    // lancer de plus — sinon le lancer bonus faisait rater la case.
+    const single = [], double = [];
+    for(let t=3;t<=11;t++){
+      const idx = landingIndex(pos, t);
+      if(tiles[idx].catKey===targetCat || !landable(idx, targetCat)) continue;
+      if(canReachTarget(idx, rollsLeft-1, targetCat, memo)) single.push(t);
+      if(t%2===0 && canReachTarget(idx, rollsLeft, targetCat, memo)) double.push(t);
+    }
+    if(double.length && (!single.length || Math.random() < 1/3)) return { total: pickWeightedTotal(double), onTarget: false, wantDouble: true };
+    if(single.length) return { total: pickWeightedTotal(single), onTarget: false, wantDouble: false };
+  }
+  // repli : une commune (jamais Chance, Caisse, Prison ni Départ)
+  const neutral = [];
+  for(let t=2;t<=12;t++){ const idx = landingIndex(pos,t); if(idx!==0 && tiles[idx].catKey==='commune') neutral.push(t); }
+  if(neutral.length) return { total: pickWeightedTotal(neutral), onTarget: false, wantDouble: false };
+  return null;
 }
 
 async function claimCurrentLot(){
@@ -4709,26 +4772,21 @@ async function claimCurrentLot(){
   // recommencée sans avoir validé, etc.), ce lot est reporté à plus
   // tard dans la file et remplacé par un lot sûr pour cette mise —
   // jamais un lot qui ferait dépasser le plafond de reversement en vrai.
-  let outcomeToAward = pendingOutcome;
-  if(pendingOutcome && OUTCOME_COST[pendingOutcome]!==undefined){
-    const projected = totalMise>0 ? (totalPaid+OUTCOME_COST[pendingOutcome])/totalMise : 0;
-    if(projected > CEILING_RATIO){
-      outcomeState.batch.splice(outcomeState.pos, 0, pendingOutcome);
-      saveOutcomeState();
-      outcomeToAward = 'commune';
-    }
-  }
-  // Le lot réellement remporté est celui décidé d'avance pour cette
-  // mise — si le pion n'est pas déjà sur une case correspondante, il y
-  // est amené visuellement avant l'annonce, pour ne jamais réafficher
-  // une photo qui ne correspond pas à sa case. Diffusé à l'écran public
-  // AVANT d'attendre l'animation : sinon son propre pion resterait sur
-  // l'ancienne case pendant que le message "celebrate" lui dirait déjà
-  // d'afficher la photo du nouveau lot — retour du bug photo/case qui
-  // ne correspondent pas, mais cette fois sur l'écran secondaire.
-  broadcastSync({type:'forceArrival', targetCat:outcomeToAward});
-  await forceOutcomeArrival(outcomeToAward);
+  // Le lot remporté est TOUJOURS celui de la case où le pion se trouve :
+  // ce sont les dés (planTotal) qui l'y ont amené. Le pion ne bouge
+  // jamais après un lancer.
   const realCat = tiles[currentIndex].catKey;
+  let requeued = null;
+  if(pendingOutcome && realCat !== pendingOutcome){
+    // arrêt validé par l'hôte avant que les dés aient amené le pion sur
+    // la case prévue : le lot décidé d'avance retourne en tête de file,
+    // il servira à la prochaine mise (le lot de la case est moins cher,
+    // par construction du planificateur)
+    outcomeState.batch.splice(outcomeState.pos, 0, pendingOutcome);
+    saveOutcomeState();
+    requeued = pendingOutcome;
+  }
+  pendingOutcome = null;
   // Le plafond de reversement continue de calculer et suivre le
   // pourcentage payé exactement comme avant (mêmes 50%, même formule),
   // mais on affiche et on remet toujours le vrai lot de la case tirée,
@@ -4738,7 +4796,7 @@ async function claimCurrentLot(){
   fundedCategory(realCat);
   celebrate(realCat, null, {locked:true});
   broadcastSync({type:'celebrate', catKey:realCat});
-  lastWinUndo = { amountAdded: totalPaid - paidBefore, rollsUsedBefore };
+  lastWinUndo = { amountAdded: totalPaid - paidBefore, rollsUsedBefore, requeued };
   if(undoBtn) undoBtn.hidden = false;
   // Un lot gardé épuise le tour : plus aucun lancer sur cette mise.
   rollsUsed = rollsAllowed;
@@ -4759,6 +4817,13 @@ if(undoBtn) undoBtn.addEventListener('click', ()=>{
   // joueur resterait bloqué sans lancer alors qu'aucun lot n'a
   // réellement été gardé.
   rollsUsed = lastWinUndo.rollsUsedBefore;
+  if(lastWinUndo.requeued && outcomeState.batch[outcomeState.pos]===lastWinUndo.requeued){
+    // le lot décidé d'avance avait été remis en file : on le reprend
+    // pour cette mise, les prochains lancers viseront de nouveau sa case
+    outcomeState.batch.splice(outcomeState.pos, 1);
+    saveOutcomeState();
+    pendingOutcome = lastWinUndo.requeued;
+  }
   if(!finished) validate.disabled = (rollsUsed>=rollsAllowed);
   clearWinUndo();
   updateWinButton();
@@ -4786,7 +4851,6 @@ if(syncChannel && isDisplay){
     const m = e.data || {};
     if(m.type==='draw'){ topNum.textContent = m.draw.total; playCardDrawAnimation(m.draw); }
     else if(m.type==='move') move(m.count, m.card);
-    else if(m.type==='forceArrival') forceOutcomeArrival(m.targetCat);
     else if(m.type==='celebrate') celebrate(m.catKey);
     else if(m.type==='restart') restart();
     else if(m.type==='start') startGame();
