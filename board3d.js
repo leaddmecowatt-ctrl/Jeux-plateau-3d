@@ -86,23 +86,26 @@ const CATS = {
    rentabilité (le q nécessaire remonte légèrement, 80,1% au lieu de
    79,6%, mais la marge reste pile à 50%, vérifié). */
 const RARE_GRADEE_CARD = { text: '★ CARTE GRADÉE OFFERTE (20-80€) — TRÈS RARE ★', weight: 1, rare: true, effect:{type:'prize', cat:'gradee'} };
-/* Chance et Caisse : uniquement des lots offerts (plus de déplacement ni
-   de relance, qui cassaient le plan des dés et la marge). Elles sont des
-   lots de la recette comme les autres, tombent seulement en case finale,
-   et la carte tirée est le lot de la partie. Coût moyen d'un tirage
-   (pondéré) : Chance ≈ 6,7 €, Caisse ≈ 6,1 € ; maximum 26 € (gradée). */
+/* Chance et Caisse : la carte fait TOUJOURS avancer ou reculer le pion
+   jusqu'à une case de lot (jamais de fin de partie sur Chance/Caisse, même
+   sans lancer restant). Le déplacement est décidé par le planificateur
+   (plannedCardDelta) pour amener le pion sur la case du lot prévu ; ces
+   listes ne servent que de repli si le pion y arrive sans plan. */
 const CHANCE_DECK = [
-  { text: 'Carte commune offerte', weight: 4, effect:{type:'prize', cat:'commune'} },
-  { text: 'Carte alternative offerte', weight: 4, effect:{type:'prize', cat:'alternative'} },
-  { text: 'Booster à 8 € offert', weight: 2, effect:{type:'prize', cat:'booster8'} },
-  RARE_GRADEE_CARD,
+  { text: 'Avancez de 3 cases', weight: 4, effect:{type:'move', delta:3} },
+  { text: 'Avancez de 5 cases', weight: 3, effect:{type:'move', delta:5} },
+  { text: 'Reculez de 2 cases', weight: 3, effect:{type:'move', delta:-2} },
 ];
 const CHEST_DECK = [
-  { text: 'Carte commune offerte', weight: 5, effect:{type:'prize', cat:'commune'} },
-  { text: 'Carte alternative offerte', weight: 3, effect:{type:'prize', cat:'alternative'} },
-  { text: 'Booster à 8 € offert', weight: 2, effect:{type:'prize', cat:'booster8'} },
-  RARE_GRADEE_CARD,
+  { text: 'Avancez de 2 cases', weight: 4, effect:{type:'move', delta:2} },
+  { text: 'Avancez de 4 cases', weight: 3, effect:{type:'move', delta:4} },
+  { text: 'Reculez de 1 case',  weight: 3, effect:{type:'move', delta:-1} },
 ];
+let plannedCardDelta = null;
+function moveCard(delta){
+  const n = Math.abs(delta);
+  return { text: (delta>0 ? 'Avancez de ' : 'Reculez de ')+n+' case'+(n>1?'s':''), weight: 1, effect:{type:'move', delta} };
+}
 /* Garde-fou "pitié" : la carte rare (grosse carte gradée) tombe en
    moyenne 1 tirage sur 25, mais le pur hasard peut la faire attendre
    bien plus longtemps, ce qui plombe l'ambiance d'un live où les
@@ -128,6 +131,11 @@ let pityCounter = parseInt(safeGetItem(PITY_KEY), 10) || 0;
 function savePity(){ try{ localStorage.setItem(PITY_KEY, String(pityCounter)); }catch(e){} }
 
 function drawCard(deck){
+  if(plannedCardDelta != null){
+    const c = moveCard(plannedCardDelta);
+    plannedCardDelta = null;
+    return c;
+  }
   if(pityCounter >= PITY_THRESHOLD && deck.includes(RARE_GRADEE_CARD)){
     pityCounter = 0; savePity();
     return RARE_GRADEE_CARD;
@@ -3837,7 +3845,7 @@ const TOTAL_PAID_KEY = 'pika_total_paid';
    cette garantie. */
 const AVG_MISE = 9;              // mise moyenne (euros)
 const CA_CYCLE = 3000;           // chiffre d'affaires d'un cycle (euros)
-const MARGIN_TARGET = 0.50;      // marge garantie sur le cycle et à chaque instant
+const MARGIN_TARGET = 0.35;      // marge garantie sur le cycle et à chaque instant
 const CEILING_RATIO = 1 - MARGIN_TARGET;  // part maximale reversée (dérivée, ne pas régler ici)
 let totalMise = parseFloat(safeGetItem(TOTAL_MISE_KEY)) || 0;
 let totalPaid = parseFloat(safeGetItem(TOTAL_PAID_KEY)) || 0;
@@ -3919,23 +3927,19 @@ function fundedCategory(catKey){
 const OUTCOME_BATCH_KEY = 'pika_outcome_batch';
 const OUTCOME_BATCH_SIZE = Math.round(CA_CYCLE/AVG_MISE);   // 333 parties = un cycle de 3000 €
 /* Nombre de lots de chaque sorte PAR CYCLE de 333 parties (3000 €).
-   PROVISOIRE : à régler avec l'hôte (statistiques de chute). Le total ne
-   doit pas dépasser CA_CYCLE × (1 − MARGIN_TARGET) = 1500 € ; ici 1478 €
-   (jackpot 300 + ETB 150 + 4×50 + 9×26 + 21×8 + 20×7,2 + 10 prisons,
-   8 Chance ≈ 6,7 et 8 Caisse ≈ 6,1, le reste en commune à 0,68).
-   Le reste des 333 parties part en commune. */
+   Recette retenue avec l'hôte : gradée fréquente (5 %), communes 61 %,
+   marge 35 %. Total 1928 € pour un plafond de 1950 €.
+   Chance et Caisse ne sont pas des lots : ce sont des détours (la carte
+   amène sur la case du lot prévu), voir CARD_ROUTE_P. */
 const OUTCOME_RECIPE = [
   { cat:'jackpot300',  n:1  },
   { cat:'etb',         n:1  },
-  { cat:'booster50',   n:4  },
-  { cat:'gradee',      n:9  },
-  { cat:'booster8',    n:21 },
-  { cat:'alternative', n:20 },
+  { cat:'booster50',   n:3  },
+  { cat:'gradee',      n:17 },
+  { cat:'booster8',    n:44 },
+  { cat:'alternative', n:54 },
   // Prison : fin de partie immédiate, carte commune de consolation
   { cat:'prison',      n:10 },
-  // Chance / Caisse : la carte tirée est le lot (≈ 6,7 € / 6,1 € en moyenne)
-  { cat:'chance',      n:8  },
-  { cat:'chest',       n:8  },
 ];
 
 // Coût réel de chaque catégorie (PAYOUT_LADDER + prison, qui n'y
@@ -3943,12 +3947,7 @@ const OUTCOME_RECIPE = [
 // Prison paie tout de même une carte commune de consolation
 const OUTCOME_COST = { prison: 0.68 };
 PAYOUT_LADDER.forEach(t=>{ OUTCOME_COST[t.cat] = t.cost; });
-const deckExpected = deck => deck.reduce((a,c)=>a+c.weight*OUTCOME_COST[c.effect.cat],0) / deck.reduce((a,c)=>a+c.weight,0);
-const deckMax = deck => Math.max(...deck.map(c=>OUTCOME_COST[c.effect.cat]));
-OUTCOME_COST.chance = deckExpected(CHANCE_DECK);   // ≈ 6,7 € (recette)
-OUTCOME_COST.chest  = deckExpected(CHEST_DECK);    // ≈ 6,1 € (recette)
-// pire cas d'un tirage de carte : sert au contrôle en direct de la cagnotte
-const OUTCOME_MAX_COST = { chance: deckMax(CHANCE_DECK), chest: deckMax(CHEST_DECK) };
+
 
 function buildOutcomeBatch(size){
   const counts = {};
@@ -4076,7 +4075,7 @@ function buildOutcomeBatch(size){
 /* Version de la file. Une file laissée en mémoire du navigateur par une
    version précédente du jeu (autre recette, autre ordonnancement) n'a
    pas les mêmes garanties : elle est reconstruite. */
-const OUTCOME_BATCH_VERSION = 'v4-cycle3000-marge50';
+const OUTCOME_BATCH_VERSION = 'v5-cycle3000-marge35-detours';
 function loadOutcomeState(){
   try{
     const raw = safeGetItem(OUTCOME_BATCH_KEY);
@@ -4104,7 +4103,7 @@ function saveOutcomeState(){
    valider, validation anticipée, ancienne file…) : ce contrôle en direct
    est la garantie finale. */
 function outcomeCovered(cat){
-  const cost = OUTCOME_MAX_COST[cat] !== undefined ? OUTCOME_MAX_COST[cat] : OUTCOME_COST[cat];
+  const cost = OUTCOME_COST[cat];
   if(cost===undefined) return true;
   return totalPaid + cost <= CEILING_RATIO*totalMise + 1e-9;
 }
@@ -4572,12 +4571,7 @@ async function move(forcedCount, forcedCard){
   const rollsExhausted = rollsUsed>=rollsAllowed;
   const finalCat = currentIndex>=0 ? tiles[currentIndex].catKey : null;
   const canClaim = currentIndex>0 && finalCat!=='chance' && finalCat!=='chest';
-  if(!finished && (finalCat==='chance' || finalCat==='chest')){
-    // la carte tirée est le lot de la partie : plus aucun lancer
-    rollsUsed = rollsAllowed;
-    validate.disabled = true;
-    pendingOutcome = null;
-  } else if(finalCat==='prison' && !finished && canClaim){
+  if(finalCat==='prison' && !finished && canClaim){
     // Prison : fin de partie immédiate, plus aucun lancer, carte de
     // consolation distribuée sans action de l'animateur
     rollsUsed = rollsAllowed;
@@ -4640,6 +4634,7 @@ function restart(){
   rollsUsed = 0;
   rollsAllowed = 3;
   pendingOutcome = null;
+  plannedCardDelta = null;
   walk = null;
   currentIndex = -1;
   player.root.scale.set(1,1,1);
@@ -4689,6 +4684,7 @@ async function drawAndMove(){
   validate.disabled = true;
   // rollsLeft compte le lancer en cours (rollsUsed n'est pas encore incrémenté)
   const plan = planTotal(currentIndex, rollsAllowed - rollsUsed, pendingOutcome);
+  plannedCardDelta = (plan && plan.cardDelta != null) ? plan.cardDelta : null;
   const draw = computeCardDraw(plan ? plan.total : null, plan ? plan.wantDouble : false);
   // Règle des 3 lancers (+1 par double, cumulable) : consommé dès le
   // lancer effectué, pas seulement à la validation du lot, sinon un
@@ -4742,6 +4738,10 @@ function clearWinUndo(){
    construction) et le lot décidé d'avance retourne en tête de file : la
    rentabilité est préservée, le pion ne bouge jamais après un lancer. */
 const NEUTRAL_FORBIDDEN = new Set(['chance','chest','prison']);
+// Détours par Chance/Caisse : déplacements possibles de la carte, et part
+// des arrivées qui passent par un détour quand c'est possible
+const CARD_DELTAS = [1,2,3,4,5,6,-1,-2,-3];
+let CARD_ROUTE_P = 0.08;
 const DICE_W = {2:1,3:2,4:3,5:4,6:5,7:6,8:5,9:4,10:3,11:2,12:1};
 function landable(idx, targetCat){
   if(idx===0) return false;                 // Départ : jamais de lot
@@ -4784,10 +4784,27 @@ function planTotal(pos, rollsLeft, targetCat){
   if(!targetCat || OUTCOME_COST[targetCat]===undefined || !TILES_BY_CAT[targetCat]) return null;
   const memo = new Map();
   if(rollsLeft<=1){
-    // DERNIER lancer : on pose le pion sur une case du lot visé
-    const now = [];
+    // DERNIER lancer : on pose le pion sur une case du lot visé, soit
+    // directement, soit via un DÉTOUR par Chance/Caisse dont la carte
+    // (déplacement pipé) l'amène sur la case du lot visé
+    const now = [], via = [];
     // Départ (case 0) porte une étiquette de lot mais n'en distribue jamais
-    for(let t=2;t<=12;t++){ const idx = landingIndex(pos,t); if(idx!==0 && tiles[idx].catKey===targetCat) now.push(t); }
+    for(let t=2;t<=12;t++){
+      const idx = landingIndex(pos,t);
+      if(idx!==0 && tiles[idx].catKey===targetCat){ now.push(t); continue; }
+      const c = tiles[idx].catKey;
+      if(c==='chance' || c==='chest'){
+        for(const d of CARD_DELTAS){
+          const j = landingIndex(idx, d);
+          if(j>0 && tiles[j].catKey===targetCat) via.push({ t, d });
+        }
+      }
+    }
+    if(via.length && (!now.length || Math.random() < CARD_ROUTE_P)){
+      const nd = via.filter(v=>v.t!==2 && v.t!==12);
+      const pick = (nd.length ? nd : via)[Math.floor(Math.random()*(nd.length ? nd : via).length)];
+      return { total: pick.t, onTarget: true, wantDouble: false, cardDelta: pick.d };
+    }
     if(now.length){
       // 2 et 12 sont forcément des doubles (lancer bonus) : on les évite
       // pour que le tour puisse finir là
