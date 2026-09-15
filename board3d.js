@@ -3931,12 +3931,14 @@ const OUTCOME_RECIPE = [
   { cat:'gradee',      n:9  },
   { cat:'booster8',    n:25 },
   { cat:'alternative', n:30 },
-  { cat:'prison',      n:0  },
+  // Prison : fin de partie immédiate, carte commune de consolation
+  { cat:'prison',      n:10 },
 ];
 
 // Coût réel de chaque catégorie (PAYOUT_LADDER + prison, qui n'y
 // figure pas puisqu'il ne coûte jamais rien).
-const OUTCOME_COST = { prison: 0 };
+// Prison paie tout de même une carte commune de consolation
+const OUTCOME_COST = { prison: 0.68 };
 PAYOUT_LADDER.forEach(t=>{ OUTCOME_COST[t.cat] = t.cost; });
 
 function buildOutcomeBatch(size){
@@ -4561,7 +4563,13 @@ async function move(forcedCount, forcedCard){
   const rollsExhausted = rollsUsed>=rollsAllowed;
   const finalCat = currentIndex>=0 ? tiles[currentIndex].catKey : null;
   const canClaim = currentIndex>0 && finalCat!=='chance' && finalCat!=='chest';
-  if(rollsExhausted && !finished && canClaim){
+  if(finalCat==='prison' && !finished && canClaim){
+    // Prison : fin de partie immédiate, plus aucun lancer, carte de
+    // consolation distribuée sans action de l'animateur
+    rollsUsed = rollsAllowed;
+    statusEl.textContent = '🔒 Prison — fin de partie.';
+    await claimCurrentLot();
+  } else if(rollsExhausted && !finished && canClaim){
     // Plus aucun lancer possible et le joueur n'a pas choisi de
     // s'arrêter avant : la règle du jeu dit qu'il garde alors le lot
     // sur lequel il est resté — validé automatiquement, sans action
@@ -4724,6 +4732,7 @@ const DICE_W = {2:1,3:2,4:3,5:4,6:5,7:6,8:5,9:4,10:3,11:2,12:1};
 function landable(idx, targetCat){
   if(idx===0) return false;                 // Départ : jamais de lot
   const cat = tiles[idx].catKey;
+  if(cat==='prison') return false;          // Prison finit la partie : jamais en cours de route
   if(cat===targetCat) return true;
   if(NEUTRAL_FORBIDDEN.has(cat)) return false;
   const c = OUTCOME_COST[cat], t = OUTCOME_COST[targetCat];
