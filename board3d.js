@@ -2830,6 +2830,7 @@ function buildBodyLayer(bones, blink, model){
    pion `player` déjà présent dans la scène. Ne doit jamais être await-é
    au niveau racine du script : une erreur ou une lenteur ici ne doit
    jamais empêcher le plateau de s'afficher et de tourner. */
+let _glbBytes = null;
 async function loadPlayerModel(player){
   const gltf = await new Promise((resolve, reject)=>{
     const url = './assets/character/player.glb';
@@ -2842,6 +2843,7 @@ async function loadPlayerModel(player){
       const bin = atob(b64);
       const bytes = new Uint8Array(bin.length);
       for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+      _glbBytes = bytes;
       new GLTFLoader().parse(bytes.buffer, '', resolve, reject);
     } else {
       new GLTFLoader().load(url, resolve, undefined, reject);
@@ -2881,23 +2883,49 @@ async function loadPlayerModel(player){
   })();
   let blink = { update(){} };
   let blinkAssigned = false;
+  let skinMat = null;
   model.traverse(o=>{
     if(!o.isMesh) return;
     o.castShadow = true;
     const oldMat = o.material;
+    if(oldMat.name === 'skin') skinMat = null;   // (posé plus bas sur le nouveau matériau)
     const newMat = new THREE.MeshToonMaterial({
       map: oldMat.map || null,
       gradientMap: toonGradientMap,
       color: oldMat.color ? oldMat.color.clone() : new THREE.Color(0xffffff),
     });
     o.material = newMat;
+    if(oldMat.name === 'skin') skinMat = newMat;
     // Le matériau "peau" (texture visage/corps) est le seul avec une
     // map — casquette/bande/cheveux sont en couleur plate.
-    if(oldMat.map && !blinkAssigned){
+    if(oldMat.map && oldMat.map.image && (oldMat.map.image.width || oldMat.map.image.naturalWidth) && !blinkAssigned){
       blink = setupBlink(newMat, oldMat.map);
       blinkAssigned = true;
     }
   });
+  /* Filet de sécurité : si la texture de la peau n'a pas été chargée par
+     GLTFLoader (sur iPhone, dans l'hébergement des artefacts, ses URL
+     blob: temporaires peuvent être bloquées : personnage tout blanc,
+     sans tee-shirt ni cicatrices), on la recharge nous-mêmes depuis le
+     data: URI inscrit dans le modèle par le build, comme n'importe
+     quelle image de la page. */
+  if(!blinkAssigned && skinMat && _glbBytes){
+    try{
+      const dv = new DataView(_glbBytes.buffer, _glbBytes.byteOffset, _glbBytes.byteLength);
+      const jsonLen = dv.getUint32(12, true);
+      const json = JSON.parse(new TextDecoder().decode(_glbBytes.subarray(20, 20+jsonLen)));
+      const uri = json.images && json.images[0] && json.images[0].uri;
+      if(uri && uri.startsWith('data:')){
+        const tex = await new THREE.TextureLoader().loadAsync(uri);
+        tex.flipY = false;                       // convention glTF
+        tex.colorSpace = THREE.SRGBColorSpace;
+        skinMat.map = tex;
+        skinMat.needsUpdate = true;
+        blink = setupBlink(skinMat, tex);
+        blinkAssigned = true;
+      }
+    }catch(e){ console.warn('Texture du personnage : repli impossible', e); }
+  }
 
   player.root.add(model);
   player.model = model;
