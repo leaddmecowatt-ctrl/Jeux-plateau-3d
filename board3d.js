@@ -707,7 +707,10 @@ try{
   wrap.appendChild(fb);
   throw e;
 }
-const DPR_MAX = Math.min(window.devicePixelRatio||1, 2);
+/* 1,5x max : au-delà, l'image n'est pas visiblement plus nette sur un
+   plateau de cette taille mais le flou lumineux coûte presque 2 fois plus
+   (mesuré : bloom = ~17x le reste du rendu, proportionnel aux pixels). */
+const DPR_MAX = Math.min(window.devicePixelRatio||1, 1.5);
 renderer.setPixelRatio(DPR_MAX);
 /* alpha:true permet la transparence mais ne l'active pas : Three.js
    efface quand même chaque image en noir opaque (alpha 1) par
@@ -3766,32 +3769,32 @@ function frameStep(dt, t){
 
 /* ---------- Qualité adaptative ----------
    Mesuré : le flou lumineux (bloom) coûte à lui seul ~17 fois le reste
-   du rendu, et son coût grimpe avec la résolution (écrans 2x). Sur une
-   machine qui suit, RIEN ne change. Si la cadence réelle reste sous
-   ~32 images/s pendant 3 s, on descend d'un cran, cran par cran, jamais
-   plus d'un toutes les 3 s, sans jamais remonter (pas d'oscillation) :
-     1. bloom calculé en demi-résolution (le flou reste un flou)
-     2. rendu à 1,5x max au lieu de 2x
-     3. rendu à 1x
-     4. bloom en quart de résolution
+   du rendu, et son coût grimpe avec la résolution. Il est donc calculé
+   d'office en demi-résolution (comparé image par image : indiscernable,
+   un flou reste un flou). Si la cadence réelle reste sous ~45 images/s
+   pendant ~1,5 s, on descend d'un cran, cran par cran, jamais plus d'un
+   toutes les 2 s, sans jamais remonter (pas d'oscillation) :
+     1. rendu à 1,25x max au lieu de 1,5x
+     2. rendu à 1x
+     3. bloom en quart de résolution
    Le jeu, les règles, les animations et les lots ne changent pas. */
 const QUALITY = { level:0, samples:0, slow:0, last:0, armedAt:0 };
-const QUALITY_LEVELS = 4;
+const QUALITY_LEVELS = 3;
 function applyQuality(level){
   QUALITY.level = level;
-  const dpr = level>=3 ? 1 : level>=2 ? Math.min(DPR_MAX, 1.5) : DPR_MAX;
+  const dpr = level>=2 ? 1 : level>=1 ? Math.min(DPR_MAX, 1.25) : DPR_MAX;
   if(renderer.getPixelRatio() !== dpr) renderer.setPixelRatio(dpr);
   resize();
 }
-function bloomScaleForLevel(level){ return level>=4 ? 0.25 : level>=1 ? 0.5 : 1; }
+function bloomScaleForLevel(level){ return level>=3 ? 0.25 : 0.5; }
 function qualityTick(realDt, now){
   if(QUALITY.level >= QUALITY_LEVELS) return;
-  if(!QUALITY.armedAt){ QUALITY.armedAt = now + 6; return; }   // 6 s de grâce (chargement)
+  if(!QUALITY.armedAt){ QUALITY.armedAt = now + 2; return; }   // 2 s de grâce (chargement)
   if(now < QUALITY.armedAt) return;
   QUALITY.samples++;
-  if(realDt > 1/32) QUALITY.slow++;
-  if(QUALITY.samples >= 90){                       // ~3 s à 30 i/s
-    if(QUALITY.slow > QUALITY.samples*0.6 && now - QUALITY.last > 3){
+  if(realDt > 1/45) QUALITY.slow++;
+  if(QUALITY.samples >= 60){                       // ~1,5 s à 40 i/s
+    if(QUALITY.slow > QUALITY.samples*0.5 && now - QUALITY.last > 2){
       QUALITY.last = now;
       applyQuality(QUALITY.level + 1);
     }
