@@ -304,6 +304,15 @@ button:active:not(:disabled){transform:translateY(1px)}
 /* Le nom du lieu reste affiché tant que le pion y est — il ne
    glisse/disparaît que lors du changement de case suivant. */
 .place-banner.show{ opacity:1; transform:translateY(0) scale(1); }
+/* Retour visible des touches (la barre de statut est masquée) */
+.key-hint{
+  position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:95;
+  background:rgba(10,8,2,.88);border:1px solid var(--gold);color:var(--gold-bright);
+  font-size:13px;font-weight:800;letter-spacing:.02em;padding:7px 14px;border-radius:20px;
+  max-width:92vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  opacity:0;transition:opacity .2s ease;pointer-events:none;
+}
+.key-hint.show{ opacity:1; }
 
 .lots-gallery{
   background:linear-gradient(180deg,#1a1406,#0d0a03);
@@ -770,6 +779,7 @@ if(new URLSearchParams(location.search).get('view')==='display'){
   <div class="top-hud">
     <div class="brand">★ PIKAPOLY ★</div>
     <div class="place-banner-wrap"><div class="place-banner" id="placeBanner">Départ</div></div>
+    <div class="key-hint" id="keyHint" aria-live="polite"></div>
     <span id="topNum" hidden></span>
   </div>
 

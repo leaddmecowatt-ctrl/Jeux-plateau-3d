@@ -4547,6 +4547,25 @@ const wait = ms => new Promise(r=>setTimeout(r,ms));
    et courait à 2,8 cases/s, sans jamais passer par l'allure de marche
    WALK_V_MIN..MAX. À 0,50, seuls les vrais rattrapages restent forcés. */
 const HOP_DURATION = 0.50;
+/* Appui sur D (garder le lot) pendant la marche : le personnage semble
+   déjà arrêté pendant la décélération finale (~0,7 s) alors que le
+   trajet n'est pas terminé côté jeu, et l'animateur appuie souvent pile
+   à ce moment. La destination est connue dès le départ de la marche
+   (les cartes sont déjà retournées), donc l'appui est retenu et le lot
+   validé dès l'arrivée réelle. Un appui pendant le tirage des cartes
+   n'est pas retenu, et un détour Chance/Caisse (nouvelle destination)
+   l'oublie : il faut alors appuyer à nouveau. */
+let claimKeyAt = 0;
+const CLAIM_KEY_GRACE_MS = 20000;
+const keyHintEl = document.getElementById('keyHint');
+let keyHintTimer = 0;
+function showKeyHint(text){
+  if(!keyHintEl) return;
+  keyHintEl.textContent = text;
+  keyHintEl.classList.add('show');
+  clearTimeout(keyHintTimer);
+  keyHintTimer = setTimeout(()=>keyHintEl.classList.remove('show'), 2600);
+}
 
 async function move(forcedCount, forcedCard){
   if(moving || finished) return;
@@ -4554,6 +4573,7 @@ async function move(forcedCount, forcedCard){
   const myGen = ++generation;
   validate.disabled = true;
   if(winBtn) winBtn.hidden = true;
+  claimKeyAt = 0;
   const count = forcedCount!=null ? forcedCount : 1;
   const destIdx = landingIndex(currentIndex, count);
   const destCat = tiles[destIdx].catKey;
@@ -4621,6 +4641,10 @@ async function move(forcedCount, forcedCard){
     await claimCurrentLot();
   } else {
     validate.disabled = finished || rollsExhausted;
+    if(canClaim && !finished && claimKeyAt && performance.now() - claimKeyAt < CLAIM_KEY_GRACE_MS){
+      claimKeyAt = 0;
+      await claimCurrentLot();
+    }
   }
 }
 
@@ -4976,15 +5000,19 @@ window.addEventListener('keydown', (e)=>{
   const k = e.key.toLowerCase();
   if(k==='a'){ if(startBtn && !startBtn.hidden) startBtn.click(); }
   else if(k==='b'){
+    const busy = moving || (cardDrawOverlay && cardDrawOverlay.classList.contains('show'));
     if(!validate.disabled) validate.click();
-    else if(moving || (cardDrawOverlay && cardDrawOverlay.classList.contains('show'))) statusEl.textContent = '⏳ Attendez la fin du déplacement avant de relancer (touche B).';
+    else if(busy) showKeyHint('⏳ Attendez la fin du déplacement avant de relancer (B)');
+    else if(finished || rollsUsed>=rollsAllowed) showKeyHint('Partie terminée — C pour recommencer');
   }
   else if(k==='c'){ resetBtn.click(); }
   else if(k==='d'){
+    const drawing = cardDrawOverlay && cardDrawOverlay.classList.contains('show');
     if(winBtn && !winBtn.hidden && !winBtn.disabled) winBtn.click();
-    else if(moving || (cardDrawOverlay && cardDrawOverlay.classList.contains('show'))) statusEl.textContent = '⏳ Attendez que le personnage soit arrivé pour garder le lot (touche D).';
-    else if(winBtn && winBtn.disabled && currentIndex>0) statusEl.textContent = 'Lot déjà validé — touche C pour recommencer, Z pour annuler.';
-    else if(currentIndex<=0) statusEl.textContent = 'Aucun lot à garder : tirez d\'abord les cartes (touche B).';
+    else if(drawing) showKeyHint('⏳ Attendez l’arrivée du personnage, puis appuyez sur D');
+    else if(moving){ claimKeyAt = performance.now(); showKeyHint('⏳ Le lot sera gardé dès l’arrivée du personnage'); }
+    else if(winBtn && winBtn.disabled && currentIndex>0) showKeyHint('Lot déjà validé — C pour recommencer, Z pour annuler');
+    else if(currentIndex<=0) showKeyHint('Aucun lot à garder : tirez d’abord les cartes (B)');
   }
   else if(k==='z'){ if(undoBtn && !undoBtn.hidden) undoBtn.click(); }
 });
