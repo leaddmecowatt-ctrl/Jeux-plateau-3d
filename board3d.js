@@ -1049,6 +1049,16 @@ function perimeterPosAt(u){ // u in [0,1)
 // des cases spéciales, pas des lots, elles ont leur propre badge
 // compact plus bas). catKey pointe vers CATS pour réutiliser le vrai
 // libellé et la vraie photo de chaque lot, sans jamais les retaper.
+// Chances (en %) de chaque lot par partie, affichées à droite de sa
+// ligne. Remplies plus bas à partir de la recette réelle du cycle
+// (OUTCOME_RECIPE), puis la plaque est redessinée : une seule source
+// de vérité, jamais un chiffre retapé à la main.
+let LOT_ODDS_PCT = null;
+function fmtOddsPct(p){
+  if(p==null) return '';
+  const s = p >= 10 ? String(Math.round(p)) : p.toFixed(1).replace('.', ',');
+  return s + ' %';
+}
 const CENTER_LEGEND_ROWS = [
   {swatch:'jackpot', catKey:'jackpot300'},
   {swatch:'orange',  catKey:'etb'},
@@ -1189,9 +1199,27 @@ function makeCenterPlateTexture(){
     // ne réduit que si un nom précis (ex. "Booster du Marchand 30 ans",
     // le plus long) déborderait sinon de la ligne.
     const textX = dotX + dotR*1.5;
-    const maxTextW = rowX + rowW - textX - size*0.012;
     ctx.textAlign='left'; ctx.textBaseline='middle';
     ctx.lineJoin = 'round';
+    // chances du lot, alignées à droite de la ligne, même style que
+    // le nom (noir gras liseré d'or)
+    let oddsW = 0;
+    const odds = LOT_ODDS_PCT && r.catKey ? fmtOddsPct(LOT_ODDS_PCT[r.catKey]) : '';
+    if(odds){
+      const oFont = rh*0.44;
+      ctx.font='900 '+oFont+'px Arial,Helvetica,sans-serif';
+      ctx.textAlign='right';
+      const ox = rowX + rowW - size*0.014;
+      ctx.lineWidth = size*0.0052; ctx.strokeStyle = GOLD_BRIGHT;
+      ctx.strokeText(odds, ox, y+rh*0.52);
+      ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = size*0.008;
+      ctx.fillStyle = '#0a0a0a';
+      ctx.fillText(odds, ox, y+rh*0.52);
+      ctx.shadowBlur = 0;
+      oddsW = ctx.measureText(odds).width + size*0.02;
+      ctx.textAlign='left';
+    }
+    const maxTextW = rowX + rowW - textX - size*0.012 - oddsW;
     let fontSize = rh*0.52;
     ctx.font='900 '+fontSize+'px Arial,Helvetica,sans-serif';
     while(fontSize > rh*0.28 && ctx.measureText(CATS[r.catKey].label).width > maxTextW){
@@ -3976,6 +4004,18 @@ const OUTCOME_RECIPE = [
 // Coût réel de chaque catégorie (PAYOUT_LADDER + prison, qui n'y
 // figure pas puisqu'il ne coûte jamais rien).
 // Prison paie tout de même une carte commune de consolation
+// Chances par partie de chaque lot (recette / taille du cycle), pour
+// la plaque centrale du plateau — le reste (commune) est déduit.
+{
+  const odds = {}; let used = 0;
+  OUTCOME_RECIPE.forEach(r=>{ odds[r.cat] = 100*r.n/OUTCOME_BATCH_SIZE; used += r.n; });
+  odds.commune = 100*(OUTCOME_BATCH_SIZE-used)/OUTCOME_BATCH_SIZE;
+  LOT_ODDS_PCT = odds;
+  const old = centerPlate.material.map;
+  centerPlate.material.map = makeCenterPlateTexture();
+  centerPlate.material.needsUpdate = true;
+  if(old) old.dispose();
+}
 const OUTCOME_COST = { prison: 0.68 };
 PAYOUT_LADDER.forEach(t=>{ OUTCOME_COST[t.cat] = t.cost; });
 
