@@ -4975,9 +4975,17 @@ window.addEventListener('keydown', (e)=>{
   if(tag==='INPUT' || tag==='TEXTAREA') return;
   const k = e.key.toLowerCase();
   if(k==='a'){ if(startBtn && !startBtn.hidden) startBtn.click(); }
-  else if(k==='b'){ if(!validate.disabled) validate.click(); }
+  else if(k==='b'){
+    if(!validate.disabled) validate.click();
+    else if(moving || (cardDrawOverlay && cardDrawOverlay.classList.contains('show'))) statusEl.textContent = '⏳ Attendez la fin du déplacement avant de relancer (touche B).';
+  }
   else if(k==='c'){ resetBtn.click(); }
-  else if(k==='d'){ if(winBtn && !winBtn.hidden) winBtn.click(); }
+  else if(k==='d'){
+    if(winBtn && !winBtn.hidden && !winBtn.disabled) winBtn.click();
+    else if(moving || (cardDrawOverlay && cardDrawOverlay.classList.contains('show'))) statusEl.textContent = '⏳ Attendez que le personnage soit arrivé pour garder le lot (touche D).';
+    else if(winBtn && winBtn.disabled && currentIndex>0) statusEl.textContent = 'Lot déjà validé — touche C pour recommencer, Z pour annuler.';
+    else if(currentIndex<=0) statusEl.textContent = 'Aucun lot à garder : tirez d\'abord les cartes (touche B).';
+  }
   else if(k==='z'){ if(undoBtn && !undoBtn.hidden) undoBtn.click(); }
 });
 
