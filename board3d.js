@@ -5695,8 +5695,31 @@ let celebParticles = [], celebRockets = [], celebRAF = null, celebEndAt = 0, cel
 // tard la photo du lot réellement à l'écran avec celle du jackpot.
 let celebGen = 0;
 
+/* Disposition « télé verticale » (pivot R, ou vrai écran vertical) : le
+   plateau est en haut, les panneaux (lots, partie en cours, derniers
+   gains, règles) en dessous. La célébration du lot était centrée sur
+   TOUT l'écran et recouvrait « Partie en cours » (dernier tirage) et
+   les derniers gains. Elle est ramenée sur la zone du plateau, comme
+   en horizontal où elle reste au-dessus de la colonne du plateau. */
+const appEl = document.getElementById('app');
+function verticalTvLayout(){
+  return document.documentElement.classList.contains('rotated') ||
+    (window.matchMedia && window.matchMedia('(max-aspect-ratio: 3/4) and (min-height: 1100px)').matches);
+}
+function fitCelebToBoard(){
+  if(!celeb || !wrap || !appEl) return;
+  if(!verticalTvLayout()){ celeb.style.top = ''; celeb.style.height = ''; celeb.style.bottom = ''; return; }
+  // position du plateau dans le repère de #app (offsets de mise en page,
+  // insensibles à la rotation CSS), pas getBoundingClientRect (pivoté)
+  let top = 0, el = wrap;
+  while(el && el !== appEl){ top += el.offsetTop; el = el.offsetParent; }
+  celeb.style.top = top + 'px';
+  celeb.style.height = wrap.offsetHeight + 'px';
+  celeb.style.bottom = 'auto';
+}
 function resizeCelebCanvas(){
   if(!celebCanvas) return;
+  fitCelebToBoard();
   // taille de la boîte de l'overlay (et non de la fenêtre) : quand
   // l'interface est pivotée (télé tournée), largeur et hauteur sont inversées
   const box = celeb || document.body;
