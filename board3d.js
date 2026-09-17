@@ -877,34 +877,52 @@ controls.autoRotateSpeed = 0.55;
    champ si un coin devait sortir : les 4 coins restent toujours visibles. */
 const CAM_DIR_DEFAULT = new THREE.Vector3(0, 13.2, 11).normalize();   // vue d'origine (cible en y=0,3)
 const CAM_DIR_SQUARE  = new THREE.Vector3(0, 14.9, 9).normalize();    // plongée un peu plus marquée
+/* Cadre plus haut que large mais pas étroit (télé posée en portrait) :
+   vue nettement plus en plongée, le plateau projeté devient presque
+   carré et remplit la largeur ET la hauteur du cadre au lieu de laisser
+   un grand ciel au-dessus. */
+const CAM_DIR_TALL    = new THREE.Vector3(0, 16.4, 6.6).normalize();
 const CAM_BASE_MIN = controls.minDistance, CAM_BASE_MAX = controls.maxDistance;
-let camFitFactor = 1, camFitSquare = false;
+const CAM_BASE_DIST = camera.position.distanceTo(controls.target);   // distance de la vue d'origine (cadre carré)
+let camFitFactor = 1, camFitMode = 'default';
 // état de la caméra cinématique (défini ici car le cadrage le consulte dès le chargement)
 let cineMode = null, cineBlend = 0;
+function aspectFitMode(a){
+  if(a >= 0.95 && a <= 1.15) return 'square';
+  if(a >= 0.74 && a < 0.95) return 'tall';
+  return 'default';
+}
 function aspectFitFactor(a){
+  const mode = aspectFitMode(a);
+  if(mode === 'square') return 0.84;
+  if(mode === 'tall') return 0.90;
   if(a < 1) return Math.min(Math.pow(1/a, 0.38), 1.6);
   if(a > 1.15) return Math.max(0.76, Math.pow(1/a, 0.70));
-  if(a >= 0.95) return 0.84;
   return 1;
 }
 function fitCameraToAspect(){
   const a = wrap.clientWidth / wrap.clientHeight;
   if(!(a > 0)) return;
   const f = aspectFitFactor(a);
-  const square = (a >= 0.95 && a <= 1.15);
+  const mode = aspectFitMode(a);
   const k = f / camFitFactor;
-  const modeChanged = square !== camFitSquare;
+  const modeChanged = mode !== camFitMode;
   if(Math.abs(k - 1) < 1e-3 && !modeChanged) return;
-  camFitFactor = f; camFitSquare = square;
+  camFitFactor = f; camFitMode = mode;
   controls.minDistance = CAM_BASE_MIN * f;
   controls.maxDistance = CAM_BASE_MAX * f;
   // Pendant une séquence cinéma (marche, gros plan, orage) la caméra est
   // pilotée ailleurs : on ne touche qu'aux bornes, la vue plateau sera
   // recadrée au retour.
   if(cineMode !== null || cineBlend > 0.001) return;
-  const dist = camera.position.distanceTo(controls.target) * k;
-  const dir = modeChanged ? (square ? CAM_DIR_SQUARE : CAM_DIR_DEFAULT)
-                          : camera.position.clone().sub(controls.target).normalize();
+  // Distance ABSOLUE (vue d'origine × facteur), pas un cumul de ratios :
+  // une suite de redimensionnements (télé tournée, plein écran, fenêtre
+  // déplacée) redonne toujours exactement le même cadrage.
+  const dist = CAM_BASE_DIST * f;
+  // clone : les directions de référence sont partagées, multiplyScalar
+  // les modifierait en place (cadrage faux au 2e changement de mode)
+  const dir = (modeChanged ? (mode === 'square' ? CAM_DIR_SQUARE : mode === 'tall' ? CAM_DIR_TALL : CAM_DIR_DEFAULT)
+                           : camera.position.clone().sub(controls.target).normalize()).clone();
   camera.position.copy(controls.target).add(dir.multiplyScalar(dist));
   controls.update();
 }
