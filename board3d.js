@@ -5447,6 +5447,28 @@ function updateTvHud(){
   if(tvStatus && statusEl) tvStatus.textContent = statusEl.textContent;
 }
 setInterval(updateTvHud, 250);
+/* Pivot de l'image (touche R, ou ?rot=90 / ?rot=270 dans l'adresse) :
+   0° → 90° → 270° → 0°. Mémorisé dans le navigateur. */
+const ROT_KEY = 'pika_rot';
+let uiRotation = 0;
+function applyRotation(deg){
+  uiRotation = (deg===90 || deg===270) ? deg : 0;
+  const root = document.documentElement;
+  root.classList.toggle('rotated', uiRotation !== 0);
+  root.classList.toggle('rot90', uiRotation === 90);
+  root.classList.toggle('rot270', uiRotation === 270);
+  try{ localStorage.setItem(ROT_KEY, String(uiRotation)); }catch(e){}
+  setTimeout(()=>{ resize(); resizeCelebCanvas(); }, 30);
+}
+{
+  const q = new URLSearchParams(location.search).get('rot');
+  const saved = parseInt(safeGetItem(ROT_KEY), 10);
+  applyRotation(q != null ? parseInt(q, 10) : (isNaN(saved) ? 0 : saved));
+}
+function cycleRotation(){
+  applyRotation(uiRotation === 0 ? 90 : uiRotation === 90 ? 270 : 0);
+  showKeyHint(uiRotation === 0 ? 'Image droite (R pour pivoter)' : 'Image pivotée de ' + uiRotation + '° (R pour changer)');
+}
 function toggleFullscreen(){
   try{
     if(!document.fullscreenElement) document.documentElement.requestFullscreen();
@@ -5475,6 +5497,7 @@ window.addEventListener('keydown', (e)=>{
   }
   else if(k==='z'){ if(undoBtn && !undoBtn.hidden) undoBtn.click(); }
   else if(k==='f'){ toggleFullscreen(); }
+  else if(k==='r'){ cycleRotation(); }
 });
 
 if(syncChannel && isDisplay){
@@ -5570,8 +5593,11 @@ let celebGen = 0;
 
 function resizeCelebCanvas(){
   if(!celebCanvas) return;
-  celebCanvas.width = window.innerWidth;
-  celebCanvas.height = window.innerHeight;
+  // taille de la boîte de l'overlay (et non de la fenêtre) : quand
+  // l'interface est pivotée (télé tournée), largeur et hauteur sont inversées
+  const box = celeb || document.body;
+  celebCanvas.width = box.clientWidth || window.innerWidth;
+  celebCanvas.height = box.clientHeight || window.innerHeight;
 }
 window.addEventListener('resize', resizeCelebCanvas, {passive:true});
 
