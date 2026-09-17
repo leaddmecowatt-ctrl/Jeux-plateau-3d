@@ -729,12 +729,26 @@ html.storm #bgFill{ filter:blur(22px) brightness(.10) saturate(.8); }
 .celebration{
   position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
   pointer-events:none;opacity:0;visibility:hidden;transition:opacity .25s ease;
+  /* La photo du lot passait DERRIÈRE le plateau sur iOS/Safari — et
+     seulement là : sous Chrome/Android l'empilement est correct.
+     Le canvas WebGL du plateau (#gl) possède sa propre couche de
+     composition, et Safari peut peindre un calque NON promu derrière
+     elle quel que soit son z-index. Cet overlay n'était promu que par
+     accident, pendant les ~0,7 s de l'animation .shake : le transform
+     de ses keyframes lui donnait une couche, puis il la reperdait dès
+     que le script retirait la classe — d'où le lot qui « venait devant
+     une seconde » avant de repasser derrière, y compris sur un lot
+     remporté. translateZ(0) rend cette promotion permanente.
+     backface-visibility évite en prime le clignotement au moment où
+     Safari bascule la couche. */
+  transform:translateZ(0);
+  backface-visibility:hidden;
 }
 .celebration.show{opacity:1;visibility:visible}
 .celebration.shake{animation:celebShake .5s ease}
 @keyframes celebShake{
-  0%,100%{transform:translate(0,0)} 20%{transform:translate(-8px,4px)} 40%{transform:translate(7px,-5px)}
-  60%{transform:translate(-6px,-3px)} 80%{transform:translate(5px,5px)}
+  0%,100%{transform:translate3d(0,0,0)} 20%{transform:translate3d(-8px,4px,0)} 40%{transform:translate3d(7px,-5px,0)}
+  60%{transform:translate3d(-6px,-3px,0)} 80%{transform:translate3d(5px,5px,0)}
 }
 #celebCanvas{position:absolute;inset:0;width:100%;height:100%}
 .celeb-text{
