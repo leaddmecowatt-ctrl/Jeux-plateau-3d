@@ -668,6 +668,74 @@ html.display-mode .display-badge{ display:block; }
 }
 .celeb-sub[hidden]{display:none}
 
+/* ---------- Mode GROS LOT (tripack, coffret, ETB) : la célébration
+   s'énerve — rayons lumineux qui tournent derrière le lot, stroboscope
+   à l'ouverture, panneau qui claque à l'écran, titre et photo qui
+   pulsent. Le canvas des feux d'artifice et la pluie de confettis
+   restent derrière la photo pour que le lot reste lisible. ---------- */
+.celeb-rays{
+  position:absolute;left:50%;top:50%;width:240vmax;height:240vmax;margin:-120vmax 0 0 -120vmax;
+  background:repeating-conic-gradient(from 0deg, rgba(255,226,122,0) 0deg 8deg, rgba(255,226,122,.30) 8deg 16deg);
+  opacity:0;pointer-events:none;transform-origin:center;will-change:transform;
+}
+.celebration.big::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse at center, rgba(255,200,60,.22), rgba(0,0,0,.6) 72%);
+  animation:hypeGlow 1s ease-in-out infinite alternate;
+}
+@keyframes hypeGlow{from{opacity:.75}to{opacity:1}}
+.celebration.big .celeb-rays{opacity:1;animation:raysSpin 7s linear infinite, raysIn .7s ease-out;}
+.celebration.big[data-level="4"] .celeb-rays{animation-duration:5s, .7s}
+.celebration.big[data-level="5"] .celeb-rays{
+  background:repeating-conic-gradient(from 0deg, rgba(255,255,255,0) 0deg 6deg, rgba(255,240,170,.42) 6deg 12deg);
+  animation-duration:3.2s, .7s;
+}
+@keyframes raysSpin{to{transform:rotate(360deg)}}
+@keyframes raysIn{from{opacity:0;transform:scale(.2)}to{opacity:1;transform:scale(1)}}
+/* stroboscope d'ouverture : 3 flashs très courts */
+.celebration.big::after{
+  content:"";position:absolute;inset:0;pointer-events:none;background:#fff8e0;opacity:0;
+  animation:hypeStrobe 1.1s steps(1,end) 1;
+}
+.celebration.big[data-level="5"]::after{animation:hypeStrobe 1.6s steps(1,end) 1}
+@keyframes hypeStrobe{
+  0%{opacity:.75} 7%{opacity:0} 14%{opacity:.5} 21%{opacity:0} 30%{opacity:.35} 36%{opacity:0} 100%{opacity:0}
+}
+/* le panneau claque à l'écran au lieu d'apparaître */
+.celebration.big .celeb-text{
+  animation:celebSlam .6s cubic-bezier(.2,1.5,.35,1);
+  border-width:3px;border-color:#fff3c4;
+  box-shadow:0 0 40px rgba(255,226,122,.55),0 0 120px rgba(255,196,60,.35);
+}
+@keyframes celebSlam{
+  0%{transform:scale(3) rotate(-7deg);opacity:0}
+  55%{transform:scale(.9) rotate(2deg);opacity:1}
+  78%{transform:scale(1.07) rotate(-1deg)}
+  100%{transform:scale(1) rotate(0)}
+}
+.celebration.big #celebMain{
+  font-size:clamp(26px,7.5vw,50px);letter-spacing:.02em;
+  animation:hypePulse .55s ease-in-out infinite alternate;
+}
+@keyframes hypePulse{
+  from{transform:scale(1);text-shadow:0 0 18px rgba(255,226,122,.9),0 2px 4px rgba(0,0,0,.8)}
+  to{transform:scale(1.09);text-shadow:0 0 34px rgba(255,240,170,1),0 0 70px rgba(255,196,60,.8),0 2px 4px rgba(0,0,0,.8)}
+}
+.celebration.big .celeb-photo{animation:photoHype .9s ease-in-out infinite alternate}
+@keyframes photoHype{
+  from{box-shadow:0 12px 28px rgba(0,0,0,.6),0 0 26px rgba(255,226,122,.55);transform:scale(1)}
+  to{box-shadow:0 12px 28px rgba(0,0,0,.6),0 0 70px rgba(255,236,150,.95),0 0 130px rgba(255,196,60,.5);transform:scale(1.025)}
+}
+.celebration.big .celeb-sub{
+  font-size:clamp(15px,4vw,22px);font-weight:900;color:#fff3c4;letter-spacing:.06em;
+  animation:hypeSub .4s ease-in-out infinite alternate;
+}
+@keyframes hypeSub{from{opacity:.75}to{opacity:1}}
+@media (prefers-reduced-motion: reduce){
+  .celebration.big .celeb-rays,.celebration.big::after,.celebration.big::before{animation:none}
+  .celebration.big #celebMain,.celebration.big .celeb-photo,.celebration.big .celeb-sub,.celebration.big .celeb-text{animation:none}
+}
+
 /* Jeton de confirmation "Démarrage cagnotte" (touche E) : un simple
    flash au centre du PLATEAU (pas de l'écran entier, sinon la bande
    du haut décale le centrage) pour confirmer que la commande a bien
@@ -901,6 +969,7 @@ if(new URLSearchParams(location.search).get('view')==='display'){
   </div>
 
   <div class="celebration" id="celebration" aria-hidden="true">
+    <div class="celeb-rays" id="celebRays"></div>
     <canvas id="celebCanvas"></canvas>
     <div class="celeb-text" id="celebText">
       <img class="celeb-photo" id="celebPhoto" alt="" hidden>

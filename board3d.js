@@ -1695,6 +1695,15 @@ function winShock(tile, level){
 }
 
 let shakeUntil = 0, shatterUntil = 0, shatterActive = false, shatterStartT = 0;
+/* Secousse courte du plateau pour les gros lots hors jackpot (le
+   jackpot a son propre séisme + éclatement). Remise à zéro propre à la
+   fin, sans passer par la reconstitution des éclats. */
+let hypeShakeUntil = 0, hypeShakeMag = 0;
+function startHypeShake(durSec, mag){
+  if(reduceMotion || shatterUntil>0) return;
+  hypeShakeUntil = clock.getElapsedTime() + durSec;
+  hypeShakeMag = mag;
+}
 const _shardDummy = new THREE.Object3D();
 /* Pluie d'or du jackpot : un rideau de paillettes qui tombe sur toute la
    largeur du plateau pendant l'éclatement. C'est un système de points à
@@ -3747,6 +3756,16 @@ function frameStep(dt, t){
     }
   }
 
+  // Secousse "gros lot" (tripack / coffret) : décroît puis se remet à plat
+  if(hypeShakeUntil>0 && shatterUntil===0){
+    if(t < hypeShakeUntil){
+      const mag = Math.min(1, (hypeShakeUntil-t)/0.5) * hypeShakeMag;
+      boardGroup.position.set((Math.random()-0.5)*mag, 0, (Math.random()-0.5)*mag);
+      boardGroup.rotation.z = (Math.random()-0.5)*mag*0.15;
+    } else {
+      boardGroup.position.set(0,0,0); boardGroup.rotation.z = 0; hypeShakeUntil = 0;
+    }
+  }
   // Séisme puis éclatement du plateau (effet "Carte Darkrai")
   if(shakeUntil>0 && t<shakeUntil){
     // le tremblement monte en intensité à l'approche de l'éclatement,
@@ -5292,7 +5311,7 @@ function launchFireworksShow(level, catKey){
     ? [['#ffe27a','#fff2c2','#ffffff','#ffd200'], ['#ffb347','#ffe27a','#ffffff']]
     : [['#ffe27a','#e0323f','#1a56db','#ffffff'], ['#1a56db','#ffffff','#ffe27a']]);
 
-  const rocketCount = showcase ? 14 : 2 + level;
+  const rocketCount = showcase ? 14 : (level>=4 ? 6 + level*2 : 2 + level);
 
   for(let i=0;i<rocketCount;i++){
     // salves de 3 : un bouquet se lit par vagues, une fusee toutes les
@@ -5309,11 +5328,64 @@ function launchFireworksShow(level, catKey){
         x, y:H*1.05, y0:H*1.05, y1, px:x, py:H*1.05,
         start: performance.now(), dur: (showcase?600:480)+Math.random()*240,
         exploded:false, level, colors,
-        power: showcase ? 1.25+Math.random()*0.45 : 1
+        power: showcase ? 1.25+Math.random()*0.45 : (level>=4 ? 1.2+Math.random()*0.5 : 1)
       });
       if(!celebRAF) celebFrame();
     }, delay);
   }
+}
+
+/* ---------- Mode GROS LOT : ce qui s'ajoute au reveal pour tripack
+   (3), coffret (4) et ETB (5) — éclairs en rafale synchronisés avec des
+   coups de caméra et des impacts sonores, secousse du plateau, pluie
+   d'or 3D pour le coffret, et une pluie de confettis qui tombe du haut
+   de l'écran derrière la photo pendant plusieurs secondes. ---------- */
+const HYPE_SUB = {
+  3: '🔥 GROS LOT ! 🔥',
+  4: '🔥🔥 ÉNORME ! 🔥🔥',
+  5: '👑 LE GROS LOT DU LIVE ! 👑',
+};
+let hypeGen = 0;
+function spawnConfettiRain(level, durMs){
+  if(!celebCanvas || reduceMotion) return;
+  const gen = ++hypeGen;
+  const t0 = performance.now();
+  const cols = level>=5 ? ['#ffe27a','#fff2c2','#ffffff','#ffd200','#ffb347']
+                        : ['#ffe27a','#e0323f','#1a56db','#ffffff','#48e5c2','#ff6fae'];
+  const per = 4 + level*2;
+  const tick = ()=>{
+    if(gen !== hypeGen) return;
+    const W = celebCanvas.width;
+    for(let i=0;i<per;i++){
+      const x = Math.random()*W, sz = 4+Math.random()*5;
+      celebParticles.push({
+        x, y:-12, px:x, py:-12, vx:(Math.random()-0.5)*1.4, vy:1.2+Math.random()*2.2,
+        g:0.02+Math.random()*0.02, size:sz, color:cols[(Math.random()*cols.length)|0],
+        life:1, decay:0.0028+Math.random()*0.002, shape:'rect',
+        rot:Math.random()*Math.PI, vr:(Math.random()-0.5)*0.35, spark:false, drag:0.992, twinkle:Math.random()<0.3
+      });
+    }
+    if(!celebRAF) celebFrame();
+    if(performance.now()-t0 < durMs) setTimeout(tick, 110);
+  };
+  tick();
+}
+function hypeShow(level){
+  const strikes = level>=5 ? 6 : level>=4 ? 4 : 3;
+  const gap = level>=5 ? 360 : 440;
+  for(let i=0;i<strikes;i++){
+    setTimeout(()=>{
+      if(!celeb || !celeb.classList.contains('big')) return;
+      triggerLightning();
+      playImpact();
+      cameraPunch(i%2 ? 0.7 : 1.3);
+      if(i===0 || i===2){ celeb.classList.remove('shake'); void celeb.offsetWidth; celeb.classList.add('shake'); }
+    }, 220 + i*gap);
+  }
+  if(level===3) startHypeShake(1.1, 0.06);
+  if(level===4){ startHypeShake(1.6, 0.09); startGoldRain(3.4); }
+  spawnConfettiRain(level, level>=5 ? 5200 : level>=4 ? 3800 : 2800);
+  triggerCheer(level>=5 ? 1.6 : 1.2);
 }
 
 function celebFrame(){
@@ -5400,7 +5472,7 @@ function celebFrame(){
     // Un lot validé ("LOT REMPORTÉ") reste affiché à l'écran tant que
     // l'animateur n'a pas cliqué sur "RECOMMENCER" — seuls les
     // confettis (animés ci-dessus) s'arrêtent une fois retombés.
-    if(!celebLocked) celeb.classList.remove('show','flip','rare-card');
+    if(!celebLocked) celeb.classList.remove('show','flip','rare-card','big');
   }
 }
 
@@ -5411,7 +5483,8 @@ function clearCelebration(){
   celebParticles = [];
   celebRockets = [];
   celebLocked = false;
-  if(celeb) celeb.classList.remove('show','shake','flip','rare-card');
+  hypeGen++;
+  if(celeb) celeb.classList.remove('show','shake','flip','rare-card','big');
 }
 
 /* Aperçu du lot dès l'arrivée sur la case, avant toute décision de le
@@ -5432,7 +5505,8 @@ function showLotPreview(catKey){
   celebGen++;
   celebLocked = false;
   celeb.dataset.level = '';
-  celeb.classList.remove('shake');
+  celeb.classList.remove('shake','big');
+  hypeGen++;
   if(celebMain) celebMain.hidden = true;
   if(celebSub) celebSub.hidden = true;
   if(celebPhoto){ celebPhoto.src = url; celebPhoto.hidden = false; }
@@ -5572,6 +5646,14 @@ function revealCelebration(catKey, forcedCard, level){
   }
 
   const effectiveLevel = rareCardDrawn ? 5 : level;
+  // Mode GROS LOT : tripack, coffret, ETB (jamais pour une pioche
+  // Chance/Caisse, qui a son propre retournement de carte).
+  const big = effectiveLevel>=3 && !rareCardDrawn && catKey!=='chance' && catKey!=='chest';
+  celeb.classList.toggle('big', big);
+  if(big){
+    if(celebSub){ celebSub.textContent = HYPE_SUB[effectiveLevel] || HYPE_SUB[3]; celebSub.hidden = false; }
+    hypeShow(effectiveLevel);
+  }
   playFanfare(effectiveLevel);
   // Pioche du Prof. Chen : reveal classique, sans confettis ni éclair
   // (sauf carte rare tirée d'une Chance/Caisse, qui garde son effet
@@ -5590,7 +5672,7 @@ function revealCelebration(catKey, forcedCard, level){
       if(effectiveLevel>=4 || showcase) setTimeout(triggerLightning, 380);
     }
   }
-  celebEndAt = performance.now() + (skipFx ? 1200 : (showcase ? 4600 : 1900 + effectiveLevel*500));
+  celebEndAt = performance.now() + (skipFx ? 1200 : Math.max(showcase ? 4600 : 1900 + effectiveLevel*500, big ? 3600 + effectiveLevel*900 : 0));
   if(!celebRAF) celebFrame();
   setTimeout(()=>{ celeb.classList.remove('shake'); }, rareCardDrawn ? 900 : 700);
 }
