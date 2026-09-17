@@ -5850,7 +5850,11 @@ function verticalTvLayout(){
 }
 function fitCelebToBoard(){
   if(!celeb || !wrap || !appEl) return;
-  if(!verticalTvLayout()){ celeb.style.top = ''; celeb.style.height = ''; celeb.style.bottom = ''; return; }
+  if(!verticalTvLayout()){
+    celeb.style.top = ''; celeb.style.height = ''; celeb.style.bottom = '';
+    celeb.style.removeProperty('--celeb-box-h');
+    return;
+  }
   // position du plateau dans le repère de #app (offsets de mise en page,
   // insensibles à la rotation CSS), pas getBoundingClientRect (pivoté)
   let top = 0, el = wrap;
@@ -5858,6 +5862,14 @@ function fitCelebToBoard(){
   celeb.style.top = top + 'px';
   celeb.style.height = wrap.offsetHeight + 'px';
   celeb.style.bottom = 'auto';
+  /* Hauteur RÉELLE de l'overlay, publiée pour la CSS : les tailles de la
+     photo et du panneau sont écrites en vh/vw, or en télé pivotée #app
+     est tourné de 90° et ces unités ne correspondent plus à ses axes.
+     La photo se retrouvait dimensionnée sur le viewport (jusqu'à 349 px)
+     dans une boîte qui n'en fait que 260, et débordait de la zone du
+     plateau. Mesurée sur cette variable, elle tient dans sa boîte quelle
+     que soit l'orientation. */
+  celeb.style.setProperty('--celeb-box-h', wrap.offsetHeight + 'px');
 }
 function resizeCelebCanvas(){
   if(!celebCanvas) return;

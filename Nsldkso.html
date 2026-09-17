@@ -1164,6 +1164,13 @@ html.rotated .mystery-result{font-size:clamp(28px,4.5vh,80px);}
 html.rotated .celeb-text{max-width:min(92vh,1500px); font-size:clamp(26px,3.6vh,64px); padding:1.4vw 2vh;}
 html.rotated .celeb-text #celebMain{white-space:normal; line-height:1.15;}
 html.rotated .celeb-photo{width:min(80vh,46vw); max-height:46vw;}
+/* Télé verticale : l'overlay est ramené sur la seule zone du plateau
+   (voir fitCelebToBoard), il ne fait donc plus la hauteur de l'écran.
+   --celeb-box-h est cette hauteur réelle, posée par le script ; s'y
+   mesurer évite que la photo et le panneau, écrits en vh/vw, débordent
+   d'une boîte exprimée dans le repère pivoté de #app. */
+.celebration[style*="--celeb-box-h"] .celeb-text{ max-height:var(--celeb-box-h); min-height:0; }
+.celebration[style*="--celeb-box-h"] .celeb-photo{ max-height:calc(var(--celeb-box-h) * .70); min-height:0; flex:0 1 auto; }
 html.rotated .celebration.big #celebMain{font-size:clamp(30px,4.4vh,80px);}
 html.rotated .celeb-sub{font-size:clamp(16px,2.2vh,40px);}
 html.rotated .lightning-bolt{width:min(34vh,420px);}
