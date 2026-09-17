@@ -4454,7 +4454,7 @@ function peekNextOutcome(){
   return 'commune';
 }
 /* Le repère principal est dans le titre « ★ PIKAPOLY ★ » tout en haut :
-   une étoile à 4 branches (✦) à la place de l'étoile classique (★).
+   l'étoile garde sa forme, seule sa teinte devient un peu plus claire.
    Les deux étoiles changent pour l'ETB, seule celle de gauche pour un
    coffret. Un spectateur n'y voit qu'un ornement ; l'animateur, qui
    sait où regarder, le voit au premier coup d'œil. Jamais sur l'écran
@@ -4465,10 +4465,9 @@ function updateCue(){
   if(isDisplay) return;
   {
     const cat = pendingOutcome || peekNextOutcome();
-    const l = (cat==='jackpot300' || cat==='etb') ? '✦' : '★';
-    const r = cat==='jackpot300' ? '✦' : '★';
-    if(brandStarL && brandStarL.textContent !== l) brandStarL.textContent = l;
-    if(brandStarR && brandStarR.textContent !== r) brandStarR.textContent = r;
+    // même forme ★, juste une teinte un peu plus claire (classe .cue)
+    if(brandStarL) brandStarL.classList.toggle('cue', cat==='jackpot300' || cat==='etb');
+    if(brandStarR) brandStarR.classList.toggle('cue', cat==='jackpot300');
   }
   if(!cueDot) return;
   // Pendant une partie : le lot de cette partie. Dès qu'il est validé
