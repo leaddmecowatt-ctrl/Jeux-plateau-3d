@@ -4436,6 +4436,27 @@ function outcomeCovered(cat){
   if(cost===undefined) return true;
   return totalPaid + cost <= CEILING_RATIO*totalMise + 1e-9;
 }
+/* ---------- Repère discret de l'animateur ----------
+   Un point de 5 px, presque invisible, en bas à gauche de l'écran
+   animateur (jamais sur l'écran public) : doré quand le prochain lot
+   décidé est l'ETB, bleuté quand c'est un coffret. Il s'affiche dès que
+   la partie précédente est terminée (le lot de la suivante est déjà
+   connu), reste pendant les lancers, et s'éteint à la validation. */
+const cueDot = document.getElementById('cueDot');
+function peekNextOutcome(){
+  if(outcomeState.pos >= outcomeState.batch.length) return null;
+  const b = outcomeState.batch, pos = outcomeState.pos;
+  // même règle de couverture qu'au tirage, la mise de la partie à venir comprise
+  const covered = cat => { const c = OUTCOME_COST[cat]; return c===undefined || totalPaid + c <= CEILING_RATIO*(totalMise + AVG_MISE) + 1e-9; };
+  if(covered(b[pos])) return b[pos];
+  for(let j=pos+1;j<b.length;j++) if(covered(b[j])) return b[j];
+  return 'commune';
+}
+function updateCue(){
+  if(!cueDot || isDisplay) return;
+  const cat = pendingOutcome || (currentIndex===-1 && !finished ? peekNextOutcome() : null);
+  cueDot.className = 'cue-dot' + (cat==='jackpot300' ? ' etb' : cat==='etb' ? ' coffret' : '');
+}
 function nextPredeterminedOutcome(){
   if(outcomeState.pos >= outcomeState.batch.length){
     outcomeState = { version: OUTCOME_BATCH_VERSION, batch: buildOutcomeBatch(OUTCOME_BATCH_SIZE), pos: 0 };
@@ -4458,6 +4479,7 @@ function nextPredeterminedOutcome(){
 function resetOutcomeBatch(){
   outcomeState = { version: OUTCOME_BATCH_VERSION, batch: buildOutcomeBatch(OUTCOME_BATCH_SIZE), pos: 0 };
   saveOutcomeState();
+  updateCue();
 }
 
 /* ---------- Mise en scène du tirage : suspense sonore/visuel autour
@@ -5005,10 +5027,12 @@ function restart(){
   player.setWalking(false);
   stopStorm();
   cineEnd();                 // retour à la vue plateau
+  updateCue();
   placeTokenInstant(-1);
   setActive(-1);
   statusEl.textContent = 'Le joueur est prêt sur Départ.';
   updatePlaceBanner(-1, false);
+updateCue();
   topNum.textContent = '—';
   validate.disabled = false;
   if(winBtn) winBtn.hidden = true;
@@ -5040,6 +5064,7 @@ async function drawAndMove(){
     // pré-calculé — les dés qui vont suivre restent honnêtes à
     // l'écran, mais ne décident plus du lot réellement remporté.
     pendingOutcome = nextPredeterminedOutcome();
+    updateCue();
   }
   // On continue plutôt que de garder le lot affiché : l'aperçu (ou le
   // lot validé) de la case précédente s'efface avant le nouveau tirage.
@@ -5241,6 +5266,7 @@ async function claimCurrentLot(){
     }
   }
   pendingOutcome = null;
+  updateCue();
   // Le plafond de reversement continue de calculer et suivre le
   // pourcentage payé exactement comme avant (mêmes 50%, même formule),
   // mais on affiche et on remet toujours le vrai lot de la case tirée,
@@ -5283,6 +5309,7 @@ if(undoBtn) undoBtn.addEventListener('click', ()=>{
   // dans tous les cas la mise reprend son lot décidé d'avance : les
   // lancers suivants restent pipés vers sa case
   pendingOutcome = lastWinUndo.pending || null;
+  updateCue();
   if(!finished) validate.disabled = (rollsUsed>=rollsAllowed);
   clearWinUndo();
   updateWinButton();
