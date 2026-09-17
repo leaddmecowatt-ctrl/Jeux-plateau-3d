@@ -4453,8 +4453,24 @@ function peekNextOutcome(){
   for(let j=pos+1;j<b.length;j++) if(covered(b[j])) return b[j];
   return 'commune';
 }
+/* Le repère principal est dans le titre « ★ PIKAPOLY ★ » tout en haut :
+   une étoile à 4 branches (✦) à la place de l'étoile classique (★).
+   Les deux étoiles changent pour l'ETB, seule celle de gauche pour un
+   coffret. Un spectateur n'y voit qu'un ornement ; l'animateur, qui
+   sait où regarder, le voit au premier coup d'œil. Jamais sur l'écran
+   public (isDisplay). */
+const brandStarL = document.getElementById('brandStarL');
+const brandStarR = document.getElementById('brandStarR');
 function updateCue(){
-  if(!cueDot || isDisplay) return;
+  if(isDisplay) return;
+  {
+    const cat = pendingOutcome || peekNextOutcome();
+    const l = (cat==='jackpot300' || cat==='etb') ? '✦' : '★';
+    const r = cat==='jackpot300' ? '✦' : '★';
+    if(brandStarL && brandStarL.textContent !== l) brandStarL.textContent = l;
+    if(brandStarR && brandStarR.textContent !== r) brandStarR.textContent = r;
+  }
+  if(!cueDot) return;
   // Pendant une partie : le lot de cette partie. Dès qu'il est validé
   // (ou avant le premier lancer) : le lot de la partie SUIVANTE, déjà
   // en tête de file — l'animateur le sait avant d'appuyer sur C.
