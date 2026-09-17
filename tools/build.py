@@ -319,7 +319,8 @@ def build(out_path):
     )
     assert '<script>\n(function' in body, "build.py: could not find the board3d.js <script type=module> tag to replace"
 
-    out = ('<!doctype html>\n<html lang="fr">\n' + head + '\n<body>' + body + '</body>\n</html>\n')
+    html_tag = re.search(r'<html[^>]*>', html).group(0)   # garde data-rot & co
+    out = ('<!doctype html>\n' + html_tag + '\n' + head + '\n<body>' + body + '</body>\n</html>\n')
     # GLTFLoader embarque deux images de test (AVIF et WebP, 1 px) pour
     # détecter les formats supportés. Ces types ne passent pas la
     # vérification du partage public des artefacts. On ne se sert d'aucune

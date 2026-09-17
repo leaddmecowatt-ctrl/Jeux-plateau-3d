@@ -5492,9 +5492,13 @@ function applyRotation(deg){
   setTimeout(()=>{ resize(); resizeCelebCanvas(); }, 30);
 }
 {
+  // Priorité : ?rot= dans l'adresse > choix mémorisé (R / Pivoter) >
+  // data-rot posé sur <html> (version « télé verticale » livrée déjà
+  // pivotée) > image droite.
   const q = new URLSearchParams(location.search).get('rot');
   const saved = parseInt(safeGetItem(ROT_KEY), 10);
-  applyRotation(q != null ? parseInt(q, 10) : (isNaN(saved) ? 0 : saved));
+  const preset = parseInt(document.documentElement.dataset.rot || '', 10);
+  applyRotation(q != null ? parseInt(q, 10) : !isNaN(saved) ? saved : !isNaN(preset) ? preset : 0);
 }
 /* Boutons écran : visibles au mouvement de la souris, effacés après 4 s. */
 const screenBtns = document.getElementById('screenBtns');
