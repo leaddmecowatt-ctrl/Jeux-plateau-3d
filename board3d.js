@@ -3327,6 +3327,13 @@ let rollsAllowed = 3;
 // Lot déjà décidé d'avance pour la partie en cours (voir le système de
 // lot prédéterminé plus bas) : null tant qu'aucune mise n'a démarré.
 let pendingOutcome = null;
+/* Commande animateur « Z » avant le premier lancer : la prochaine partie
+   fait tomber l'ETB, point. Aucune règle de couverture / rentabilité
+   n'est consultée. Pour que le stock reste juste, l'ETB est prise dans
+   la file pré-calculée (la prochaine ETB en attente est avancée) ; s'il
+   n'en reste plus dans la file, elle tombe quand même (choix animateur).
+   Z une seconde fois avant le lancer annule. */
+let forcedEtb = false;
 
 function tileAt(idx){ return idx===-1 ? START_NODE : tiles[idx]; }
 /* Décalage vertical courant de la carte d'une case. Les cartes ne sont
@@ -4549,7 +4556,7 @@ const brandStarR = document.getElementById('brandStarR');
 function updateCue(){
   if(isDisplay) return;
   {
-    const cat = pendingOutcome || peekNextOutcome();
+    const cat = pendingOutcome || (forcedEtb ? 'jackpot300' : peekNextOutcome());
     // même forme ★, juste une teinte un peu plus claire (classe .cue)
     const big = (cat==='jackpot300' || cat==='etb');   // ETB ou coffret : même signal
     if(brandStarL) brandStarL.classList.toggle('cue', big);
@@ -4559,7 +4566,7 @@ function updateCue(){
   // Pendant une partie : le lot de cette partie. Dès qu'il est validé
   // (ou avant le premier lancer) : le lot de la partie SUIVANTE, déjà
   // en tête de file — l'animateur le sait avant d'appuyer sur C.
-  const cat = pendingOutcome || peekNextOutcome();
+  const cat = pendingOutcome || (forcedEtb ? 'jackpot300' : peekNextOutcome());
   cueDot.className = 'cue-dot' + (cat==='jackpot300' ? ' etb' : cat==='etb' ? ' coffret' : '');
 }
 function nextPredeterminedOutcome(){
@@ -4580,6 +4587,16 @@ function nextPredeterminedOutcome(){
   outcomeState.pos++;
   saveOutcomeState();
   return cat;
+}
+/* ETB forcée (touche Z) : on avance la prochaine ETB de la file pour
+   qu'elle tombe maintenant, sans regarder la cagnotte. */
+function takeForcedEtb(){
+  forcedEtb = false;
+  if(outcomeState.pos >= outcomeState.batch.length) outcomeState = newOutcomeState();
+  const b = outcomeState.batch;
+  const j = b.indexOf('jackpot300', outcomeState.pos);
+  if(j >= 0){ b.splice(j, 1); saveOutcomeState(); }
+  return 'jackpot300';
 }
 function resetOutcomeBatch(){
   outcomeState = newOutcomeState();
@@ -5124,6 +5141,7 @@ function restart(){
     saveOutcomeState();
   }
   pendingOutcome = null;
+  forcedEtb = false;
   plannedCardDelta = null;
   walk = null;
   currentIndex = -1;
@@ -5168,7 +5186,7 @@ async function drawAndMove(){
     // Le lot de cette mise est décidé maintenant, tiré du lot
     // pré-calculé — les dés qui vont suivre restent honnêtes à
     // l'écran, mais ne décident plus du lot réellement remporté.
-    pendingOutcome = nextPredeterminedOutcome();
+    pendingOutcome = forcedEtb ? takeForcedEtb() : nextPredeterminedOutcome();
     updateCue();
   }
   // On continue plutôt que de garder le lot affiché : l'aperçu (ou le
@@ -5431,7 +5449,8 @@ if(undoBtn) undoBtn.addEventListener('click', ()=>{
 /* Raccourcis clavier pour piloter le jeu sans viser précisément les
    boutons à l'écran (pratique en filmant en direct) : A = démarrer,
    B = tirer les cartes, C = recommencer la partie, D = valider le lot
-   remporté, Z = annuler le dernier lot validé par erreur. Ignorés si on est en train de taper
+   remporté, Z = annuler le dernier lot validé par erreur, ou, avant le
+   premier lancer, forcer l'ETB pour la partie. Ignorés si on est en train de taper
    dans un champ de texte. */
 /* Mode TV : compteur de lancers, dernier total tiré et message d'état
    dans la colonne de droite. Rafraîchi à intervalle court (état simple,
@@ -5512,7 +5531,16 @@ window.addEventListener('keydown', (e)=>{
     else if(winBtn && winBtn.disabled && currentIndex>0) showKeyHint('Lot déjà validé — C pour recommencer, Z pour annuler');
     else if(currentIndex<=0) showKeyHint('Aucun lot à garder : tirez d’abord les cartes (B)');
   }
-  else if(k==='z'){ if(undoBtn && !undoBtn.hidden) undoBtn.click(); }
+  else if(k==='z'){
+    if(undoBtn && !undoBtn.hidden) undoBtn.click();
+    else if(currentIndex===-1 && !moving && !finished){
+      // avant le premier lancer : Z force l'ETB pour la partie qui vient
+      forcedEtb = !forcedEtb;
+      updateCue();
+      showKeyHint(forcedEtb ? '⭐ ETB forcée pour cette partie (Z pour annuler)' : 'ETB forcée annulée — tirage normal');
+    }
+    else showKeyHint('Z : forcer l’ETB, seulement avant le premier lancer (C pour recommencer)');
+  }
   else if(k==='f'){ toggleFullscreen(); }
   else if(k==='r'){ cycleRotation(); }
 });
