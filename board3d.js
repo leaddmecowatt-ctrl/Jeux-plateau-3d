@@ -6099,12 +6099,17 @@ function clearCelebration(){
 }
 
 /* Aperçu du lot dès l'arrivée sur la case, avant toute décision de le
-   garder ou de continuer : juste la photo, en grand, sans confettis,
-   qui s'efface toute seule après quelques secondes pour laisser les
-   boutons "TIRER LES CARTES" / "LOT REMPORTÉ" bien dégagés — un
-   nouveau tirage l'efface aussi immédiatement s'il arrive avant.
-   Si le lot est validé entre-temps, celebrate() le verrouille à
-   l'écran (celebLocked) et cet effacement automatique est annulé. */
+   garder ou de continuer : juste la photo, en grand, sans confettis.
+   Il RESTE à l'écran : le public doit pouvoir regarder le lot aussi
+   longtemps que l'animateur le commente. Trois choses seulement le
+   font disparaître, toutes déclenchées par l'animateur :
+     - relancer un tirage (bouton TIRER LES CARTES, ou touche B), qui
+       passe par clearCelebration() avant de tirer ;
+     - garder le lot (LOT REMPORTÉ), qui le verrouille à l'écran ;
+     - RECOMMENCER.
+   Il s'effaçait auparavant tout seul après 2,6 s, pour dégager les
+   boutons — mais l'overlay est en pointer-events:none, il n'a jamais
+   gêné un clic. */
 let previewGen = 0;
 function showLotPreview(catKey){
   if(!celeb || !celebCanvas) return;
@@ -6122,10 +6127,7 @@ function showLotPreview(catKey){
   if(celebSub) celebSub.hidden = true;
   if(celebPhoto){ celebPhoto.src = url; celebPhoto.hidden = false; }
   celeb.classList.add('show');
-  const myPreviewGen = ++previewGen;
-  setTimeout(()=>{
-    if(myPreviewGen===previewGen && !celebLocked) celeb.classList.remove('show','flip','rare-card');
-  }, 2600);
+  previewGen++;
 }
 
 /* Annonce propre à chaque catégorie de lot (plutôt qu'un message
@@ -6191,7 +6193,13 @@ async function playMysteryReveal(sub){
   mysteryShade.style.transform = shadeAt(pos);
   mysteryShade.style.opacity = '1';
   await wait(120);
-  const hops = reduceMotion ? [200] : [110,110,120,135,155,180,215,260,320,400,520];
+  // Nombre de sauts IMPAIR : partie de la carte gagnante, l'ombre finit
+  // donc sur l'autre. La fin de course était trop étirée — les trois
+  // derniers sauts duraient 1,24 s à eux seuls et le dernier 520 ms, ce
+  // qui donnait l'impression que l'ombre restait bloquée sur une carte
+  // avant l'annonce. Le ralenti est conservé, mais resserré : dernier
+  // saut à 350 ms, et ~2,4 s de suspense au lieu de ~2,8 s.
+  const hops = reduceMotion ? [200] : [95,100,110,125,145,170,200,230,265,305,350];
   for(const d of hops){
     pos = 1 - pos;
     mysteryShade.style.transition = 'transform ' + d + 'ms cubic-bezier(.3,.6,.3,1)';
