@@ -6172,12 +6172,26 @@ function celebFrame(){
   }
 }
 
-function clearCelebration(){
-  celebGen++;
+/* Arrête net la boucle de confettis et efface ce qu'elle a laissé peint.
+   Deux raisons de passer par ici plutôt que d'annuler la boucle à la
+   main : celebFrame() nettoie son canvas au DÉBUT de chaque image, donc
+   une boucle annulée sans ce coup de gomme laisse sa dernière image
+   figée à l'écran ; et surtout la boucle, en se terminant, retire
+   elle-même la classe 'show' quand rien ne la verrouille — un reliquat
+   de célébration encore en vol peut donc effacer ce qui vient d'être
+   affiché à sa place. */
+function stopCelebLoop(){
   if(celebRAF) cancelAnimationFrame(celebRAF);
   celebRAF = null;
   celebParticles = [];
   celebRockets = [];
+  celebEndAt = 0;
+  if(celebCtx && celebCanvas) celebCtx.clearRect(0,0,celebCanvas.width,celebCanvas.height);
+}
+
+function clearCelebration(){
+  celebGen++;
+  stopCelebLoop();
   celebLocked = false;
   hypeGen++;
   if(celeb) celeb.classList.remove('show','shake','flip','rare-card','big');
@@ -6205,6 +6219,13 @@ function showLotPreview(catKey){
   // plus pouvoir s'afficher par-dessus cette nouvelle case.
   celebGen++;
   celebLocked = false;
+  /* La célébration du lot précédent peut avoir laissé ses confettis en
+     vol. Comme l'aperçu vient juste de remettre celebLocked à false,
+     la fin de cette boucle-là retirerait la classe 'show' et effacerait
+     l'aperçu tout juste affiché — quelques secondes après l'arrivée sur
+     la case, sans que rien ne l'ait demandé. On reprend donc la surface
+     proprement avant de l'utiliser. */
+  stopCelebLoop();
   celeb.dataset.level = '';
   celeb.classList.remove('shake','big');
   hypeGen++;
