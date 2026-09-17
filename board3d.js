@@ -66,12 +66,12 @@ function outwardYaw(r,c){
    ========================================================================= */
 const CATS = {
   commune:     { label:'Pioche du Prof. Chen',        value:'~0,68€',  tier:'flat',  swatch:'bronze' },
-  booster8:    { label:'Booster du Marchand 30 ans',  value:'8€',      tier:'float', swatch:'blue'   },
+  booster8:    { label:'Booster du Marchand 30 ans',  value:'~17€',    tier:'float', swatch:'blue'   },
   alternative: { label:'Zone Safari',                 value:'~7,20€',  tier:'flat',  swatch:'red'    },
-  gradee:      { label:'Duopack 30 ans',              value:'20-80€',  tier:'float', swatch:'teal'   },
-  booster50:   { label:'Tripack 30 ans',              value:'50€',     tier:'float', swatch:'rose'   },
-  etb:         { label:'Coffret 30 ans',              value:'150€',    tier:'float', swatch:'orange' },
-  jackpot300:  { label:'ETB 30 ans',                  value:'300€',    tier:'float', swatch:'jackpot'},
+  gradee:      { label:'Duopack 30 ans',              value:'~30€',    tier:'float', swatch:'teal'   },
+  booster50:   { label:'Tripack 30 ans',              value:'~58€',    tier:'float', swatch:'rose'   },
+  etb:         { label:'Coffret 30 ans',              value:'~85€',    tier:'float', swatch:'orange' },
+  jackpot300:  { label:'ETB 30 ans',                  value:'~190€',   tier:'float', swatch:'jackpot'},
   chance:      { label:'Chance',                     value:'tirage',  tier:'glyph', swatch:'purple' },
   chest:       { label:'Caisse Communautaire',       value:'tirage',  tier:'glyph', swatch:'green'  },
   prison:      { label:'Prison',                     value:'0€',      tier:'glyph', swatch:'danger' },
@@ -3903,8 +3903,8 @@ const TOTAL_PAID_KEY = 'pika_total_paid';
    (OUTCOME_RECIPE) sont une affaire séparée, réglable sans toucher à
    cette garantie. */
 const AVG_MISE = 9;              // mise moyenne (euros)
-const CA_CYCLE = 3000;           // chiffre d'affaires d'un cycle (euros)
-const MARGIN_TARGET = 0.35;      // marge garantie sur le cycle et à chaque instant
+const CA_CYCLE = 4500;           // chiffre d'affaires d'un cycle (euros) : tout le stock 30 ans
+const MARGIN_TARGET = 0.26;      // marge garantie sur le cycle et à chaque instant, lots comptés à leur VALEUR MARCHÉ (revente)
 const CEILING_RATIO = 1 - MARGIN_TARGET;  // part maximale reversée (dérivée, ne pas régler ici)
 let totalMise = parseFloat(safeGetItem(TOTAL_MISE_KEY)) || 0;
 let totalPaid = parseFloat(safeGetItem(TOTAL_PAID_KEY)) || 0;
@@ -3942,13 +3942,17 @@ if(resetBankBtn) resetBankBtn.addEventListener('click', ()=>{
 /* Paliers du plus cher au moins cher : un lot qui ferait dépasser le
    plafond de reversement cumulé redescend au premier palier qui
    passe encore sous ce plafond. */
+/* Coût de chaque lot = sa VALEUR MARCHÉ (revente constatée à la sortie,
+   16/09/2026), volontairement plus sévère que le prix d'achat réel
+   (stock complet payé ~1 200 €) : la marge garantie ici est donc une
+   marge « même si on comptait les lots à ce qu'ils valent sur Vinted ». */
 const PAYOUT_LADDER = [
-  { cat:'jackpot300', cost:300 },
-  { cat:'etb',         cost:150 },
-  { cat:'booster50',   cost:50  },
-  { cat:'gradee',      cost:26  },
-  { cat:'booster8',    cost:8   },
-  { cat:'alternative', cost:7.2 },
+  { cat:'jackpot300', cost:190 },   // ETB 30 ans
+  { cat:'etb',         cost:85  },   // Coffret Amphinobi-ex / Nymphali-ex
+  { cat:'booster50',   cost:58  },   // Tripack 30 ans
+  { cat:'gradee',      cost:30  },   // Duopack 30 ans
+  { cat:'booster8',    cost:17  },   // Booster 30 ans
+  { cat:'alternative', cost:7.2 },   // Zone Safari (ou carte promo/jumbo 30 ans issue des coffrets ouverts)
   { cat:'commune',     cost:0.68 },
 ];
 const LADDER_IDX = {};
@@ -3984,21 +3988,25 @@ function fundedCategory(catKey){
    au lot déjà décidé, pour que la photo affichée corresponde toujours
    exactement à la case sur laquelle il est posé. */
 const OUTCOME_BATCH_KEY = 'pika_outcome_batch';
-const OUTCOME_BATCH_SIZE = Math.round(CA_CYCLE/AVG_MISE);   // 333 parties = un cycle de 3000 €
-/* Nombre de lots de chaque sorte PAR CYCLE de 333 parties (3000 €).
-   Recette retenue avec l'hôte : gradée fréquente (5 %), communes 61 %,
-   marge 35 %. Total 1928 € pour un plafond de 1950 €.
+const OUTCOME_BATCH_SIZE = Math.round(CA_CYCLE/AVG_MISE);   // 500 parties = un cycle de 4500 €
+/* Nombre de lots de chaque sorte PAR CYCLE de 500 parties (4500 €) :
+   un cycle = TOUT le stock 30 ans de l'hôte (5 ETB, 10 coffrets dont 8
+   ouverts en 32 boosters + 16 promos/jumbos, 5 tripacks, 5 duopacks).
+   Recette retenue avec l'hôte : 1 partie sur 8 gagne un 30 ans, communes
+   60 %, Zone Safari 27 % (dont les 16 promos/jumbos, remises par
+   l'animateur), marge 27 % à la valeur marché (~48 % sur le prix payé).
+   Total 3297 € pour un plafond de 3330 €.
    Chance et Caisse ne sont pas des lots : ce sont des détours (la carte
    amène sur la case du lot prévu), voir CARD_ROUTE_P. */
 const OUTCOME_RECIPE = [
-  { cat:'jackpot300',  n:1  },
-  { cat:'etb',         n:1  },
-  { cat:'booster50',   n:3  },
-  { cat:'gradee',      n:17 },
-  { cat:'booster8',    n:44 },
-  { cat:'alternative', n:54 },
+  { cat:'jackpot300',  n:5   },   // ETB 30 ans
+  { cat:'etb',         n:2   },   // Coffret ex (1 Amphinobi, 1 Nymphali)
+  { cat:'booster50',   n:5   },   // Tripack 30 ans
+  { cat:'gradee',      n:5   },   // Duopack 30 ans
+  { cat:'booster8',    n:32  },   // Booster 30 ans
+  { cat:'alternative', n:136 },   // Zone Safari (120) + promos/jumbos 30 ans (16)
   // Prison : fin de partie immédiate, carte commune de consolation
-  { cat:'prison',      n:10 },
+  { cat:'prison',      n:15  },
 ];
 
 // Coût réel de chaque catégorie (PAYOUT_LADDER + prison, qui n'y
@@ -4146,7 +4154,7 @@ function buildOutcomeBatch(size){
 /* Version de la file. Une file laissée en mémoire du navigateur par une
    version précédente du jeu (autre recette, autre ordonnancement) n'a
    pas les mêmes garanties : elle est reconstruite. */
-const OUTCOME_BATCH_VERSION = 'v5-cycle3000-marge35-detours';
+const OUTCOME_BATCH_VERSION = 'v6-cycle4500-stock30ans';
 function loadOutcomeState(){
   try{
     const raw = safeGetItem(OUTCOME_BATCH_KEY);
@@ -4846,7 +4854,7 @@ const NEUTRAL_FORBIDDEN = new Set(['chance','chest','prison']);
 // Détours par Chance/Caisse : déplacements possibles de la carte, et part
 // des arrivées qui passent par un détour quand c'est possible
 const CARD_DELTAS = [1,2,3,4,5,6,-1,-2,-3];
-const INTERMEDIATE_MAX_COST = 8;   // booster 8 € au maximum en cours de route
+const INTERMEDIATE_MAX_COST = 17;  // booster (17 €) au maximum en cours de route
 let CARD_ROUTE_P = 0.08;
 const DICE_W = {2:1,3:2,4:3,5:4,6:5,7:6,8:5,9:4,10:3,11:2,12:1};
 function landable(idx, targetCat){
@@ -4967,12 +4975,13 @@ async function claimCurrentLot(){
     /* Le joueur s'arrête avant que les dés aient amené le pion sur la
        case prévue (règle « je garde ou je relance »). Le lot de sa case
        est moins cher, par construction. Le lot décidé d'avance :
-         • retourne en tête de file s'il est GROS (≥ 50 €) — il doit tomber
-           quoi qu'il arrive — ou si le joueur n'a pris qu'une commune ;
+         • retourne en tête de file s'il est un PRODUIT SCELLÉ du stock
+           (≥ 30 € : duopack, tripack, coffret, ETB) — il doit tomber quoi
+           qu'il arrive — ou si le joueur n'a pris qu'une commune ;
          • est consommé sinon : le joueur a préféré un booster sûr à une
            chance de gradée. Le remettre en file ferait payer les deux,
            et la marge ne tiendrait plus. */
-    const big = (OUTCOME_COST[pendingOutcome]||0) >= 50;
+    const big = (OUTCOME_COST[pendingOutcome]||0) >= 30;
     const cheap = (OUTCOME_COST[realCat]||0) < 5;
     if(big || cheap){
       outcomeState.batch.splice(outcomeState.pos, 0, pendingOutcome);
