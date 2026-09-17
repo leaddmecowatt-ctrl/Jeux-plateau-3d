@@ -5503,8 +5503,8 @@ if(undoBtn) undoBtn.addEventListener('click', ()=>{
 /* Raccourcis clavier pour piloter le jeu sans viser précisément les
    boutons à l'écran (pratique en filmant en direct) : A = démarrer,
    B = tirer les cartes, C = recommencer la partie, D = valider le lot
-   remporté, Z = annuler le dernier lot validé par erreur, ou, avant le
-   premier lancer, forcer l'ETB pour la partie ; M = forcer le Tripack ;
+   remporté, Z (avant le premier lancer) = forcer l'ETB pour la partie ;
+   M = forcer le Tripack ;
    chiffres 1-6 = forcer le lot n° 1 à 6 (ETB, Coffret, Tripack, Duopack,
    Booster, Lot Mystère). Ignorés si on est en train de taper
    dans un champ de texte. */
@@ -5588,13 +5588,14 @@ window.addEventListener('keydown', (e)=>{
     if(winBtn && !winBtn.hidden && !winBtn.disabled) winBtn.click();
     else if(drawing) showKeyHint('⏳ Attendez l’arrivée du personnage, puis appuyez sur D');
     else if(moving){ claimKeyAt = performance.now(); showKeyHint('⏳ Le lot sera gardé dès l’arrivée du personnage'); }
-    else if(winBtn && winBtn.disabled && currentIndex>0) showKeyHint('Lot déjà validé — C pour recommencer, Z pour annuler');
+    else if(winBtn && winBtn.disabled && currentIndex>0) showKeyHint('Lot déjà validé — C pour recommencer');
     else if(currentIndex<=0) showKeyHint('Aucun lot à garder : tirez d’abord les cartes (B)');
   }
   else if(forceKeyFor(e)){
     const fk = forceKeyFor(e);
-    if(k==='z' && undoBtn && !undoBtn.hidden) undoBtn.click();
-    else if(currentIndex===-1 && !moving && !finished){
+    // Z n'annule plus le dernier lot (retiré à la demande de l'animateur) :
+    // l'annulation reste possible avec le bouton « Annuler » à l'écran.
+    if(currentIndex===-1 && !moving && !finished){
       // avant le premier lancer : le lot de la touche tombera dans la partie
       // qui vient. AUCUN texte à l'écran (les joueurs ne doivent rien voir) :
       // seul le point discret en bas à gauche (blanc) confirme à l'animateur.
