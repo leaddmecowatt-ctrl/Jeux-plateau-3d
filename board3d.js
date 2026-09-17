@@ -3564,7 +3564,9 @@ function updateSparkles(dt){
    pendant un lancer de dé. */
 let ambientSparkleTimer = 0;
 function updateAmbientSparkles(dt){
-  if(reduceMotion) return;
+  // mode éco : pas d'étincelles d'ambiance en continu (décoration pure,
+  // et chaque étincelle est un sprite transparent de plus à dessiner)
+  if(reduceMotion || ecoMode) return;
   ambientSparkleTimer -= dt;
   if(ambientSparkleTimer <= 0){
     ambientSparkleTimer = 0.28 + Math.random()*0.35;
@@ -3719,10 +3721,11 @@ function frameStep(dt, t){
   updateStorm(t, dt);
   updateAmbientSparkles(dt);
 
-  trimLights.forEach(tl=>{
+  // en mode éco les loupiotes sont masquées : inutile de les animer
+  if(!ecoMode) trimLights.forEach(tl=>{
     tl.spr.material.opacity = reduceMotion ? 0.5 : 0.28 + 0.45*Math.max(0, Math.sin(t*2.2 - tl.idx*0.5));
   });
-  if(!reduceMotion){
+  if(!reduceMotion && !ecoMode){
     orbiterLights.forEach(ol=>{
       const u = (t*0.06 + ol.offset) % 1;
       const [x,z] = perimeterPosAt(u);
@@ -4143,7 +4146,29 @@ function frameStep(dt, t){
      3. bloom en quart de résolution
    Le jeu, les règles, les animations et les lots ne changent pas. */
 const QUALITY = { level:0, samples:0, slow:0, last:0, armedAt:0 };
-const QUALITY_LEVELS = 4;
+const QUALITY_LEVELS = 5;
+/* Cran 5, « mode éco » — pour les téléphones et les petites configs, où
+   la cadence restait mauvaise même tout en bas de l'échelle précédente.
+   Mesuré sur la scène : 380 appels de dessin par image, dont 117 sprites
+   décoratifs en fondu additif (liseré de loupiotes, loupiotes qui
+   tournent, étincelles) et 43 objets qui projettent une ombre. Ce cran
+   coupe les trois postes les plus chers :
+     - le flou lumineux, à lui seul ~17x le coût du reste du rendu ;
+     - la passe d'ombres (43 objets redessinés une seconde fois) ;
+     - les sprites décoratifs, tous transparents donc triés et redessinés
+       sans test de profondeur.
+   Le plateau, le pion, les lots et toutes les règles du jeu restent
+   identiques : on retire de la décoration, jamais du jeu. */
+let ecoMode = false;
+function setEcoMode(on){
+  if(ecoMode === on) return;
+  ecoMode = on;
+  if(bloomPass) bloomPass.enabled = !on;
+  renderer.shadowMap.enabled = !on;
+  trimLights.forEach(tl=>{ tl.spr.visible = !on; });
+  orbiterLights.forEach(ol=>{ ol.spr.visible = !on; });
+  scene.traverse(o=>{ if(o.material){ (Array.isArray(o.material)?o.material:[o.material]).forEach(m=>{ m.needsUpdate = true; }); } });
+}
 /* Crans supplémentaires (portable + grand écran) :
      2. ombres PCF simples (au lieu de PCF « douces », ~2x moins de
         lectures de texture par pixel du plateau) — même lumière, même
@@ -4157,25 +4182,48 @@ function setShadowSoft(soft){
 }
 function applyQuality(level){
   QUALITY.level = level;
-  const dpr = level>=4 ? 0.85 : level>=2 ? 1 : level>=1 ? Math.min(DPR_MAX, 1.25) : DPR_MAX;
+  const dpr = level>=5 ? 0.75 : level>=4 ? 0.85 : level>=2 ? 1 : level>=1 ? Math.min(DPR_MAX, 1.25) : DPR_MAX;
   if(renderer.getPixelRatio() !== dpr) renderer.setPixelRatio(dpr);
-  setShadowSoft(level < 2);
+  setEcoMode(level >= 5);
+  if(!ecoMode) setShadowSoft(level < 2);
   resize();
 }
 function bloomScaleForLevel(level){ return level>=3 ? 0.25 : 0.5; }
 function qualityTick(realDt, now){
-  if(QUALITY.level >= QUALITY_LEVELS) return;
-  if(!QUALITY.armedAt){ QUALITY.armedAt = now + 2; return; }   // 2 s de grâce (chargement)
+  if(QUALITY.locked || QUALITY.level >= QUALITY_LEVELS) return;
+  if(!QUALITY.armedAt){ QUALITY.armedAt = now + 1.2; return; } // 1,2 s de grâce (chargement)
   if(now < QUALITY.armedAt) return;
   QUALITY.samples++;
   if(realDt > 1/45) QUALITY.slow++;
-  if(QUALITY.samples >= 60){                       // ~1,5 s à 40 i/s
-    if(QUALITY.slow > QUALITY.samples*0.5 && now - QUALITY.last > 2){
+  // Réaction volontairement rapide : à l'échelle précédente (60 mesures,
+  // 2 s d'attente entre deux crans) il fallait une dizaine de secondes
+  // pour atteindre le bas de l'échelle. Sur un téléphone, ces dix
+  // secondes sont exactement le moment où l'animateur lance sa partie.
+  if(QUALITY.samples >= 24){                       // ~0,6 s à 40 i/s
+    if(QUALITY.slow > QUALITY.samples*0.5 && now - QUALITY.last > 0.8){
       QUALITY.last = now;
       applyQuality(QUALITY.level + 1);
     }
     QUALITY.samples = 0; QUALITY.slow = 0;
   }
+}
+
+/* Cran de départ, sans attendre de voir la cadence s'effondrer :
+     - ?q=0..5 dans l'adresse impose un cran (0 = tout allumé,
+       5 = mode éco) — pratique pour comparer, et pour figer un réglage
+       connu avant un live ;
+     - sinon un écran de téléphone démarre déjà bas. L'échelle
+       automatique fait le reste dans les deux sens... vers le bas. */
+{
+  const q = parseInt(new URLSearchParams(location.search).get('q'), 10);
+  const petitEcran = Math.min(window.innerWidth, window.innerHeight) <= 520;
+  const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+  if(!isNaN(q)){
+    // réglage imposé : il ne bouge plus, même si la cadence baisse
+    applyQuality(Math.max(0, Math.min(QUALITY_LEVELS, q)));
+    QUALITY.locked = true;
+  }
+  else if(petitEcran || mobile) applyQuality(3);
 }
 let _lastFrameAt = 0;
 function animate(){
