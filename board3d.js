@@ -4611,7 +4611,9 @@ function updateCue(){
   // (ou avant le premier lancer) : le lot de la partie SUIVANTE, déjà
   // en tête de file — l'animateur le sait avant d'appuyer sur C.
   const cat = pendingOutcome || (forcedCat || peekNextOutcome());
-  cueDot.className = 'cue-dot' + (cat==='jackpot300' ? ' etb' : cat==='etb' ? ' coffret' : '');
+  // point blanc = un lot est programmé (touche 1-6 / Z / M) pour cette partie
+  const forcedNow = !!forcedCat || forcedGame;
+  cueDot.className = 'cue-dot' + (cat==='jackpot300' ? ' etb' : cat==='etb' ? ' coffret' : '') + (forcedNow ? ' forced' : '');
 }
 function nextPredeterminedOutcome(){
   if(outcomeState.pos >= outcomeState.batch.length){
@@ -5593,12 +5595,13 @@ window.addEventListener('keydown', (e)=>{
     const fk = forceKeyFor(e);
     if(k==='z' && undoBtn && !undoBtn.hidden) undoBtn.click();
     else if(currentIndex===-1 && !moving && !finished){
-      // avant le premier lancer : le lot de la touche tombera dans la partie qui vient
+      // avant le premier lancer : le lot de la touche tombera dans la partie
+      // qui vient. AUCUN texte à l'écran (les joueurs ne doivent rien voir) :
+      // seul le point discret en bas à gauche (blanc) confirme à l'animateur.
       forcedCat = (forcedCat === fk.cat) ? null : fk.cat;
       updateCue();
-      showKeyHint(forcedCat ? '⭐ ' + fk.name + ' forcé pour cette partie (' + fk.key + ' pour annuler)' : fk.name + ' forcé annulé — tirage normal');
     }
-    else showKeyHint(fk.key + ' : forcer « ' + fk.name + ' », seulement avant le premier lancer (C pour recommencer)');
+    // touche pressée au mauvais moment : silence, rien à l'écran
   }
   else if(k==='f'){ toggleFullscreen(); }
   else if(k==='r'){ cycleRotation(); }
