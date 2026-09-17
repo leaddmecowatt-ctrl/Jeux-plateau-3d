@@ -67,7 +67,7 @@ function outwardYaw(r,c){
 const CATS = {
   commune:     { label:'Pioche du Prof. Chen',        value:'~0,68€',  tier:'flat',  swatch:'bronze' },
   booster8:    { label:'Booster du Marchand 30 ans',  value:'~17€',    tier:'float', swatch:'blue'   },
-  alternative: { label:'Zone Safari',                 value:'~7,20€',  tier:'flat',  swatch:'red'    },
+  alternative: { label:'Lot Mystère',                 value:'~7,20€',  tier:'flat',  swatch:'red'    },
   gradee:      { label:'Duopack 30 ans',              value:'~30€',    tier:'float', swatch:'teal'   },
   booster50:   { label:'Tripack 30 ans',              value:'~58€',    tier:'float', swatch:'rose'   },
   etb:         { label:'Coffret 30 ans',              value:'~85€',    tier:'float', swatch:'orange' },
@@ -190,6 +190,9 @@ const LOT_IMAGE_URLS = {
   booster50:  './assets/lots/booster50.jpg',
   etb:        './assets/lots/etb150.jpg',
   jackpot300: './assets/lots/jackpot300.jpg',
+  // Lot mystère (case « Zone Safari ») : les deux issues possibles
+  mystBooster:'./assets/lots/mystere_booster.jpg',
+  mystCarte:  './assets/lots/mystere_carte.jpg',
 };
 function loadImage(url){
   return new Promise((resolve)=>{
@@ -4404,7 +4407,7 @@ function buildOutcomeBatch(size){
 /* Version de la file. Une file laissée en mémoire du navigateur par une
    version précédente du jeu (autre recette, autre ordonnancement) n'a
    pas les mêmes garanties : elle est reconstruite. */
-const OUTCOME_BATCH_VERSION = 'v8-cycle4500-stock28';
+const OUTCOME_BATCH_VERSION = 'v9-lot-mystere';
 function loadOutcomeState(){
   try{
     const raw = safeGetItem(OUTCOME_BATCH_KEY);
@@ -4416,7 +4419,33 @@ function loadOutcomeState(){
       }
     }
   }catch(e){}
-  return { version: OUTCOME_BATCH_VERSION, batch: buildOutcomeBatch(OUTCOME_BATCH_SIZE), pos: 0 };
+  return newOutcomeState();
+}
+/* ---------- Lot mystère ----------
+   La case « Lot Mystère » (catégorie alternative) donne soit un booster,
+   soit une carte rare. L'hôte n'a que MYSTERY_BOOSTERS boosters par
+   cycle : le tirage booster/carte est calibré pour en donner EXACTEMENT
+   ce nombre sur les lots mystère du cycle (probabilité = boosters
+   restants / lots mystère restants), jamais plus. Compteurs persistés
+   avec la file. */
+const MYSTERY_BOOSTERS = 30;
+function newOutcomeState(){
+  const batch = buildOutcomeBatch(OUTCOME_BATCH_SIZE);
+  const mystN = batch.filter(c=>c==='alternative').length;
+  return { version: OUTCOME_BATCH_VERSION, batch, pos: 0, mystN, mystB: Math.min(MYSTERY_BOOSTERS, mystN) };
+}
+function drawMysterySub(){
+  const st = outcomeState;
+  if(typeof st.mystN !== 'number' || typeof st.mystB !== 'number'){
+    st.mystN = st.batch.slice(st.pos).filter(c=>c==='alternative').length + 1;
+    st.mystB = Math.min(MYSTERY_BOOSTERS, st.mystN);
+  }
+  const p = st.mystN > 0 ? st.mystB/st.mystN : 0;
+  const sub = Math.random() < p ? 'booster' : 'carte';
+  st.mystN = Math.max(0, st.mystN - 1);
+  if(sub === 'booster') st.mystB = Math.max(0, st.mystB - 1);
+  saveOutcomeState();
+  return sub;
 }
 let outcomeState = loadOutcomeState();
 function saveOutcomeState(){
@@ -4479,7 +4508,7 @@ function updateCue(){
 }
 function nextPredeterminedOutcome(){
   if(outcomeState.pos >= outcomeState.batch.length){
-    outcomeState = { version: OUTCOME_BATCH_VERSION, batch: buildOutcomeBatch(OUTCOME_BATCH_SIZE), pos: 0 };
+    outcomeState = newOutcomeState();
   }
   const b = outcomeState.batch, pos = outcomeState.pos;
   if(!outcomeCovered(b[pos])){
@@ -4497,7 +4526,7 @@ function nextPredeterminedOutcome(){
   return cat;
 }
 function resetOutcomeBatch(){
-  outcomeState = { version: OUTCOME_BATCH_VERSION, batch: buildOutcomeBatch(OUTCOME_BATCH_SIZE), pos: 0 };
+  outcomeState = newOutcomeState();
   saveOutcomeState();
   updateCue();
 }
@@ -5297,9 +5326,10 @@ async function claimCurrentLot(){
   // couverture par la cagnotte est garantie en amont, au tirage du lot).
   // Prison : la commune de consolation est comptée par celebrate().
   if(realCat !== 'prison'){ totalPaid += OUTCOME_COST[realCat] || 0; saveTotals(); }
-  celebrate(realCat, null, {locked:true});
-  broadcastSync({type:'celebrate', catKey:realCat});
-  lastWinUndo = { amountAdded: totalPaid - paidBefore, rollsUsedBefore, requeued, pending: pendingBefore };
+  const mystery = realCat === 'alternative' ? drawMysterySub() : null;
+  celebrate(realCat, null, {locked:true, mystery});
+  broadcastSync({type:'celebrate', catKey:realCat, mystery});
+  lastWinUndo = { amountAdded: totalPaid - paidBefore, rollsUsedBefore, requeued, pending: pendingBefore, mystery };
   if(undoBtn) undoBtn.hidden = false;
   // Un lot gardé épuise le tour : plus aucun lancer sur cette mise.
   rollsUsed = rollsAllowed;
@@ -5320,6 +5350,12 @@ if(undoBtn) undoBtn.addEventListener('click', ()=>{
   // joueur resterait bloqué sans lancer alors qu'aucun lot n'a
   // réellement été gardé.
   rollsUsed = lastWinUndo.rollsUsedBefore;
+  if(lastWinUndo.mystery){
+    // le lot mystère annulé rend son booster (ou sa carte) au compteur
+    outcomeState.mystN = (outcomeState.mystN||0) + 1;
+    if(lastWinUndo.mystery === 'booster') outcomeState.mystB = (outcomeState.mystB||0) + 1;
+    saveOutcomeState();
+  }
   if(lastWinUndo.requeued && outcomeState.batch[outcomeState.pos]===lastWinUndo.requeued){
     // le lot décidé d'avance avait été remis en file : on le reprend
     // pour cette mise, les prochains lancers viseront de nouveau sa case
@@ -5369,7 +5405,7 @@ if(syncChannel && isDisplay){
     const m = e.data || {};
     if(m.type==='draw'){ topNum.textContent = m.draw.total; playCardDrawAnimation(m.draw); }
     else if(m.type==='move') move(m.count, m.card);
-    else if(m.type==='celebrate') celebrate(m.catKey);
+    else if(m.type==='celebrate') celebrate(m.catKey, null, {mystery: m.mystery});
     else if(m.type==='restart') restart();
     else if(m.type==='start') startGame();
   };
@@ -5801,12 +5837,78 @@ function showLotPreview(catKey){
 const CATEGORY_MESSAGES = {
   commune:     '🃏 PIOCHE DU PROF. CHEN GAGNÉE ! 🃏',
   booster8:    '🎁 BOOSTER DU MARCHAND GAGNÉ ! 🎁',
-  alternative: '✨ ZONE SAFARI GAGNÉE ! ✨',
+  alternative: '🎁 LOT MYSTÈRE GAGNÉ ! 🎁',
   gradee:      '⭐ DUOPACK 30 ANS GAGNÉ ! ⭐',
   booster50:   '🎁 TRIPACK 30 ANS GAGNÉ ! 🎁',
   etb:         '🎁 COFFRET 30 ANS GAGNÉ ! 🎁',
   jackpot300:  '👑 ETB 30 ANS GAGNÉ ! 👑',
 };
+
+/* ---------- Animation du lot mystère ----------
+   Deux cartes noires face cachée, qui se retournent pour montrer les
+   deux lots possibles. Une ombre couvre une carte et saute de l'une à
+   l'autre, vite d'abord puis de plus en plus lentement, et finit sur la
+   carte NON gagnante : la carte restée en lumière est le lot remporté.
+   Le résultat est décidé avant (drawMysterySub), l'animation ne fait
+   que le mettre en scène. */
+const mysteryOverlay = document.getElementById('mysteryOverlay');
+const mysteryCards = [document.getElementById('mysteryCard0'), document.getElementById('mysteryCard1')];
+const mysteryShade = document.getElementById('mysteryShade');
+const mysteryResult = document.getElementById('mysteryResult');
+async function playMysteryReveal(sub){
+  if(!mysteryOverlay || !mysteryCards[0] || !mysteryShade) return;
+  const winIdx = sub === 'booster' ? 0 : 1;
+  mysteryCards.forEach(c=>c.classList.remove('flipped','win','lose'));
+  const img0 = mysteryCards[0].querySelector('img'), img1 = mysteryCards[1].querySelector('img');
+  if(img0) img0.src = LOT_IMAGE_URLS.mystBooster;
+  if(img1) img1.src = LOT_IMAGE_URLS.mystCarte;
+  mysteryShade.style.transition = 'none';
+  mysteryShade.style.opacity = '0';
+  if(mysteryResult) mysteryResult.textContent = '';
+  mysteryOverlay.classList.add('show');
+  playRiser(900);
+  await wait(reduceMotion ? 200 : 550);
+  mysteryCards[0].classList.add('flipped');
+  await wait(reduceMotion ? 50 : 200);
+  mysteryCards[1].classList.add('flipped');
+  await wait(reduceMotion ? 300 : 950);
+  // l'ombre : calée sur la carte gagnante au départ, 11 sauts (impair)
+  // donc elle finit sur l'autre carte
+  const r0 = mysteryCards[0].getBoundingClientRect(), r1 = mysteryCards[1].getBoundingClientRect();
+  const stageR = mysteryShade.parentElement.getBoundingClientRect();
+  mysteryShade.style.left = (r0.left - stageR.left) + 'px';
+  mysteryShade.style.top = (r0.top - stageR.top) + 'px';
+  mysteryShade.style.width = r0.width + 'px';
+  mysteryShade.style.height = r0.height + 'px';
+  const dx = r1.left - r0.left;
+  let pos = winIdx;
+  mysteryShade.style.transform = 'translateX(' + (pos*dx) + 'px)';
+  mysteryShade.style.opacity = '1';
+  await wait(120);
+  const hops = reduceMotion ? [200] : [110,110,120,135,155,180,215,260,320,400,520];
+  for(const d of hops){
+    pos = 1 - pos;
+    mysteryShade.style.transition = 'transform ' + d + 'ms cubic-bezier(.3,.6,.3,1)';
+    mysteryShade.style.transform = 'translateX(' + (pos*dx) + 'px)';
+    playHop();
+    await wait(d + 25);
+  }
+  if(pos !== 1 - winIdx){
+    pos = 1 - winIdx;
+    mysteryShade.style.transition = 'transform 200ms ease';
+    mysteryShade.style.transform = 'translateX(' + (pos*dx) + 'px)';
+    await wait(230);
+  }
+  mysteryCards[winIdx].classList.add('win');
+  mysteryCards[1-winIdx].classList.add('lose');
+  if(mysteryResult) mysteryResult.textContent = sub === 'booster' ? '🎁 BOOSTER !' : '🌟 CARTE RARE !';
+  playFanfare(3);
+  triggerImpactFlash();
+  cameraPunch(1.2);
+  await wait(1700);
+  mysteryOverlay.classList.remove('show');
+  await wait(260);
+}
 
 function celebrate(catKey, forcedCard, opts){
   celebLocked = !!(opts && opts.locked);
@@ -5836,6 +5938,19 @@ function celebrate(catKey, forcedCard, opts){
   }
   if(!celeb || !celebCanvas) return;
 
+  // Lot mystère : les deux cartes noires se retournent, l'ombre passe de
+  // l'une à l'autre en ralentissant et s'arrête ; puis le lot choisi est
+  // affiché en grand comme n'importe quel autre lot.
+  if(catKey==='alternative' && opts && opts.mystery){
+    celeb.classList.remove('show','shake','flip','rare-card','big');
+    const sub = opts.mystery;
+    playMysteryReveal(sub).then(()=>{
+      if(myCelebGen !== celebGen) return;
+      revealCelebration(catKey, forcedCard, level, {mystery: sub});
+    });
+    return;
+  }
+
   // Jackpot final (ETB) : orage sur la case du pion (foudre, onde sur
   // les cases, colonne de lumière, pluie d'or) avant que le lot
   // n'apparaisse — la suite de la célébration (photo, feux d'artifice,
@@ -5859,7 +5974,7 @@ function celebrate(catKey, forcedCard, opts){
   revealCelebration(catKey, forcedCard, level);
 }
 
-function revealCelebration(catKey, forcedCard, level){
+function revealCelebration(catKey, forcedCard, level, extra){
   resizeCelebCanvas();
   if(celebMain) celebMain.hidden = false;
   celeb.dataset.level = String(level);
@@ -5911,12 +6026,15 @@ function revealCelebration(catKey, forcedCard, level){
       celebPhoto.hidden = true;
     }
   } else {
-    if(celebMain) celebMain.textContent = CATEGORY_MESSAGES[catKey] || '🎉 Lot remporté !';
+    const myst = extra && extra.mystery;
+    if(celebMain) celebMain.textContent = myst
+      ? (myst==='booster' ? '🎁 LOT MYSTÈRE : BOOSTER GAGNÉ ! 🎁' : '🌟 LOT MYSTÈRE : CARTE RARE GAGNÉE ! 🌟')
+      : (CATEGORY_MESSAGES[catKey] || '🎉 Lot remporté !');
     if(celebSub) celebSub.hidden = true;
     // le cœur de la demande : on ne se contente plus d'un texte,
     // on montre la vraie photo du lot gagné en grand.
     if(celebPhoto){
-      const url = LOT_IMAGE_URLS[catKey];
+      const url = LOT_IMAGE_URLS[myst ? (myst==='booster' ? 'mystBooster' : 'mystCarte') : catKey];
       if(url){ celebPhoto.src = url; celebPhoto.hidden = false; }
       else celebPhoto.hidden = true;
     }

@@ -378,6 +378,56 @@ html.display-mode .display-badge{ display:block; }
   background:rgba(6,4,1,.86);opacity:0;visibility:hidden;transition:opacity .25s ease;padding:20px;
 }
 .card-draw-overlay.show{opacity:1;visibility:visible}
+
+/* ---------- Lot mystère : deux cartes noires, une ombre qui choisit ---------- */
+.mystery-overlay{
+  position:fixed;inset:0;z-index:56;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
+  background:rgba(6,4,1,.9);opacity:0;visibility:hidden;transition:opacity .25s ease;padding:20px;
+}
+.mystery-overlay.show{opacity:1;visibility:visible}
+.mystery-stage{ position:relative;display:flex;gap:min(6vw,34px);perspective:1000px; }
+.mystery-card{
+  position:relative;width:min(40vw,230px);aspect-ratio:5/7;transform-style:preserve-3d;
+  transition:transform .85s cubic-bezier(.2,.85,.25,1), filter .5s ease;
+  border-radius:12px;
+}
+.mystery-card.flipped{ transform:rotateY(180deg); }
+.mystery-card .face{
+  position:absolute;inset:0;border-radius:12px;backface-visibility:hidden;overflow:hidden;
+  border:2px solid var(--gold-bright);box-shadow:0 10px 26px rgba(0,0,0,.6);
+}
+.mystery-card .back{
+  background:radial-gradient(ellipse at 50% 40%, #2a2410, #050403 70%);
+  display:flex;align-items:center;justify-content:center;
+}
+.mystery-card .back span{
+  font-family:'Cinzel',Georgia,serif;font-weight:900;font-size:clamp(70px,22vw,130px);color:var(--gold-bright);
+  text-shadow:0 0 24px rgba(255,226,122,.8),0 3px 6px rgba(0,0,0,.9);
+}
+.mystery-card .front{ transform:rotateY(180deg);background:#000; }
+.mystery-card .front img{ width:100%;height:100%;object-fit:cover;display:block; }
+.mystery-label{
+  position:absolute;left:0;right:0;bottom:0;padding:6px 8px;text-align:center;
+  font-family:'Cinzel',Georgia,serif;font-weight:900;font-size:clamp(12px,3.4vw,17px);letter-spacing:.06em;
+  color:var(--gold-bright);background:linear-gradient(to top, rgba(0,0,0,.92), rgba(0,0,0,0));
+  text-shadow:0 2px 4px rgba(0,0,0,.9);
+}
+.mystery-shade{
+  position:absolute;left:0;top:0;width:0;height:0;border-radius:12px;pointer-events:none;
+  background:rgba(0,0,0,.78);opacity:0;z-index:2;
+}
+.mystery-card.win{ animation:mysteryWin .55s ease-in-out infinite alternate; }
+.mystery-card.win.flipped{ transform:rotateY(180deg) scale(1.06); }
+@keyframes mysteryWin{
+  from{ box-shadow:0 0 22px rgba(255,226,122,.55); }
+  to{ box-shadow:0 0 60px rgba(255,238,170,1),0 0 110px rgba(255,196,60,.6); }
+}
+.mystery-card.lose{ filter:brightness(.3) saturate(.5); }
+.mystery-result{
+  min-height:1.4em;font-family:'Cinzel',Georgia,serif;font-weight:900;color:var(--gold-bright);
+  font-size:clamp(22px,6vw,34px);letter-spacing:.06em;text-shadow:0 0 18px rgba(255,226,122,.9),0 2px 4px rgba(0,0,0,.8);
+}
+@media (prefers-reduced-motion: reduce){ .mystery-card.win{ animation:none; } }
 .card-draw-title{
   font-family:'Cinzel',Georgia,serif;font-weight:900;color:var(--gold-bright);
   font-size:clamp(16px,4vw,22px);letter-spacing:.08em;text-transform:uppercase;
@@ -985,6 +1035,22 @@ if(new URLSearchParams(location.search).get('view')==='display'){
     <div class="card-draw-title">Tirage en cours…</div>
     <div class="card-grid" id="cardGrid"></div>
     <div class="card-draw-total" id="cardDrawTotal"></div>
+  </div>
+
+  <div class="mystery-overlay" id="mysteryOverlay" aria-hidden="true">
+    <div class="card-draw-title">Lot mystère</div>
+    <div class="mystery-stage" id="mysteryStage">
+      <div class="mystery-card" id="mysteryCard0">
+        <div class="face back"><span>?</span></div>
+        <div class="face front"><img alt=""><div class="mystery-label">Booster</div></div>
+      </div>
+      <div class="mystery-card" id="mysteryCard1">
+        <div class="face back"><span>?</span></div>
+        <div class="face front"><img alt=""><div class="mystery-label">Carte rare</div></div>
+      </div>
+      <div class="mystery-shade" id="mysteryShade"></div>
+    </div>
+    <div class="mystery-result" id="mysteryResult"></div>
   </div>
 
   <div class="celebration" id="celebration" aria-hidden="true">
