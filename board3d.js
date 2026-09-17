@@ -5613,7 +5613,12 @@ if(syncChannel && isDisplay){
     const m = e.data || {};
     if(m.type==='draw'){ topNum.textContent = m.draw.total; playCardDrawAnimation(m.draw); }
     else if(m.type==='move') move(m.count, m.card);
-    else if(m.type==='celebrate') celebrate(m.catKey, null, {mystery: m.mystery});
+    // locked:true — le lot remporté reste affiché sur l'écran public
+    // exactement comme sur l'écran de l'animateur, jusqu'à RECOMMENCER
+    // (qui arrive ici par le message 'restart'). Sans ce verrou, l'écran
+    // public effaçait le lot dès la fin des confettis, soit à peine plus
+    // de deux secondes sur un petit lot.
+    else if(m.type==='celebrate') celebrate(m.catKey, null, {locked:true, mystery: m.mystery});
     else if(m.type==='restart') restart();
     else if(m.type==='start') startGame();
   };
@@ -6118,29 +6123,38 @@ async function playMysteryReveal(sub){
   await wait(reduceMotion ? 300 : 950);
   // l'ombre : calée sur la carte gagnante au départ, 11 sauts (impair)
   // donc elle finit sur l'autre carte
-  const r0 = mysteryCards[0].getBoundingClientRect(), r1 = mysteryCards[1].getBoundingClientRect();
-  const stageR = mysteryShade.parentElement.getBoundingClientRect();
-  mysteryShade.style.left = (r0.left - stageR.left) + 'px';
-  mysteryShade.style.top = (r0.top - stageR.top) + 'px';
-  mysteryShade.style.width = r0.width + 'px';
-  mysteryShade.style.height = r0.height + 'px';
-  const dx = r1.left - r0.left;
+  // Positions dans le repère de mise en page de la scène (offsetLeft /
+  // offsetTop), jamais getBoundingClientRect : quand l'interface est
+  // pivotée (télé verticale, touche R, ?rot=90), les rectangles écran
+  // sont tournés — largeur et hauteur s'inversent et l'écart entre les
+  // deux cartes tombe à zéro. L'ombre se posait alors de travers et ne
+  // sautait plus d'une carte à l'autre. Même correctif que fitCelebToBoard().
+  const c0 = mysteryCards[0], c1 = mysteryCards[1];
+  mysteryShade.style.left = c0.offsetLeft + 'px';
+  mysteryShade.style.top = c0.offsetTop + 'px';
+  mysteryShade.style.width = c0.offsetWidth + 'px';
+  mysteryShade.style.height = c0.offsetHeight + 'px';
+  // dx ET dy : la scène est en ligne en paysage, mais les deux cartes
+  // peuvent se retrouver l'une sous l'autre sur un écran étroit.
+  const dx = c1.offsetLeft - c0.offsetLeft;
+  const dy = c1.offsetTop - c0.offsetTop;
+  const shadeAt = p => 'translate(' + (p*dx) + 'px,' + (p*dy) + 'px)';
   let pos = winIdx;
-  mysteryShade.style.transform = 'translateX(' + (pos*dx) + 'px)';
+  mysteryShade.style.transform = shadeAt(pos);
   mysteryShade.style.opacity = '1';
   await wait(120);
   const hops = reduceMotion ? [200] : [110,110,120,135,155,180,215,260,320,400,520];
   for(const d of hops){
     pos = 1 - pos;
     mysteryShade.style.transition = 'transform ' + d + 'ms cubic-bezier(.3,.6,.3,1)';
-    mysteryShade.style.transform = 'translateX(' + (pos*dx) + 'px)';
+    mysteryShade.style.transform = shadeAt(pos);
     playHop();
     await wait(d + 25);
   }
   if(pos !== 1 - winIdx){
     pos = 1 - winIdx;
     mysteryShade.style.transition = 'transform 200ms ease';
-    mysteryShade.style.transform = 'translateX(' + (pos*dx) + 'px)';
+    mysteryShade.style.transform = shadeAt(pos);
     await wait(230);
   }
   mysteryCards[winIdx].classList.add('win');
