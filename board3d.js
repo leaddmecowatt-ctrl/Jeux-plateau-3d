@@ -861,53 +861,54 @@ controls.enablePan = false;
 controls.autoRotate = !reduceMotion;
 controls.autoRotateSpeed = 0.55;
 
-/* Sur un écran portrait étroit (téléphone), le cadre est plus haut
-   que large. Reculer la caméra pile assez pour ne jamais rogner un
-   bord (facteur = 1/aspect) garde tout visible mais rapetisse le
-   plateau et laisse de grandes bandes vides en haut/bas. On ne
-   recule que partiellement (racine carrée, plafonnée) : le plateau
-   reste bien plus grand à l'écran, quitte à rogner très légèrement
-   les coins les plus excentrés sur les cadres très hauts. */
-{
-  const aspect0 = wrap.clientWidth / wrap.clientHeight;
-  if(aspect0 > 0 && aspect0 < 1){
-    /* Exposant abaissé de 0,5 à 0,38 : on recule moins sur téléphone,
-       le plateau occupe davantage la largeur de l'écran. Le garde-fou
-       anti-rognage des coins (updateCornerSafety) rattrape ce qu'il faut. */
-    const factor = Math.min(Math.pow(1/aspect0, 0.38), 1.6);
-    const dir = camera.position.clone().sub(controls.target).normalize();
-    const dist = camera.position.distanceTo(controls.target) * factor;
-    camera.position.copy(controls.target).add(dir.multiplyScalar(dist));
-    controls.minDistance *= factor;
-    controls.maxDistance *= factor;
-  } else if(aspect0 > 1.15){
-    /* Écran large (ordinateur) : le cadre est bien plus large que haut,
-       le plateau n'occupait qu'un tiers de la largeur. On rapproche la
-       caméra (jusqu'à x0,72 sur du 16:9) ; le garde-fou anti-rognage
-       des coins (updateCornerSafety) élargit le champ si un coin devait
-       sortir, les 4 coins restent donc toujours visibles. */
-    const factor = Math.max(0.76, Math.pow(1/aspect0, 0.70));
-    const dir = camera.position.clone().sub(controls.target).normalize();
-    const dist = camera.position.distanceTo(controls.target) * factor;
-    camera.position.copy(controls.target).add(dir.multiplyScalar(dist));
-    controls.minDistance *= factor;
-    controls.maxDistance *= factor;
-  } else if(aspect0 >= 0.95){
-    /* Cadre presque carré (mode TV : colonne centrale entre les deux
-       panneaux latéraux) : le cadrage d'origine gardait une marge de
-       ciel au-dessus du plateau. On rapproche un peu ; le garde-fou
-       anti-rognage des coins garde les 4 coins visibles. */
-    const factor = 0.84;
-    // un peu plus en plongée : le plateau, vu de plus haut, remplit la
-    // hauteur du cadre au lieu de laisser du ciel au-dessus du bord du fond
-    camera.position.set(0, 15.2, 9.0);
-    const dir = camera.position.clone().sub(controls.target).normalize();
-    const dist = camera.position.distanceTo(controls.target) * factor;
-    camera.position.copy(controls.target).add(dir.multiplyScalar(dist));
-    controls.minDistance *= factor;
-    controls.maxDistance *= factor;
-  }
+/* ---------- Cadrage caméra selon la forme du cadre ----------
+   Le cadre 3D change de forme selon l'écran (téléphone en portrait, écran
+   large, colonne centrale du mode TV) et PEUT changer en cours de route :
+   fenêtre redimensionnée, passage en plein écran, écran externe branché.
+   Le cadrage est donc recalculé à chaque redimensionnement (resize()),
+   pas seulement au chargement.
+   - Portrait (téléphone) : on recule partiellement (racine, plafonnée),
+     le plateau reste grand quitte à rogner un peu les coins extrêmes.
+   - Écran large (cadre 3:2 etc.) : on rapproche jusqu'à x0,76.
+   - Cadre presque carré (mode TV, plateau entre deux colonnes) : on
+     rapproche (x0,84) et on passe un peu plus en plongée, pour que le
+     plateau remplisse la hauteur au lieu de laisser du ciel au-dessus.
+   Le garde-fou anti-rognage des coins (updateCornerSafety) élargit le
+   champ si un coin devait sortir : les 4 coins restent toujours visibles. */
+const CAM_DIR_DEFAULT = new THREE.Vector3(0, 13.2, 11).normalize();   // vue d'origine (cible en y=0,3)
+const CAM_DIR_SQUARE  = new THREE.Vector3(0, 14.9, 9).normalize();    // plongée un peu plus marquée
+const CAM_BASE_MIN = controls.minDistance, CAM_BASE_MAX = controls.maxDistance;
+let camFitFactor = 1, camFitSquare = false;
+// état de la caméra cinématique (défini ici car le cadrage le consulte dès le chargement)
+let cineMode = null, cineBlend = 0;
+function aspectFitFactor(a){
+  if(a < 1) return Math.min(Math.pow(1/a, 0.38), 1.6);
+  if(a > 1.15) return Math.max(0.76, Math.pow(1/a, 0.70));
+  if(a >= 0.95) return 0.84;
+  return 1;
 }
+function fitCameraToAspect(){
+  const a = wrap.clientWidth / wrap.clientHeight;
+  if(!(a > 0)) return;
+  const f = aspectFitFactor(a);
+  const square = (a >= 0.95 && a <= 1.15);
+  const k = f / camFitFactor;
+  const modeChanged = square !== camFitSquare;
+  if(Math.abs(k - 1) < 1e-3 && !modeChanged) return;
+  camFitFactor = f; camFitSquare = square;
+  controls.minDistance = CAM_BASE_MIN * f;
+  controls.maxDistance = CAM_BASE_MAX * f;
+  // Pendant une séquence cinéma (marche, gros plan, orage) la caméra est
+  // pilotée ailleurs : on ne touche qu'aux bornes, la vue plateau sera
+  // recadrée au retour.
+  if(cineMode !== null || cineBlend > 0.001) return;
+  const dist = camera.position.distanceTo(controls.target) * k;
+  const dir = modeChanged ? (square ? CAM_DIR_SQUARE : CAM_DIR_DEFAULT)
+                          : camera.position.clone().sub(controls.target).normalize();
+  camera.position.copy(controls.target).add(dir.multiplyScalar(dist));
+  controls.update();
+}
+fitCameraToAspect();
 controls.update();
 
 /* Pas d'effet de bloom (halo lumineux) : son flou à large rayon
@@ -3560,9 +3561,9 @@ const CINE = {
      et plus loin que le gros plan pour voir la foudre tomber du ciel. */
   orbit:   { dist:  5.2, elev: 0.34, aim: 1.00, lead: 0.00, side: 0.00, ease: 2.4, aimY: 0.75 },
 };
-let cineMode = null;          // null | 'travel' | 'closeup' | 'orbit'
+cineMode = null;              // null | 'travel' | 'closeup' | 'orbit' (déclaré plus haut, près du cadrage caméra)
 let cineSpin = 0;             // rad/s, mode orbit uniquement
-let cineBlend = 0;            // 0 = vue plateau, 1 = vue cinéma
+cineBlend = 0;                // 0 = vue plateau, 1 = vue cinéma
 let cineAz = 0, cineAzInit = false;
 const _cineTarget = new THREE.Vector3();
 const _cinePos = new THREE.Vector3();
@@ -4135,8 +4136,10 @@ function resize(){
   if(bs < 1) bloomPass.setSize(Math.round(w*bs), Math.round(h*bs));
   camera.aspect = w/h;
   camera.updateProjectionMatrix();
+  fitCameraToAspect();
 }
 window.addEventListener('resize',resize,{passive:true});
+document.addEventListener('fullscreenchange', ()=>setTimeout(resize, 60));
 window.addEventListener('orientationchange',()=>setTimeout(resize,150),{passive:true});
 if(window.ResizeObserver){ new ResizeObserver(resize).observe(wrap); }
 resize();

@@ -930,6 +930,23 @@ html.storm #bgFill{ filter:blur(22px) brightness(.10) saturate(.8); }
   .tv-rules ul{ margin:0;padding-left:1.1em;font-size:clamp(12px,1.02vw,22px);color:#f3e6c4;line-height:1.35; }
   .tv-rules li{ margin:.3vh 0; }
   .tv-keys{ margin-top:.8vh;font-size:clamp(11px,.85vw,18px);color:rgba(255,226,122,.55);text-align:center; }
+  /* Les écrans qui se superposent au plateau (tirage, lot mystère, lot
+     remporté, éclair) étaient bornés en pixels pour le téléphone : sur
+     une TV ils paraissaient minuscules. Bornes en fraction de l'écran. */
+  .card-grid{ width:min(62vw,1100px); gap:1vw; }
+  .card-draw-title{ font-size:clamp(22px,2.4vw,52px); }
+  .card-draw-total{ font-size:clamp(20px,2.2vw,46px); }
+  .mystery-card{ width:min(19vw,42vh); }
+  .mystery-card .back span{ font-size:clamp(90px,9vw,200px); }
+  .mystery-label{ font-size:clamp(16px,1.4vw,30px); }
+  .mystery-result{ font-size:clamp(28px,3vw,64px); }
+  .celeb-text{ max-width:min(72vw,1400px); font-size:clamp(24px,2.2vw,48px); padding:1.4vh 2vw; }
+  .celeb-text #celebMain{ white-space:normal; line-height:1.15; }
+  .celeb-photo{ width:min(42vw,62vh); max-height:62vh; }
+  .celebration.big #celebMain{ font-size:clamp(30px,3.2vw,68px); }
+  .celeb-sub{ font-size:clamp(16px,1.5vw,32px); }
+  .lightning-bolt{ width:min(18vw,340px); }
+  .key-hint{ font-size:clamp(14px,1.1vw,24px); bottom:1.6vh; }
 }
 
 /* ---------- Bandeau "derniers gains" sur l'écran public : compact,
