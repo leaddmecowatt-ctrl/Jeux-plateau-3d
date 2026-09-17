@@ -1132,7 +1132,8 @@ const CENTER_LEGEND_BADGES = [
   {swatch:'green',  icon:'gift',     title:'Caisse'},
 ];
 function makeCenterPlateTexture(){
-  const size = 900;
+  // grand écran (télé) : texture plus fine, la plaque y est affichée bien plus grande
+  const size = Math.max(window.screen.width||0, window.screen.height||0) >= 1600 ? 1400 : 900;
   const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
   const ctx = cvs.getContext('2d');
   // Pas de fond opaque : comme sur la version d'origine, le sol du
@@ -5465,6 +5466,22 @@ function applyRotation(deg){
   const saved = parseInt(safeGetItem(ROT_KEY), 10);
   applyRotation(q != null ? parseInt(q, 10) : (isNaN(saved) ? 0 : saved));
 }
+/* Boutons écran : visibles au mouvement de la souris, effacés après 4 s. */
+const screenBtns = document.getElementById('screenBtns');
+let screenBtnsTimer = 0;
+function showScreenBtns(){
+  if(!screenBtns || isDisplay) return;
+  screenBtns.classList.add('show');
+  clearTimeout(screenBtnsTimer);
+  screenBtnsTimer = setTimeout(()=>screenBtns.classList.remove('show'), 6000);
+}
+window.addEventListener('mousemove', showScreenBtns, {passive:true});
+window.addEventListener('touchstart', showScreenBtns, {passive:true});
+showScreenBtns();
+const rotBtn = document.getElementById('rotBtn');
+const fsBtn = document.getElementById('fsBtn');
+if(rotBtn) rotBtn.addEventListener('click', ()=>{ cycleRotation(); showScreenBtns(); });
+if(fsBtn) fsBtn.addEventListener('click', ()=>{ toggleFullscreen(); showScreenBtns(); });
 function cycleRotation(){
   applyRotation(uiRotation === 0 ? 90 : uiRotation === 90 ? 270 : 0);
   showKeyHint(uiRotation === 0 ? 'Image droite (R pour pivoter)' : 'Image pivotée de ' + uiRotation + '° (R pour changer)');
