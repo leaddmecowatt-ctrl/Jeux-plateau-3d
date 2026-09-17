@@ -205,6 +205,27 @@ html.storm #bgGlow{ display:none; }
 html.eco .fall-star{ display:none; }
 html.eco #bgFill{ filter:brightness(0.45) saturate(1.15); }
 
+/* LE poste le plus cher de toute la page, mesuré, et de loin.
+   Le fond est découpé en 36 bandes pour lui donner une ondulation. Chaque
+   bande porte « will-change:transform », ce qui force le navigateur à lui
+   allouer SON PROPRE calque GPU : 36 grands calques, chacun gardant sa
+   copie rasterisée de la photo de fond, tous recomposés à chaque image —
+   et d'autant plus grands que l'écran est grand, d'où une télé qui souffre
+   plus qu'un petit écran, et une mémoire GPU qui sature jusqu'à faire
+   lâcher le contexte.
+   Tout ça pour un balancement de ±2,2 pixels, invisible à l'œil.
+   En éco on fige l'ondulation et on rend les bandes à des éléments
+   ordinaires : la photo de fond est EXACTEMENT la même, seul le
+   tremblement disparaît.
+   Mesuré (télé 1080x1920 pivotée, mode éco, images rendues en 4 s) :
+     bandes animées ............................ 44
+     figées seulement .......................... 52  (+18 %)
+     sans will-change seulement ................ 52  (+18 %)
+     figées ET sans will-change ................ 76  (+73 %)
+   Les deux ensemble valent bien plus que chacun séparément : tant qu'une
+   animation tourne dessus, le calque reste promu malgré tout. */
+html.eco .bg-band{ animation:none !important; will-change:auto; }
+
 /* Nuages blancs dessinés en CSS : désactivés à la demande — l'utilisateur
    veut que ce soient les vrais nuages peints DANS la photo de fond qui
    bougent (via le travelling bgDrift ci-dessus), pas des nuages en plus
