@@ -3328,12 +3328,13 @@ let rollsAllowed = 3;
 // lot prédéterminé plus bas) : null tant qu'aucune mise n'a démarré.
 let pendingOutcome = null;
 /* Commande animateur « Z » avant le premier lancer : la prochaine partie
-   fait tomber l'ETB, point. Aucune règle de couverture / rentabilité
-   n'est consultée. Pour que le stock reste juste, l'ETB est prise dans
-   la file pré-calculée (la prochaine ETB en attente est avancée) ; s'il
-   n'en reste plus dans la file, elle tombe quand même (choix animateur).
-   Z une seconde fois avant le lancer annule. */
+   fait tomber l'ETB, point. Cette partie est HORS comptabilité : ni la
+   mise ni le lot n'entrent dans la cagnotte / le plafond de reversement,
+   et la file pré-calculée des 500 parties n'est pas touchée (c'est une
+   ETB en plus, offerte par l'animateur). Z une seconde fois avant le
+   lancer annule. forcedGame = la partie en cours est cette partie-bonus. */
 let forcedEtb = false;
+let forcedGame = false;
 
 function tileAt(idx){ return idx===-1 ? START_NODE : tiles[idx]; }
 /* Décalage vertical courant de la carte d'une case. Les cartes ne sont
@@ -4588,14 +4589,11 @@ function nextPredeterminedOutcome(){
   saveOutcomeState();
   return cat;
 }
-/* ETB forcée (touche Z) : on avance la prochaine ETB de la file pour
-   qu'elle tombe maintenant, sans regarder la cagnotte. */
+/* ETB forcée (touche Z) : partie-bonus hors comptabilité, la file des
+   lots et la cagnotte ne bougent pas. */
 function takeForcedEtb(){
   forcedEtb = false;
-  if(outcomeState.pos >= outcomeState.batch.length) outcomeState = newOutcomeState();
-  const b = outcomeState.batch;
-  const j = b.indexOf('jackpot300', outcomeState.pos);
-  if(j >= 0){ b.splice(j, 1); saveOutcomeState(); }
+  forcedGame = true;
   return 'jackpot300';
 }
 function resetOutcomeBatch(){
@@ -5134,7 +5132,7 @@ function restart(){
   finished = false;
   rollsUsed = 0;
   rollsAllowed = 3;
-  if(pendingOutcome){
+  if(pendingOutcome && !forcedGame){
     // partie interrompue avant validation : le lot décidé d'avance n'est
     // pas perdu, il retourne en tête de file (la mise, elle, reste comptée)
     outcomeState.batch.splice(outcomeState.pos, 0, pendingOutcome);
@@ -5142,6 +5140,7 @@ function restart(){
   }
   pendingOutcome = null;
   forcedEtb = false;
+  forcedGame = false;
   plannedCardDelta = null;
   walk = null;
   currentIndex = -1;
@@ -5181,12 +5180,17 @@ async function drawAndMove(){
   // partie complète = une mise, créditée automatiquement à la
   // cagnotte interne, sans aucune saisie manuelle.
   if(currentIndex===-1){
-    totalMise += AVG_MISE;
-    saveTotals();
-    // Le lot de cette mise est décidé maintenant, tiré du lot
-    // pré-calculé — les dés qui vont suivre restent honnêtes à
-    // l'écran, mais ne décident plus du lot réellement remporté.
-    pendingOutcome = forcedEtb ? takeForcedEtb() : nextPredeterminedOutcome();
+    if(forcedEtb){
+      // partie-bonus ETB (touche Z) : ni mise ni lot comptés
+      pendingOutcome = takeForcedEtb();
+    }else{
+      totalMise += AVG_MISE;
+      saveTotals();
+      // Le lot de cette mise est décidé maintenant, tiré du lot
+      // pré-calculé — les dés qui vont suivre restent honnêtes à
+      // l'écran, mais ne décident plus du lot réellement remporté.
+      pendingOutcome = nextPredeterminedOutcome();
+    }
     updateCue();
   }
   // On continue plutôt que de garder le lot affiché : l'aperçu (ou le
@@ -5370,7 +5374,9 @@ async function claimCurrentLot(){
   const realCat = tiles[currentIndex].catKey;
   const pendingBefore = pendingOutcome;
   let requeued = null;
-  if(pendingOutcome && realCat !== pendingOutcome){
+  const forced = forcedGame;
+  forcedGame = false;
+  if(pendingOutcome && realCat !== pendingOutcome && !forced){
     /* Le joueur s'arrête avant que les dés aient amené le pion sur la
        case prévue (règle « je garde ou je relance »). Le lot de sa case
        est moins cher, par construction. Le lot décidé d'avance :
@@ -5399,11 +5405,12 @@ async function claimCurrentLot(){
   // Comptabilité EXACTE : on ajoute le coût du lot réellement donné (la
   // couverture par la cagnotte est garantie en amont, au tirage du lot).
   // Prison : la commune de consolation est comptée par celebrate().
-  if(realCat !== 'prison'){ totalPaid += OUTCOME_COST[realCat] || 0; saveTotals(); }
+  // Partie-bonus ETB (touche Z) : rien n'est compté.
+  if(realCat !== 'prison' && !forced){ totalPaid += OUTCOME_COST[realCat] || 0; saveTotals(); }
   const mystery = realCat === 'alternative' ? drawMysterySub() : null;
   celebrate(realCat, null, {locked:true, mystery});
   broadcastSync({type:'celebrate', catKey:realCat, mystery});
-  lastWinUndo = { amountAdded: totalPaid - paidBefore, rollsUsedBefore, requeued, pending: pendingBefore, mystery };
+  lastWinUndo = { amountAdded: totalPaid - paidBefore, rollsUsedBefore, requeued, pending: pendingBefore, mystery, forced };
   if(undoBtn) undoBtn.hidden = false;
   // Un lot gardé épuise le tour : plus aucun lancer sur cette mise.
   rollsUsed = rollsAllowed;
@@ -5439,6 +5446,7 @@ if(undoBtn) undoBtn.addEventListener('click', ()=>{
   // dans tous les cas la mise reprend son lot décidé d'avance : les
   // lancers suivants restent pipés vers sa case
   pendingOutcome = lastWinUndo.pending || null;
+  forcedGame = !!lastWinUndo.forced;
   updateCue();
   if(!finished) validate.disabled = (rollsUsed>=rollsAllowed);
   clearWinUndo();
