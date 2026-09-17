@@ -715,6 +715,28 @@ try{
    (mesuré : bloom = ~17x le reste du rendu, proportionnel aux pixels). */
 const DPR_MAX = Math.min(window.devicePixelRatio||1, 1.5);
 renderer.setPixelRatio(DPR_MAX);
+
+/* ---------- Perte du contexte WebGL ----------
+   Quand le GPU n'en peut plus (surchauffe, mémoire, onglet en arrière-
+   plan), le navigateur retire le contexte WebGL : le plateau se fige ou
+   devient noir et NE REVIENT JAMAIS tout seul. En plein direct, c'est le
+   jeu qui « crashe ».
+   On rend l'incident non fatal : on note que l'appareil a lâché (pour
+   revenir en mode éco au rechargement, sinon il relâchera aussitôt), on
+   prévient à l'écran, et on relance la page. La cagnotte, les totaux et
+   les lots déjà décidés sont en mémoire du navigateur : la partie
+   reprend, elle n'est pas perdue. */
+const QSTICK_KEY = 'pika_q_forced';
+renderer.domElement.addEventListener('webglcontextlost', (e)=>{
+  // sans preventDefault, le navigateur ne proposera jamais de restaurer
+  e.preventDefault();
+  try{ localStorage.setItem(QSTICK_KEY, '5'); }catch(err){}
+  const warn = document.createElement('div');
+  warn.className = 'gl-fallback';
+  warn.textContent = 'Affichage relancé en mode économie…';
+  if(wrap) wrap.appendChild(warn);
+  setTimeout(()=>location.reload(), 900);
+}, false);
 /* alpha:true permet la transparence mais ne l'active pas : Three.js
    efface quand même chaque image en noir opaque (alpha 1) par
    défaut. Sans ceci, le canvas reste un rectangle noir plein là où
@@ -3380,7 +3402,10 @@ function setActive(index){
   tiles.forEach((t,i)=>{
     const wasActive = t.isActive;
     t.isActive = (i===index);
-    if(!t.isActive){ t.halo.material.opacity = 0; }
+    // visible=false, pas seulement opacity=0 : un objet transparent
+    // d'opacité nulle est quand même trié et dessiné à chaque image.
+    // 39 halos sur 40 étaient ainsi rendus pour rien.
+    if(!t.isActive){ t.halo.material.opacity = 0; t.halo.visible = false; }
     else if(!wasActive){ t.popT0 = clock.getElapsedTime(); }
   });
 }
@@ -3815,6 +3840,7 @@ function frameStep(dt, t){
       }
     }
     if(tile.isActive){
+      tile.halo.visible = true;
       // Le halo de la case courante monte avec la valeur du lot : une
       // case "gros lot" doit se voir plus fort qu'une pioche commune,
       // sinon la hiérarchie des gains ne se lit plus à l'écran.
@@ -4167,6 +4193,10 @@ function setEcoMode(on){
   renderer.shadowMap.enabled = !on;
   trimLights.forEach(tl=>{ tl.spr.visible = !on; });
   orbiterLights.forEach(ol=>{ ol.spr.visible = !on; });
+  // 40 disques d'ombre sous les lots flottants : transparents, donc
+  // triés et dessinés à chaque image. Sans ombres portées (coupées
+  // juste au-dessus), ils n'ont de toute façon plus de sens.
+  tiles.forEach(t=>{ if(t.shadowDisc) t.shadowDisc.visible = !on; });
   scene.traverse(o=>{ if(o.material){ (Array.isArray(o.material)?o.material:[o.material]).forEach(m=>{ m.needsUpdate = true; }); } });
 }
 /* Crans supplémentaires (portable + grand écran) :
@@ -4182,7 +4212,7 @@ function setShadowSoft(soft){
 }
 function applyQuality(level){
   QUALITY.level = level;
-  const dpr = level>=5 ? 0.75 : level>=4 ? 0.85 : level>=2 ? 1 : level>=1 ? Math.min(DPR_MAX, 1.25) : DPR_MAX;
+  const dpr = level>=5 ? 0.6 : level>=4 ? 0.85 : level>=2 ? 1 : level>=1 ? Math.min(DPR_MAX, 1.25) : DPR_MAX;
   if(renderer.getPixelRatio() !== dpr) renderer.setPixelRatio(dpr);
   setEcoMode(level >= 5);
   if(!ecoMode) setShadowSoft(level < 2);
@@ -4218,17 +4248,30 @@ function qualityTick(realDt, now){
   const q = parseInt(new URLSearchParams(location.search).get('q'), 10);
   const petitEcran = Math.min(window.innerWidth, window.innerHeight) <= 520;
   const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
-  if(!isNaN(q)){
+  // Cet appareil a déjà fait lâcher le contexte WebGL : on repart
+  // directement en mode éco, sinon il relâchera dans la minute.
+  const apresPlantage = parseInt(safeGetItem(QSTICK_KEY), 10);
+  if(!isNaN(apresPlantage) && isNaN(q)){
+    applyQuality(QUALITY_LEVELS);
+    QUALITY.locked = true;
+  }
+  else if(!isNaN(q)){
     // réglage imposé : il ne bouge plus, même si la cadence baisse
     applyQuality(Math.max(0, Math.min(QUALITY_LEVELS, q)));
     QUALITY.locked = true;
   }
   else if(petitEcran || mobile) applyQuality(3);
 }
-let _lastFrameAt = 0;
+let _lastFrameAt = 0, _lastRenderAt = 0;
 function animate(){
   requestAnimationFrame(animate);
   const nowMs = performance.now();
+  /* Mode éco : plafond à 30 images/s. Un appareil qui suffoque tient une
+     cadence régulière à 30 bien mieux qu'une cadence erratique entre 15
+     et 25, et il chauffe deux fois moins — or c'est la chauffe qui finit
+     par faire lâcher le contexte WebGL, c'est-à-dire par tout planter. */
+  if(ecoMode && nowMs - _lastRenderAt < 31) return;
+  _lastRenderAt = nowMs;
   const realDt = _lastFrameAt ? (nowMs - _lastFrameAt)/1000 : 0;
   _lastFrameAt = nowMs;
   if(!document.hidden && realDt > 0 && realDt < 1) qualityTick(realDt, nowMs/1000);
