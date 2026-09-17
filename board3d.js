@@ -5228,19 +5228,35 @@ async function move(forcedCount, forcedCard){
   }
 }
 
+/* Temps de lecture d'une carte Chance / Caisse : l'animateur doit
+   pouvoir la lire à voix haute avant qu'elle ne laisse la place au
+   déplacement. Deux seuls nombres à changer si c'est trop court ou trop
+   long à l'antenne. */
+const CHANCE_READ_MS = 2800;
+const CHANCE_READ_RARE_MS = 3600;
 /* Chance / Caisse Communautaire se révèlent automatiquement (pas de
-   bouton à cliquer) : la carte s'affiche, son effet éventuel
-   (avancer/reculer) est joué directement sur le plateau, puis
-   l'annonce disparaît toute seule et la partie continue. */
+   bouton à cliquer) : la carte s'affiche le temps d'être lue, puis
+   l'annonce est effacée, son effet éventuel (avancer/reculer) est joué
+   sur le plateau dégagé, et la partie continue. */
 async function resolveChanceChest(myGen, forcedCard){
   const idx = currentIndex;
   const catKey = tiles[idx].catKey;
   const deck = catKey==='chance' ? CHANCE_DECK : CHEST_DECK;
   const card = forcedCard || drawCard(deck);
-  celebrate(catKey, card);
+  /* locked:true — SANS ce verrou, la durée d'affichage de la carte
+     n'était pas décidée ici mais par l'animation de confettis : celle-ci
+     retire l'annonce dès que ses particules sont retombées, soit 2,4 s,
+     et même 1,2 s sur un lot de consolation. La carte disparaissait donc
+     avant d'avoir été lue, parfois avant même la fin de l'attente
+     ci-dessous. C'était le dernier endroit du jeu où un lot pouvait
+     s'effacer tout seul. Le verrou pose la règle partout pareil : une
+     annonce ne s'efface que quand le code le décide — ici juste après le
+     temps de lecture, pour dégager le plateau avant le déplacement. */
+  celebrate(catKey, card, {locked:true});
 
-  await wait(card.rare ? 2600 : 1900);
+  await wait(card.rare ? CHANCE_READ_RARE_MS : CHANCE_READ_MS);
   if(myGen!==generation) return;
+  clearCelebration();
 
   if(card.effect && card.effect.type==='move' && card.effect.delta){
     const goingForward = card.effect.delta>0;
