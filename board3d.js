@@ -3327,14 +3327,31 @@ let rollsAllowed = 3;
 // Lot déjà décidé d'avance pour la partie en cours (voir le système de
 // lot prédéterminé plus bas) : null tant qu'aucune mise n'a démarré.
 let pendingOutcome = null;
-/* Commandes animateur avant le premier lancer : Z = la prochaine partie
-   fait tomber l'ETB, M = le Tripack, point. Cette partie est HORS comptabilité : ni la
+/* Commandes animateur avant le premier lancer : une touche par lot,
+   la prochaine partie fait tomber ce lot, point. Chiffres 1 à 6 dans
+   l'ordre des lots (1 ETB, 2 Coffret, 3 Tripack, 4 Duopack, 5 Booster,
+   6 Lot Mystère), plus Z = ETB et M = Tripack. Cette partie est HORS comptabilité : ni la
    mise ni le lot n'entrent dans la cagnotte / le plafond de reversement,
    et la file pré-calculée des 500 parties n'est pas touchée (c'est une
    ETB en plus, offerte par l'animateur). Z une seconde fois avant le
    lancer annule. forcedGame = la partie en cours est cette partie-bonus. */
-let forcedCat = null;      // 'jackpot300' (Z) | 'booster50' (M) | null
+let forcedCat = null;      // catégorie forcée pour la partie à venir, ou null
 const FORCE_KEYS = { z:{cat:'jackpot300', name:'ETB'}, m:{cat:'booster50', name:'Tripack'} };
+// touches chiffres : par position physique (e.code), donc sans Maj sur un clavier AZERTY
+const FORCE_DIGITS = [
+  {cat:'jackpot300',  name:'ETB'},
+  {cat:'etb',         name:'Coffret'},
+  {cat:'booster50',   name:'Tripack'},
+  {cat:'gradee',      name:'Duopack'},
+  {cat:'booster8',    name:'Booster'},
+  {cat:'alternative', name:'Lot Mystère'},
+];
+function forceKeyFor(e){
+  const m = /^(?:Digit|Numpad)([1-6])$/.exec(e.code || '');
+  if(m) return Object.assign({key:m[1]}, FORCE_DIGITS[+m[1]-1]);
+  const k = e.key.toLowerCase();
+  return FORCE_KEYS[k] ? Object.assign({key:k.toUpperCase()}, FORCE_KEYS[k]) : null;
+}
 let forcedGame = false;
 
 function tileAt(idx){ return idx===-1 ? START_NODE : tiles[idx]; }
@@ -5429,7 +5446,7 @@ async function claimCurrentLot(){
   // Prison : la commune de consolation est comptée par celebrate().
   // Partie-bonus ETB (touche Z) : rien n'est compté.
   if(realCat !== 'prison' && !forced){ totalPaid += OUTCOME_COST[realCat] || 0; saveTotals(); }
-  const mystery = realCat === 'alternative' ? drawMysterySub() : null;
+  const mystery = realCat === 'alternative' ? (forced ? (Math.random() < 0.5 ? 'booster' : 'carte') : drawMysterySub()) : null;
   celebrate(realCat, null, {locked:true, mystery});
   broadcastSync({type:'celebrate', catKey:realCat, mystery});
   lastWinUndo = { amountAdded: totalPaid - paidBefore, rollsUsedBefore, requeued, pending: pendingBefore, mystery, forced };
@@ -5480,8 +5497,9 @@ if(undoBtn) undoBtn.addEventListener('click', ()=>{
    boutons à l'écran (pratique en filmant en direct) : A = démarrer,
    B = tirer les cartes, C = recommencer la partie, D = valider le lot
    remporté, Z = annuler le dernier lot validé par erreur, ou, avant le
-   premier lancer, forcer l'ETB pour la partie ; M avant le premier
-   lancer = forcer le Tripack. Ignorés si on est en train de taper
+   premier lancer, forcer l'ETB pour la partie ; M = forcer le Tripack ;
+   chiffres 1-6 = forcer le lot n° 1 à 6 (ETB, Coffret, Tripack, Duopack,
+   Booster, Lot Mystère). Ignorés si on est en train de taper
    dans un champ de texte. */
 /* Mode TV : compteur de lancers, dernier total tiré et message d'état
    dans la colonne de droite. Rafraîchi à intervalle court (état simple,
@@ -5566,16 +5584,16 @@ window.addEventListener('keydown', (e)=>{
     else if(winBtn && winBtn.disabled && currentIndex>0) showKeyHint('Lot déjà validé — C pour recommencer, Z pour annuler');
     else if(currentIndex<=0) showKeyHint('Aucun lot à garder : tirez d’abord les cartes (B)');
   }
-  else if(k==='z' || k==='m'){
-    const fk = FORCE_KEYS[k];
+  else if(forceKeyFor(e)){
+    const fk = forceKeyFor(e);
     if(k==='z' && undoBtn && !undoBtn.hidden) undoBtn.click();
     else if(currentIndex===-1 && !moving && !finished){
-      // avant le premier lancer : Z force l'ETB, M le Tripack, pour la partie qui vient
+      // avant le premier lancer : le lot de la touche tombera dans la partie qui vient
       forcedCat = (forcedCat === fk.cat) ? null : fk.cat;
       updateCue();
-      showKeyHint(forcedCat ? '⭐ ' + fk.name + ' forcé pour cette partie (' + k.toUpperCase() + ' pour annuler)' : fk.name + ' forcé annulé — tirage normal');
+      showKeyHint(forcedCat ? '⭐ ' + fk.name + ' forcé pour cette partie (' + fk.key + ' pour annuler)' : fk.name + ' forcé annulé — tirage normal');
     }
-    else showKeyHint(k.toUpperCase() + ' : forcer ' + (k==='z' ? 'l’ETB' : 'le Tripack') + ', seulement avant le premier lancer (C pour recommencer)');
+    else showKeyHint(fk.key + ' : forcer « ' + fk.name + ' », seulement avant le premier lancer (C pour recommencer)');
   }
   else if(k==='f'){ toggleFullscreen(); }
   else if(k==='r'){ cycleRotation(); }
