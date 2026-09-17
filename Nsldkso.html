@@ -443,9 +443,12 @@ html.storm #bgFill{ filter:blur(22px) brightness(.10) saturate(.8); }
   display:flex;align-items:center;justify-content:center;
 }
 .mini-card .back{
-  background:#0a1740 url('./assets/ui/card_back.jpg') center/94% 94% no-repeat;
-  border:2px solid var(--gold-bright);
-  box-shadow:0 0 8px rgba(233,195,74,.35);
+  /* Vrai dos de carte Pokémon, entier (logo haut et bas compris), sans
+     cadre ajouté : l'image remplit toute la carte, seuls les coins
+     sont arrondis comme sur une vraie carte. */
+  background:#1b3f8c url('./assets/ui/card_back.jpg') center/100% 100% no-repeat;
+  border:none;
+  box-shadow:0 4px 10px rgba(0,0,0,.55),0 0 8px rgba(233,195,74,.25);
 }
 /* Face révélée. L'ancienne version était un aplat doré avec un chiffre
    au milieu — d'où l'aspect "rondelle de métal". Ici on reprend le
