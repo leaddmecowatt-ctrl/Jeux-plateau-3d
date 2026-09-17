@@ -36,8 +36,17 @@ body{overflow:hidden;color:#fff}
 #bgBands{
   position:absolute; inset:0; overflow:hidden;
   z-index:0; pointer-events:none;
+}
+/* Respiration lumineuse du ciel : un voile clair dont seule l'OPACITÉ
+   est animée (composée sur le GPU, coût nul). L'ancienne version animait
+   « filter:brightness/saturate » sur tout l'écran : un filtre plein
+   écran recalculé à chaque image, ce qui saccadait sur portable. */
+#bgGlow{
+  position:absolute; inset:0; z-index:0; pointer-events:none;
+  background:rgba(255,236,190,.075); opacity:0; will-change:opacity;
   animation:dragonGlow 9s ease-in-out infinite;
 }
+html.storm #bgGlow{ display:none; }
 /* Écran large (ordinateur) : l'image de fond est au format portrait ;
    en « cover » on n'en voyait que le tiers central. Sur écran large les
    bandes affichent l'image ENTIÈRE en hauteur (voir layout()), et ce
@@ -55,8 +64,8 @@ body{overflow:hidden;color:#fff}
    large), avec le même découpage en bandes et la même ondulation. */
 .bg-band.wide, #bgFill.wide{ background-image:url("./assets/bg/dragon_sky_wide.jpg"); }
 @keyframes dragonGlow{
-  0%,100%{ filter:brightness(1) saturate(1); }
-  50%{ filter:brightness(1.08) saturate(1.12); }
+  0%,100%{ opacity:0; }
+  50%{ opacity:1; }
 }
 .bg-band{
   position:absolute; left:0; width:100%;
@@ -207,7 +216,15 @@ body{overflow:hidden;color:#fff}
   width:min(97vw,88vh,900px);
   aspect-ratio:1/1;
   position:relative;z-index:1;
-  filter:drop-shadow(0 22px 26px rgba(0,0,0,.55));
+}
+/* Ombre portée du plateau : un dégradé fixe sous le canvas. L'ancien
+   « filter:drop-shadow » sur le conteneur du canvas WebGL forçait un
+   flou de toute la zone du plateau à CHAQUE image rendue (le canvas
+   change en permanence) : très coûteux sur grand écran. */
+.board-wrap::before{
+  content:''; position:absolute; left:6%; right:6%; top:38%; bottom:-2%;
+  background:radial-gradient(ellipse at 50% 60%, rgba(0,0,0,.6) 0%, rgba(0,0,0,.35) 40%, rgba(0,0,0,0) 72%);
+  pointer-events:none;
 }
 #gl{
   position:absolute;inset:0;width:100%;height:100%;display:block;
@@ -1148,6 +1165,7 @@ if(new URLSearchParams(location.search).get('view')==='display'){
     <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
     <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
   </div>
+  <div id="bgGlow" aria-hidden="true"></div>
   <div class="top-hud">
     <div class="brand"><span class="brand-star" id="brandStarL">★</span> PIKAPOLY <span class="brand-star" id="brandStarR">★</span></div>
     <div class="place-banner-wrap"><div class="place-banner" id="placeBanner">Départ</div></div>

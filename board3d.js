@@ -4121,11 +4121,23 @@ function frameStep(dt, t){
      3. bloom en quart de résolution
    Le jeu, les règles, les animations et les lots ne changent pas. */
 const QUALITY = { level:0, samples:0, slow:0, last:0, armedAt:0 };
-const QUALITY_LEVELS = 3;
+const QUALITY_LEVELS = 4;
+/* Crans supplémentaires (portable + grand écran) :
+     2. ombres PCF simples (au lieu de PCF « douces », ~2x moins de
+        lectures de texture par pixel du plateau) — même lumière, même
+        direction d'ombre, bord à peine plus net
+     4. rendu à 0,85x */
+function setShadowSoft(soft){
+  const type = soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+  if(renderer.shadowMap.type === type) return;
+  renderer.shadowMap.type = type;
+  scene.traverse(o=>{ if(o.material){ (Array.isArray(o.material)?o.material:[o.material]).forEach(m=>{ m.needsUpdate = true; }); } });
+}
 function applyQuality(level){
   QUALITY.level = level;
-  const dpr = level>=2 ? 1 : level>=1 ? Math.min(DPR_MAX, 1.25) : DPR_MAX;
+  const dpr = level>=4 ? 0.85 : level>=2 ? 1 : level>=1 ? Math.min(DPR_MAX, 1.25) : DPR_MAX;
   if(renderer.getPixelRatio() !== dpr) renderer.setPixelRatio(dpr);
+  setShadowSoft(level < 2);
   resize();
 }
 function bloomScaleForLevel(level){ return level>=3 ? 0.25 : 0.5; }
@@ -4171,6 +4183,14 @@ document.addEventListener('fullscreenchange', ()=>setTimeout(resize, 60));
 window.addEventListener('orientationchange',()=>setTimeout(resize,150),{passive:true});
 if(window.ResizeObserver){ new ResizeObserver(resize).observe(wrap); }
 resize();
+/* Grand canvas dès le départ (télé, écran Retina en miroir) : on part
+   directement un cran plus bas plutôt que d'attendre ~4 s de saccades
+   pour que l'adaptation le décide. Seuil : ~2,4 millions de pixels
+   rendus (ex. 1470x956 CSS à 1,5x = 3,2 M). */
+{
+  const px = wrap.clientWidth * wrap.clientHeight * DPR_MAX * DPR_MAX;
+  if(px > 2.4e6) applyQuality(1);
+}
 
 /* ==========================================================================
    Interface Animateur
