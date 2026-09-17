@@ -922,7 +922,8 @@ renderer.domElement.addEventListener('pointerdown', ()=>{ cineEnd(); }, {passive
    captent un peu de la teinte froide du ciel en arrière-plan — sans ça,
    un plateau tout chaud posé sur un fond bleu-violet paraissait un peu
    "posé par-dessus" plutôt qu'intégré à la scène. */
-scene.add(new THREE.HemisphereLight(0xffdca0, 0x141c33, 0.68));
+const hemiLight = new THREE.HemisphereLight(0xffdca0, 0x141c33, 0.68);
+scene.add(hemiLight);
 
 /* Petit projecteur chaud au-dessus du centre du plateau : la légende
    des lots (photos + texte) doit rester bien lisible, pas juste
@@ -1653,6 +1654,227 @@ const shatterFlash = new THREE.Sprite(new THREE.SpriteMaterial({
 }));
 shatterFlash.position.set(0, 0.4, 0);
 scene.add(shatterFlash);
+
+/* ---------- Orage du champion (jackpot ETB) ----------
+   Remplace le plateau qui volait en éclats : le décor s'assombrit, la
+   caméra se met à tourner autour du pion, la foudre frappe sa case en
+   rafale (éclairs 3D ramifiés, flash des lumières de la scène, onde qui
+   parcourt les cases depuis l'impact, étincelles, tonnerre, coups de
+   caméra), puis une colonne de lumière dorée monte de la case avec une
+   pluie d'or, jusqu'au flash blanc final qui révèle le lot. */
+const STORM_MS = 4300;
+const STORM_STRIKES = [0.45, 0.95, 1.35, 1.68, 1.95, 2.18];   // secondes après le départ
+const LIGHT_BASE = { key: key.intensity, hemi: hemiLight.intensity, fill: fill.intensity, rim: rim.intensity, spot: centerSpot.intensity, expo: renderer.toneMappingExposure };
+let storm = null;
+const stormWaves = [];
+let beamMesh = null, beamLight = null;
+const beamTex = (function(){
+  const c = document.createElement('canvas'); c.width = 64; c.height = 256;
+  const g = c.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0.00, 'rgba(255,240,190,0)');
+  grad.addColorStop(0.45, 'rgba(255,224,130,0.35)');
+  grad.addColorStop(0.85, 'rgba(255,236,170,0.85)');
+  grad.addColorStop(1.00, 'rgba(255,248,220,0.95)');
+  g.fillStyle = grad; g.fillRect(0,0,64,256);
+  // liseré vertical plus clair au centre : la colonne paraît cylindrique
+  const side = g.createLinearGradient(0,0,64,0);
+  side.addColorStop(0,'rgba(0,0,0,0.35)'); side.addColorStop(0.5,'rgba(255,255,255,0)'); side.addColorStop(1,'rgba(0,0,0,0.35)');
+  g.globalCompositeOperation = 'multiply'; g.fillStyle = side; g.fillRect(0,0,64,256);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; return tex;
+})();
+/* Onde de choc qui parcourt les cases depuis le point d'impact : une
+   bosse qui s'éloigne à 7,5 unités/s, suivie d'un léger creux, et qui
+   s'amortit avec la distance et le temps. */
+function stormWaveOffset(tile, t){
+  if(!stormWaves.length) return 0;
+  let y = 0;
+  for(const w of stormWaves){
+    const age = t - w.t0;
+    if(age < 0 || age > 2.4) continue;
+    const d = Math.hypot(tile.world.x - w.x, tile.world.z - w.z);
+    const u = d - age*7.5;
+    if(u > 1.2 || u < -2.2) continue;
+    const env = Math.exp(-age*1.2) * Math.exp(-Math.max(0, d-1.2)*0.1);
+    y += (Math.exp(-u*u*1.8) - 0.45*Math.exp(-(u+1.0)*(u+1.0)*1.8)) * 0.19 * env;
+  }
+  return y;
+}
+function boltPath(from, to, jitter){
+  const pts = [from.clone()]; const n = 9;
+  for(let i=1;i<n;i++){
+    const p = from.clone().lerp(to, i/n);
+    const k = jitter*(1 - (i/n)*0.6);
+    p.x += (Math.random()-0.5)*k; p.z += (Math.random()-0.5)*k;
+    pts.push(p);
+  }
+  pts.push(to.clone());
+  const path = new THREE.CurvePath();
+  for(let i=0;i<pts.length-1;i++) path.add(new THREE.LineCurve3(pts[i], pts[i+1]));
+  return { path, pts };
+}
+function boltMat(color, opacity){
+  const m = new THREE.MeshBasicMaterial({ color, transparent:true, opacity, blending:THREE.AdditiveBlending, depthWrite:false });
+  return m;
+}
+function spawnBolt(tx, ty, tz){
+  if(!storm) return;
+  const g = new THREE.Group();
+  const from = new THREE.Vector3(tx + (Math.random()-0.5)*5, 8.5, tz + (Math.random()-0.5)*5);
+  const to = new THREE.Vector3(tx, ty, tz);
+  const main = boltPath(from, to, 1.7);
+  const add = (path, segs, r, color, op)=>{
+    const m = new THREE.Mesh(new THREE.TubeGeometry(path, segs, r, 5, false), boltMat(color, op));
+    m.userData.op = op; g.add(m);
+  };
+  add(main.path, 72, 0.06, 0xfff9ec, 1);
+  add(main.path, 72, 0.27, 0xffd36a, 0.4);
+  for(let b=0;b<3;b++){
+    const i = 2 + Math.floor(Math.random()*5);
+    const start = main.pts[i];
+    const end = start.clone().add(new THREE.Vector3((Math.random()-0.5)*3.2, -(1+Math.random()*2.4), (Math.random()-0.5)*3.2));
+    add(boltPath(start, end, 0.8).path, 24, 0.03, 0xfff9ec, 0.95);
+  }
+  scene.add(g);
+  storm.bolts.push({ g, born: clock.getElapsedTime(), life: 0.24 + Math.random()*0.1 });
+}
+function disposeBolt(b){
+  scene.remove(b.g);
+  b.g.traverse(o=>{ if(o.geometry) o.geometry.dispose(); if(o.material) o.material.dispose(); });
+}
+function playThunder(strength){
+  const ctx = getAudioCtx(); if(!ctx) return;
+  try{
+    const now = ctx.currentTime;
+    const dur = 1.1;
+    const bufSize = Math.floor(ctx.sampleRate*dur);
+    const buffer = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for(let i=0;i<bufSize;i++){ const u=i/bufSize; data[i] = (Math.random()*2-1) * Math.pow(1-u, 1.6) * (0.6+0.4*Math.sin(u*40)); }
+    const noise = ctx.createBufferSource(); noise.buffer = buffer;
+    const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.setValueAtTime(900, now); lp.frequency.exponentialRampToValueAtTime(120, now+0.5);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.55*strength, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now+dur);
+    noise.connect(lp); lp.connect(gain); gain.connect(ctx.destination);
+    noise.start(now);
+  }catch(e){}
+  playImpact();
+}
+function triggerImpactBlast(){
+  if(!impactFlash || reduceMotion) return;
+  impactFlash.classList.add('blast');
+  setTimeout(()=>impactFlash.classList.remove('blast'), 260);
+}
+function startJackpotStorm(){
+  if(reduceMotion) return false;
+  stopStorm();
+  const P = player.root.position;
+  const tile = currentIndex >= 0 ? tiles[currentIndex] : null;
+  const x = tile ? tile.world.x : P.x, z = tile ? tile.world.z : P.z, y = P.y;
+  storm = { t0: clock.getElapsedTime(), x, y, z, strike:0, flashT:-9, bolts:[], dim:0, beamOn:false, blast:false, released:false, endT:0 };
+  document.documentElement.classList.add('storm');
+  cineSpin = 0.5;
+  cineBegin('orbit');
+  const geo = new THREE.CylinderGeometry(0.44, 0.26, 7.5, 28, 1, true);
+  const mat = new THREE.MeshBasicMaterial({ map: beamTex, color:0xffd27a, transparent:true, opacity:0, blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide });
+  beamMesh = new THREE.Mesh(geo, mat);
+  beamMesh.position.set(x, y + 3.75, z);
+  beamMesh.scale.set(1, 0.01, 1);
+  scene.add(beamMesh);
+  beamLight = new THREE.PointLight(0xffd88a, 0, 11, 2);
+  beamLight.position.set(x, y + 1.3, z);
+  scene.add(beamLight);
+  return true;
+}
+function stopStorm(){
+  if(!storm) return;
+  storm.bolts.forEach(disposeBolt);
+  if(beamMesh){ scene.remove(beamMesh); beamMesh.geometry.dispose(); beamMesh.material.dispose(); beamMesh = null; }
+  if(beamLight){ scene.remove(beamLight); beamLight = null; }
+  key.intensity = LIGHT_BASE.key; hemiLight.intensity = LIGHT_BASE.hemi; fill.intensity = LIGHT_BASE.fill;
+  rim.intensity = LIGHT_BASE.rim; centerSpot.intensity = LIGHT_BASE.spot;
+  renderer.toneMappingExposure = LIGHT_BASE.expo;
+  shatterFlash.material.opacity = 0;
+  document.documentElement.classList.remove('storm');
+  if(cineMode === 'orbit') cineEnd();
+  stormWaves.length = 0;
+  storm = null;
+}
+function updateStorm(t, dt){
+  if(!storm) return;
+  const age = t - storm.t0;
+  // assombrissement : monte en 0,5 s, revient en 1,2 s après la révélation
+  if(!storm.released) storm.dim = Math.min(1, storm.dim + dt/0.5);
+  else storm.dim = Math.max(0, storm.dim - dt/1.2);
+  const flash = Math.max(0, 1 - (t - storm.flashT)/0.13);
+  key.intensity   = LIGHT_BASE.key *(1 - 0.82*storm.dim) + flash*1.6;
+  hemiLight.intensity = LIGHT_BASE.hemi*(1 - 0.75*storm.dim) + flash*0.8;
+  renderer.toneMappingExposure = LIGHT_BASE.expo*(1 - 0.55*storm.dim) + flash*0.7;
+  fill.intensity  = LIGHT_BASE.fill*(1 - 0.80*storm.dim);
+  rim.intensity   = LIGHT_BASE.rim *(1 - 0.60*storm.dim) + flash*0.8;
+  centerSpot.intensity = LIGHT_BASE.spot*(1 - 0.70*storm.dim);
+
+  // rafale de foudre sur la case du pion
+  while(!storm.released && storm.strike < STORM_STRIKES.length && age >= STORM_STRIKES[storm.strike]){
+    const i = storm.strike++;
+    storm.flashT = t;
+    spawnBolt(storm.x, storm.y, storm.z);
+    if(i >= 2) spawnBolt(storm.x, storm.y, storm.z);
+    stormWaves.push({ t0: t, x: storm.x, z: storm.z });
+    spawnSparkles(storm.x, storm.y + 0.1, storm.z, 16, 2.4, 3.4, 0.5, 0.9);
+    shatterFlash.position.set(storm.x, storm.y + 0.35, storm.z);
+    shatterFlash.scale.set(1.6, 1.6, 1.6);
+    shatterFlash.material.opacity = 1;
+    cameraPunch(i%2 ? 1.2 : 2.0);
+    playThunder(0.7 + i*0.06);
+    if(i === 0 || i === STORM_STRIKES.length-1) triggerImpactFlash();
+    cineSpin += 0.24;
+  }
+  // colonne de lumière après la dernière frappe
+  if(!storm.beamOn && age >= 2.45){
+    storm.beamOn = true;
+    startGoldRain(2.4);
+    playRiser(1500);
+    triggerCheer(1.8);
+  }
+  if(beamMesh){
+    let sc = 0, op = 0;
+    if(storm.beamOn){
+      const u = Math.min(1, (age - 2.45)/0.45);
+      sc = u < 1 ? 1.25*Math.sin(u*Math.PI/2) - 0.25*u : 1;
+      op = 0.55;
+    }
+    if(storm.released) op *= Math.max(0, 1 - (t - storm.endT)/0.9);
+    beamMesh.scale.set(1 + 0.06*Math.sin(t*9), Math.max(0.01, sc), 1 + 0.06*Math.cos(t*7));
+    beamMesh.rotation.y += dt*1.6;
+    beamMesh.material.opacity = op;
+    if(beamLight) beamLight.intensity = 3.4*op;
+    if(op > 0.3 && !storm.released) spawnSparkles(storm.x, storm.y + 0.05, storm.z, 2, 0.9, 2.8, 0.7, 1.2);
+  }
+  // flash au sol de chaque impact
+  if(shatterFlash.material.opacity > 0){
+    shatterFlash.scale.multiplyScalar(1 + dt*7);
+    shatterFlash.material.opacity = Math.max(0, shatterFlash.material.opacity - dt*4);
+  }
+  // éclairs : scintillent puis s'éteignent
+  for(const b of storm.bolts){
+    const a = (t - b.born)/b.life;
+    const o = a >= 1 ? 0 : (Math.random() < 0.3 ? 0.35 : 1)*(1 - a*0.6);
+    b.g.children.forEach(m=>{ m.material.opacity = m.userData.op*o; });
+  }
+  for(let i=storm.bolts.length-1;i>=0;i--){
+    if(t - storm.bolts[i].born >= storm.bolts[i].life){ disposeBolt(storm.bolts[i]); storm.bolts.splice(i,1); }
+  }
+  // flash blanc final puis révélation
+  if(!storm.blast && age >= STORM_MS/1000 - 0.18){ storm.blast = true; triggerImpactBlast(); playThunder(1.1); cameraPunch(2.4); }
+  if(!storm.released && age >= STORM_MS/1000){
+    storm.released = true; storm.endT = t;
+    document.documentElement.classList.remove('storm');
+    cineEnd();
+  }
+  if(storm.released && storm.dim <= 0 && t - storm.endT > 1.3) stopStorm();
+}
 
 /* ---------- Impact à l'arrivée sur une case ----------
    Un anneau plat qui s'ouvre depuis la case, plus un bref flash au sol :
@@ -3297,8 +3519,13 @@ const CINE = {
      l'image : au-delà de 14°, le bord du chapeau de paille recouvre le
      visage — c'est toute l'origine du "on ne le voit pas". */
   closeup: { dist:  3.55, elev: 0.20, aim: 1.00, lead: 1.00, side: 0.55, ease: 3.6, aimY: 0.50 },
+  /* Orage du jackpot : la caméra tourne autour du pion (vitesse
+     cineSpin, qui s'emballe à chaque coup de foudre), un peu plus haut
+     et plus loin que le gros plan pour voir la foudre tomber du ciel. */
+  orbit:   { dist:  5.2, elev: 0.34, aim: 1.00, lead: 0.00, side: 0.00, ease: 2.4, aimY: 0.75 },
 };
-let cineMode = null;          // null | 'travel' | 'closeup'
+let cineMode = null;          // null | 'travel' | 'closeup' | 'orbit'
+let cineSpin = 0;             // rad/s, mode orbit uniquement
 let cineBlend = 0;            // 0 = vue plateau, 1 = vue cinéma
 let cineAz = 0, cineAzInit = false;
 const _cineTarget = new THREE.Vector3();
@@ -3356,6 +3583,7 @@ function updateCineCam(dt){
   // qu'un profil strict
   const wantAz = angLerp(radialAz, player.root.rotation.y + cfg.side, cfg.lead);
   if(!cineAzInit){ cineAz = wantAz; cineAzInit = true; }
+  else if(cineMode === 'orbit') cineAz += dt*cineSpin;
   else cineAz = angLerp(cineAz, wantAz, Math.min(1, dt*2.2));
 
   // point visé : entre le centre du plateau et le pion selon l'étape
@@ -3401,6 +3629,7 @@ function frameStep(dt, t){
   }
   updateSparkles(dt);
   updateGoldRain(t, dt);
+  updateStorm(t, dt);
   updateAmbientSparkles(dt);
 
   trimLights.forEach(tl=>{
@@ -3433,6 +3662,7 @@ function frameStep(dt, t){
         if(pe < 0.6) posY += Math.exp(-pe*7)*Math.sin(pe*20)*0.16;
         else tile.popT0 = null;
       }
+      posY += stormWaveOffset(tile, t);
       tile.topGroup.position.y = posY;
       // le liseré + les rivets sont des InstancedMesh partagés (pas
       // des enfants de topGroup) : on les remet à jour ici pour
@@ -4773,6 +5003,7 @@ function restart(){
   player.root.scale.set(1,1,1);
   player.root.rotation.x = 0;
   player.setWalking(false);
+  stopStorm();
   cineEnd();                 // retour à la vue plateau
   placeTokenInstant(-1);
   setActive(-1);
@@ -5558,24 +5789,24 @@ function celebrate(catKey, forcedCard, opts){
   }
   if(!celeb || !celebCanvas) return;
 
-  // Carte Darkrai (jackpot final) : le plateau tremble puis vole en
-  // éclats avant que la carte n'apparaisse — la suite de la
-  // célébration (photo, feux d'artifice) démarre une fois le
-  // plateau reformé, pile au bon moment.
+  // Jackpot final (ETB) : orage sur la case du pion (foudre, onde sur
+  // les cases, colonne de lumière, pluie d'or) avant que le lot
+  // n'apparaisse — la suite de la célébration (photo, feux d'artifice,
+  // mode gros lot) démarre au flash final, pile au bon moment.
   if(catKey==='jackpot300'){
     // On efface tout de suite l'aperçu affiché en arrivant sur la case
     // (sinon sa photo resterait visible, figée, pendant tout le
     // tremblement du plateau) : rien ne s'affiche tant que le vrai
     // reveal n'est pas prêt, jamais une photo périmée d'un autre lot.
-    celeb.classList.remove('show','shake','flip','rare-card');
-    startBoardShatter();
+    celeb.classList.remove('show','shake','flip','rare-card','big');
+    const stormOn = startJackpotStorm();
     setTimeout(()=>{
       // Le jeton de génération protège contre un reveal différé qui
       // arriverait après coup (nouvelle partie, nouveau lot validé
       // entre-temps) : il ne doit jamais écraser un autre affichage.
       if(myCelebGen !== celebGen) return;
       revealCelebration(catKey, forcedCard, level);
-    }, SHAKE_MS+SHATTER_MS+120);
+    }, stormOn ? STORM_MS+60 : 0);
     return;
   }
   revealCelebration(catKey, forcedCard, level);

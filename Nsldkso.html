@@ -409,6 +409,11 @@ html.display-mode .display-badge{ display:block; }
   transition:opacity .08s ease-out;
 }
 .impact-flash.hit{ opacity:.55; transition:opacity .04s ease-out; }
+.impact-flash.blast{ opacity:1; transition:opacity .05s ease-out; }
+/* Orage du jackpot : le décor s'assombrit pendant la séquence */
+.bg-band, #bgFill{ transition:filter .5s ease; }
+html.storm .bg-band{ filter:brightness(.22) saturate(.6); }
+html.storm #bgFill{ filter:blur(22px) brightness(.10) saturate(.8); }
 
 /* Éclair qui zèbre l'écran sur les gros lots, en plus des confettis. */
 .lightning-bolt{
