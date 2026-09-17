@@ -4191,6 +4191,9 @@ function setEcoMode(on){
   ecoMode = on;
   if(bloomPass) bloomPass.enabled = !on;
   renderer.shadowMap.enabled = !on;
+  // La classe « eco » coupe aussi la décoration COTÉ PAGE (voir la CSS) :
+  // le coût d'une page n'est pas seulement celui de la scène 3D.
+  document.documentElement.classList.toggle('eco', on);
   trimLights.forEach(tl=>{ tl.spr.visible = !on; });
   orbiterLights.forEach(ol=>{ ol.spr.visible = !on; });
   // 40 disques d'ombre sous les lots flottants : transparents, donc

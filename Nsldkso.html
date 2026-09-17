@@ -189,6 +189,22 @@ html.storm #bgGlow{ display:none; }
 }
 @media (prefers-reduced-motion: reduce){ .fall-star{ display:none; } }
 
+/* ---------- Mode éco : la décoration de la PAGE ----------
+   Le coût d'une image n'est pas seulement celui de la scène 3D. Deux
+   postes tournent en permanence, même plateau immobile :
+     - les 8 étoiles filantes : chacune combine un clip-path en étoile et
+       une ombre portée, et son animation la fait TOURNER et CHANGER
+       D'ÉCHELLE. Le navigateur ne peut donc rien mettre en cache : il
+       redessine les 8 formes à chaque image, sans fin ;
+     - #bgFill : un calque plus grand que l'écran, flouté à 22 px, affiché
+       justement en mode pivoté — et placé dans #app, qui subit la
+       rotation CSS.
+   Les deux sont purement décoratifs (les étoiles disparaissent déjà quand
+   le système demande moins d'animations). En éco on garde l'assombrissement
+   du fond, on retire le flou et les étoiles. */
+html.eco .fall-star{ display:none; }
+html.eco #bgFill{ filter:brightness(0.45) saturate(1.15); }
+
 /* Nuages blancs dessinés en CSS : désactivés à la demande — l'utilisateur
    veut que ce soient les vrais nuages peints DANS la photo de fond qui
    bougent (via le travelling bgDrift ci-dessus), pas des nuages en plus
