@@ -4441,7 +4441,8 @@ function outcomeCovered(cat){
    animateur (jamais sur l'écran public) : doré quand le prochain lot
    décidé est l'ETB, bleuté quand c'est un coffret. Il s'affiche dès que
    la partie précédente est terminée (le lot de la suivante est déjà
-   connu), reste pendant les lancers, et s'éteint à la validation. */
+   connu), reste pendant les lancers, et passe au lot suivant dès la
+   validation, avant même « Recommencer ». */
 const cueDot = document.getElementById('cueDot');
 function peekNextOutcome(){
   if(outcomeState.pos >= outcomeState.batch.length) return null;
@@ -4454,7 +4455,10 @@ function peekNextOutcome(){
 }
 function updateCue(){
   if(!cueDot || isDisplay) return;
-  const cat = pendingOutcome || (currentIndex===-1 && !finished ? peekNextOutcome() : null);
+  // Pendant une partie : le lot de cette partie. Dès qu'il est validé
+  // (ou avant le premier lancer) : le lot de la partie SUIVANTE, déjà
+  // en tête de file — l'animateur le sait avant d'appuyer sur C.
+  const cat = pendingOutcome || peekNextOutcome();
   cueDot.className = 'cue-dot' + (cat==='jackpot300' ? ' etb' : cat==='etb' ? ' coffret' : '');
 }
 function nextPredeterminedOutcome(){
