@@ -4455,8 +4455,8 @@ function peekNextOutcome(){
 }
 /* Le repère principal est dans le titre « ★ PIKAPOLY ★ » tout en haut :
    l'étoile garde sa forme, seule sa teinte devient un peu plus claire.
-   Les deux étoiles changent pour l'ETB, seule celle de gauche pour un
-   coffret. Un spectateur n'y voit qu'un ornement ; l'animateur, qui
+   Les deux étoiles changent, que le prochain lot soit l'ETB ou un
+   coffret (pas de distinction demandée). Un spectateur n'y voit qu'un ornement ; l'animateur, qui
    sait où regarder, le voit au premier coup d'œil. Jamais sur l'écran
    public (isDisplay). */
 const brandStarL = document.getElementById('brandStarL');
@@ -4466,8 +4466,9 @@ function updateCue(){
   {
     const cat = pendingOutcome || peekNextOutcome();
     // même forme ★, juste une teinte un peu plus claire (classe .cue)
-    if(brandStarL) brandStarL.classList.toggle('cue', cat==='jackpot300' || cat==='etb');
-    if(brandStarR) brandStarR.classList.toggle('cue', cat==='jackpot300');
+    const big = (cat==='jackpot300' || cat==='etb');   // ETB ou coffret : même signal
+    if(brandStarL) brandStarL.classList.toggle('cue', big);
+    if(brandStarR) brandStarR.classList.toggle('cue', big);
   }
   if(!cueDot) return;
   // Pendant une partie : le lot de cette partie. Dès qu'il est validé
