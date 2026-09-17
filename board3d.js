@@ -1091,8 +1091,13 @@ function perimeterPosAt(u){ // u in [0,1)
 // (OUTCOME_RECIPE), puis la plaque est redessinée : une seule source
 // de vérité, jamais un chiffre retapé à la main.
 let LOT_ODDS_PCT = null;
+/* Affichage public des chances : désactivé à la demande de l'animateur
+   (les joueurs ne doivent pas voir le pourcentage de chaque lot). Les
+   chances restent calculées (simulation, réglages), juste pas dessinées :
+   ni sur la plaque centrale, ni dans la légende télé. */
+const SHOW_ODDS = false;
 function fmtOddsPct(p){
-  if(p==null) return '';
+  if(!SHOW_ODDS || p==null) return '';
   const s = p >= 10 ? String(Math.round(p)) : p.toFixed(1).replace('.', ',');
   return s + ' %';
 }
