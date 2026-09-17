@@ -4239,13 +4239,13 @@ function fundedCategory(catKey){
 const OUTCOME_BATCH_KEY = 'pika_outcome_batch';
 const OUTCOME_BATCH_SIZE = Math.round(CA_CYCLE/AVG_MISE);   // 500 parties = un cycle de 4500 €
 /* Nombre de lots de chaque sorte PAR CYCLE de 500 parties (4500 €) :
-   un cycle = TOUT le stock 30 ans de l'hôte (5 ETB, 10 coffrets dont 8
-   ouverts, 5 tripacks dont 2 ouverts, 5 duopacks dont 2 ouverts : les
-   ouvertures donnent 42 boosters + 20 promos/jumbos).
-   Recette retenue avec l'hôte : 15 % de 30 ans (1 partie sur 6,7),
-   communes 57 %, Zone Safari 28 % (dont les 20 promos/jumbos, remises
-   par l'animateur), prison 4 %, marge 26 % à la valeur marché (~46 %
-   sur le prix payé). Total 3313 € pour un plafond de 3330 €.
+   un cycle = TOUT le stock 30 ans de l'hôte (5 ETB, 11 coffrets dont 9
+   ouverts, 6 tripacks dont 3 ouverts, 6 duopacks dont 3 ouverts : les
+   ouvertures donnent 51 boosters + 24 promos/jumbos).
+   Recette retenue avec l'hôte : 17,6 % de 30 ans (1 partie sur 5,7),
+   communes 60 %, Zone Safari 23 % (dont les 24 promos/jumbos, remises
+   par l'animateur), prison 4 %, marge 26,6 % à la valeur marché (~46 %
+   sur le prix payé). Total 3304 € pour un plafond de 3330 €.
    Chance et Caisse ne sont pas des lots : ce sont des détours (la carte
    amène sur la case du lot prévu), voir CARD_ROUTE_P. */
 const OUTCOME_RECIPE = [
@@ -4253,8 +4253,8 @@ const OUTCOME_RECIPE = [
   { cat:'etb',         n:2   },   // Coffret ex (1 Amphinobi, 1 Nymphali)
   { cat:'booster50',   n:3   },   // Tripack 30 ans
   { cat:'gradee',      n:3   },   // Duopack 30 ans
-  { cat:'booster8',    n:42  },   // Booster 30 ans
-  { cat:'alternative', n:140 },   // Zone Safari (120) + promos/jumbos 30 ans (20)
+  { cat:'booster8',    n:51  },   // Booster 30 ans
+  { cat:'alternative', n:116 },   // Zone Safari (92) + promos/jumbos 30 ans (24)
   // Prison : fin de partie immédiate, carte commune de consolation
   { cat:'prison',      n:20  },
 ];
@@ -4404,7 +4404,7 @@ function buildOutcomeBatch(size){
 /* Version de la file. Une file laissée en mémoire du navigateur par une
    version précédente du jeu (autre recette, autre ordonnancement) n'a
    pas les mêmes garanties : elle est reconstruite. */
-const OUTCOME_BATCH_VERSION = 'v7-cycle4500-stock30ans-15pct';
+const OUTCOME_BATCH_VERSION = 'v8-cycle4500-stock28';
 function loadOutcomeState(){
   try{
     const raw = safeGetItem(OUTCOME_BATCH_KEY);
