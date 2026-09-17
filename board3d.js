@@ -892,6 +892,20 @@ controls.autoRotateSpeed = 0.55;
     camera.position.copy(controls.target).add(dir.multiplyScalar(dist));
     controls.minDistance *= factor;
     controls.maxDistance *= factor;
+  } else if(aspect0 >= 0.95){
+    /* Cadre presque carré (mode TV : colonne centrale entre les deux
+       panneaux latéraux) : le cadrage d'origine gardait une marge de
+       ciel au-dessus du plateau. On rapproche un peu ; le garde-fou
+       anti-rognage des coins garde les 4 coins visibles. */
+    const factor = 0.84;
+    // un peu plus en plongée : le plateau, vu de plus haut, remplit la
+    // hauteur du cadre au lieu de laisser du ciel au-dessus du bord du fond
+    camera.position.set(0, 15.2, 9.0);
+    const dir = camera.position.clone().sub(controls.target).normalize();
+    const dist = camera.position.distanceTo(controls.target) * factor;
+    camera.position.copy(controls.target).add(dir.multiplyScalar(dist));
+    controls.minDistance *= factor;
+    controls.maxDistance *= factor;
   }
 }
 controls.update();
@@ -1075,6 +1089,25 @@ const CENTER_LEGEND_ROWS = [
 // Chance / Caisse Communautaire : pas des lots, juste deux petits
 // badges compacts (icône + nom) sous l'en-tête, bien visibles sans
 // prendre la place d'une ligne de lot.
+/* Mode TV : la même liste que la plaque, en HTML dans la colonne de
+   gauche (grande, lisible à plusieurs mètres). Une seule source de
+   vérité : libellés CATS, photos LOT_IMAGE_URLS, chances LOT_ODDS_PCT. */
+function renderTvLegend(){
+  const el = document.getElementById('tvLegend');
+  if(!el) return;
+  el.innerHTML = '';
+  CENTER_LEGEND_ROWS.forEach(r=>{
+    const def = CATS[r.catKey]; if(!def) return;
+    const row = document.createElement('div');
+    row.className = 'tv-lot';
+    row.style.setProperty('--c', SWATCH_COLORS[r.swatch] || '#e9c34a');
+    const img = document.createElement('img'); img.src = LOT_IMAGE_URLS[r.catKey] || ''; img.alt = '';
+    const name = document.createElement('div'); name.className = 'name'; name.textContent = def.label;
+    const pct = document.createElement('div'); pct.className = 'pct'; pct.textContent = fmtOddsPct(LOT_ODDS_PCT ? LOT_ODDS_PCT[r.catKey] : null);
+    row.appendChild(img); row.appendChild(name); row.appendChild(pct);
+    el.appendChild(row);
+  });
+}
 const CENTER_LEGEND_BADGES = [
   {swatch:'purple', icon:'question', title:'Chance'},
   {swatch:'green',  icon:'gift',     title:'Caisse'},
@@ -4272,6 +4305,7 @@ const OUTCOME_RECIPE = [
   OUTCOME_RECIPE.forEach(r=>{ odds[r.cat] = 100*r.n/OUTCOME_BATCH_SIZE; used += r.n; });
   odds.commune = 100*(OUTCOME_BATCH_SIZE-used)/OUTCOME_BATCH_SIZE;
   LOT_ODDS_PCT = odds;
+  renderTvLegend();
   const old = centerPlate.material.map;
   centerPlate.material.map = makeCenterPlateTexture();
   centerPlate.material.needsUpdate = true;
@@ -5377,6 +5411,27 @@ if(undoBtn) undoBtn.addEventListener('click', ()=>{
    B = tirer les cartes, C = recommencer la partie, D = valider le lot
    remporté, Z = annuler le dernier lot validé par erreur. Ignorés si on est en train de taper
    dans un champ de texte. */
+/* Mode TV : compteur de lancers, dernier total tiré et message d'état
+   dans la colonne de droite. Rafraîchi à intervalle court (état simple,
+   coût nul), le texte d'état est celui de la barre de statut masquée. */
+const tvRolls = document.getElementById('tvRolls');
+const tvTotal = document.getElementById('tvTotal');
+const tvStatus = document.getElementById('tvStatus');
+function updateTvHud(){
+  if(!tvRolls) return;
+  const started = (currentIndex >= 0 || rollsUsed > 0);
+  tvRolls.textContent = 'Lancer ' + Math.min(rollsUsed, rollsAllowed) + ' / ' + rollsAllowed;
+  const total = topNum ? topNum.textContent : '';
+  tvTotal.textContent = finished ? 'Partie terminée' : (started && total ? 'Dernier tirage : ' + total : 'Prêt à jouer');
+  if(tvStatus && statusEl) tvStatus.textContent = statusEl.textContent;
+}
+setInterval(updateTvHud, 250);
+function toggleFullscreen(){
+  try{
+    if(!document.fullscreenElement) document.documentElement.requestFullscreen();
+    else document.exitFullscreen();
+  }catch(e){}
+}
 window.addEventListener('keydown', (e)=>{
   const tag = (document.activeElement && document.activeElement.tagName) || '';
   if(tag==='INPUT' || tag==='TEXTAREA') return;
@@ -5398,6 +5453,7 @@ window.addEventListener('keydown', (e)=>{
     else if(currentIndex<=0) showKeyHint('Aucun lot à garder : tirez d’abord les cartes (B)');
   }
   else if(k==='z'){ if(undoBtn && !undoBtn.hidden) undoBtn.click(); }
+  else if(k==='f'){ toggleFullscreen(); }
 });
 
 if(syncChannel && isDisplay){
@@ -5454,7 +5510,17 @@ const celebPhoto = document.getElementById('celebPhoto');
    toute autonomie, sans message de sync supplémentaire. */
 const resultsTicker = document.getElementById('resultsTicker');
 let lastResults = [];
+const tvResults = document.getElementById('tvResults');
 function renderResultsTicker(){
+  if(tvResults){
+    tvResults.innerHTML = '';
+    lastResults.forEach((r,i)=>{
+      const item = document.createElement('div');
+      item.className = 'r' + (i===0 ? ' new' : '');
+      const img = document.createElement('img'); img.src = r.url; img.alt = '';
+      item.appendChild(img); tvResults.appendChild(item);
+    });
+  }
   if(!resultsTicker) return;
   resultsTicker.innerHTML = '';
   lastResults.forEach((r,i)=>{
