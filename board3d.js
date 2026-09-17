@@ -5199,6 +5199,29 @@ async function move(forcedCount, forcedCard){
 
   moving = false;
   updateWinButton();
+  /* Partie programmée à la touche : on accorde les lancers nécessaires
+     pour atteindre la case demandée, AVANT de conclure que les lancers
+     sont épuisés (sinon le lot de la case d'arrivée serait validé
+     automatiquement juste ici, et la programmation tomberait à l'eau).
+
+     Sans cette rallonge, les deux plus gros lots ne pouvaient JAMAIS
+     sortir : le plateau fait 36 cases, le Coffret est en case 34 et
+     l'ETB en 35, alors que 3 lancers (+1 par double) parcourent une
+     vingtaine de cases. Les dés visaient bien la bonne case, ils
+     n'avaient pas assez de lancers pour l'atteindre, et la partie
+     finissait sur une commune. Mesuré avant correction : Tripack,
+     Duopack et Lot Mystère sortaient, Coffret et ETB jamais.
+
+     Cela ne concerne QUE les parties programmées, déjà hors
+     comptabilité : une partie normale garde ses 3 lancers, sa mise et
+     son plafond de reversement. Le plafond de sécurité évite une partie
+     qui tournerait sans fin si la case visée restait hors d'atteinte. */
+  const FORCED_ROLLS_MAX = 15;
+  if(forcedGame && pendingOutcome && !finished
+     && currentIndex >= 0 && tiles[currentIndex].catKey !== pendingOutcome
+     && rollsUsed >= rollsAllowed && rollsAllowed < FORCED_ROLLS_MAX){
+    rollsAllowed++;
+  }
   const rollsExhausted = rollsUsed>=rollsAllowed;
   const finalCat = currentIndex>=0 ? tiles[currentIndex].catKey : null;
   const canClaim = currentIndex>0 && finalCat!=='chance' && finalCat!=='chest';
