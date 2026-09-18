@@ -13,7 +13,9 @@ Tout est en français, y compris le code et les messages de commit — garder ce
 | fichier | rôle |
 |---|---|
 | `Nsldkso.html` | page unique : HTML + toute la CSS (~1 500 lignes) |
-| `board3d.js` | tout le jeu : scène three.js, règles, comptabilité, animations (~6 500 lignes, un seul module ES) |
+| **`regles/argent.js`** | **la règle d'argent : marge, prix, recettes, file des lots (~320 lignes). Module PUR : ni DOM, ni three.js, ni `localStorage` — c'est le seul endroit où se règle l'argent** |
+| `board3d.js` | le jeu : scène three.js, animations, déroulé, et la tenue des compteurs (~6 350 lignes, un module ES) |
+| `tests/argent.test.mjs` | vérifie la règle d'argent hors navigateur, en moins d'une seconde |
 | `tools/build.py` | bundle HTML + JS + three.js + assets en **un seul fichier** autonome |
 | `vendor/three/` | three.js et ses modules (`VENDOR_MODULES` dans build.py les liste) |
 | `assets/lots/*.jpg` | photo de chaque lot, clé = catégorie (`etb150.jpg`, `booster50.jpg`…) |
@@ -25,17 +27,23 @@ Tout est en français, y compris le code et les messages de commit — garder ce
 ## Construire, tester, livrer
 
 ```bash
+node --test tests/*.test.mjs                           # la règle d'argent, en < 1 s, sans navigateur
 python3 tools/build.py --out dist/pikajackpot.html     # ~7 Mo, s'ouvre en double-clic, hors ligne
-cp board3d.js /tmp/c.mjs && node --check /tmp/c.mjs         # vérification de syntaxe (module ES)
+node --check board3d.js regles/argent.js               # vérification de syntaxe (module ES)
 ```
 
 Les `import` ES ne marchent pas en `file://` : **toujours livrer le bundle**, jamais
 les sources. Pour donner un lien : publier `dist/pikajackpot.html` en Artifact.
 
-Il n'y a pas de suite de tests. Après toute modification de recette, de prix ou de
-plafond, charger le bundle dans un navigateur et vérifier qu'il n'y a **aucune erreur
-console** : `buildOutcomeBatch` lève une exception si les lots dépassent le plafond,
+Après toute modification de recette, de prix ou de plafond : **lancer les tests d'abord**
+(`node --test tests/*.test.mjs`). Ils construisent 60 files complètes et vérifient qu'à
+*chaque partie* le reversé tient sous le plafond — la garantie qui coûte de l'argent en
+direct. Ils ne démarrent aucune scène 3D, c'est tout l'intérêt de `regles/argent.js`.
+
+Ensuite seulement, charger le bundle dans un navigateur et vérifier qu'il n'y a **aucune
+erreur console** : `buildOutcomeBatch` lève une exception si les lots dépassent le plafond,
 et la page ne se charge pas. Un script Playwright suffit (lire `localStorage` après chargement).
+Les tests couvrent l'argent ; le navigateur couvre le reste (3D, mise en page, overlays).
 
 Clés `localStorage` (tout l'état vit dans le navigateur de la machine de diffusion) :
 `pika_total_mise` / `pika_total_paid` (cagnotte et lots comptés), `pika_outcome_batch`
@@ -59,13 +67,18 @@ Catégories : `jackpot300` (ETB 30 ans), `etb` (coffret ex), `booster50` (tripac
 `gradee` (duopack), `booster8` (booster), `alternative` (lot mystère : booster ou carte),
 `commune`, `prison`, plus `chance` / `chest` qui sont des détours, pas des lots.
 
-**Rentabilité** (section « Règle métier de rentabilité ») : `AVG_MISE` (9 €), `CA_CYCLE`
+**Rentabilité** (tout est dans `regles/argent.js`) : `AVG_MISE` (9 €), `CA_CYCLE`
 (4 500 €), `MARGIN_TARGET` (0,26) → `CEILING_RATIO`. À tout instant
 `totalPaid ≤ ceilingFor(totalMise)`. `fundedCategory()` fait redescendre un lot non
 couvert au palier inférieur. `OUTCOME_RECIPE` = nombre de chaque lot par cycle de
 500 parties ; `buildOutcomeBatch()` construit la file mélangée qui respecte le plafond
-à chaque préfixe. `nextPredeterminedOutcome()` la consomme ; les dés amènent ensuite le
+à chaque préfixe. `nextPredeterminedOutcome()` la consomme (dans `board3d.js`) ; les dés amènent ensuite le
 pion sur une case du lot déjà décidé (section « Dés pipés »).
+
+La frontière : `regles/argent.js` **décide** (fonctions pures, testées), `board3d.js`
+**encaisse et affiche** (compteurs, `localStorage`, 3D). `fundedCategory()` en est
+l'exemple : `tierFor()` choisit le palier payable, `board3d.js` écrit le total.
+Ne jamais remettre de règle d'argent dans `board3d.js` : elle redeviendrait invérifiable.
 
 **Recalibrage** (`RECAL`, `ceilingFor`, `recalRec`) : bloc appliqué **une seule fois**
 au chargement (clé `pika_recal`, comparée à `RECAL.id`). Il pose les compteurs, une

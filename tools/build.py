@@ -31,6 +31,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # as its own `import` lines use relative paths or the bare 'three'
 # specifier (both are resolved generically below).
 VENDOR_MODULES = [
+    # La règle d'argent (marge, prix, recettes) : module pur, sans
+    # dépendance, donc en tête de liste.
+    'regles/argent.js',
     'vendor/three/OrbitControls.js',
     'vendor/three/examples/jsm/utils/BufferGeometryUtils.js',
     'vendor/three/examples/jsm/loaders/GLTFLoader.js',
