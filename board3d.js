@@ -4358,6 +4358,54 @@ const AVG_MISE = 9;              // mise moyenne (euros)
 const CA_CYCLE = 4500;           // chiffre d'affaires d'un cycle (euros) : tout le stock 30 ans
 const MARGIN_TARGET = 0.26;      // marge garantie sur le cycle et à chaque instant, lots comptés à leur VALEUR MARCHÉ (revente)
 const CEILING_RATIO = 1 - MARGIN_TARGET;  // part maximale reversée (dérivée, ne pas régler ici)
+
+/* ---------- Recalibrage en cours de cycle (18/09/2026) ----------
+   Constat à 1 500 € encaissés, aux prix annoncés par l'hôte : 1 490 €
+   de lots déjà sortis (6 coffrets, 1 ETB, 3 tripacks, 20 boosters —
+   pour l'essentiel à la touche forcée, donc invisibles pour cette
+   comptabilité), là où la règle des 26 % en autorisait 1 110. Soit
+   380 € d'avance sur la courbe de reversement.
+   Plutôt que de bloquer tous les gros lots jusqu'à ce que la cagnotte
+   rattrape (une soixantaine de parties à communes : le direct meurt),
+   l'avance est ÉTALÉE sur le reste du cycle : sur les 3 000 € restants,
+   la part reversée passe de 74 % à 61,3 % (1 840 € au lieu de 2 220),
+   et la file des lots est reconstruite avec le stock qui reste
+   réellement. Au terme du cycle (4 500 €), la règle normale reprend.
+   Appliqué UNE seule fois (clé pika_recal) ; « Démarrage cagnotte »
+   l'efface définitivement, et il ne se réapplique jamais ensuite. */
+const RECAL_KEY = 'pika_recal';
+const RECAL = {
+  id: '2026-09-18',
+  miseBase: 1500,                       // encaissé au moment du recalibrage
+  paidBase: 1500 * CEILING_RATIO,       // 1 110 € : point « sur la courbe » dans les unités du jeu
+  miseEnd: 4500,                        // fin du cycle
+  ratio: 1840 / 3000,                   // part reversée sur le reste du cycle (61,3 %)
+  games: Math.round(3000 / AVG_MISE),   // 333 parties restantes
+  mystB: 20,                            // boosters restants pour les lots mystère (30 × 2/3)
+  recipe: [
+    { cat:'jackpot300',  n:4  },   // ETB 30 ans : 5 − 1 sorti
+    { cat:'etb',         n:0  },   // coffrets : budget du cycle déjà dépassé (6 sortis pour 2 prévus)
+    { cat:'booster50',   n:0  },   // tripacks : les 3 du cycle sont sortis
+    { cat:'gradee',      n:0  },   // duopacks : les 6 ont été ouverts
+    { cat:'booster8',    n:31 },   // boosters : 51 − 20 sortis
+    { cat:'alternative', n:50 },   // Zone Safari / promos : réduit pour tenir sous 61,3 %
+    { cat:'prison',      n:13 },
+  ],
+};
+let recalRec = null;
+try{ recalRec = JSON.parse(safeGetItem(RECAL_KEY) || 'null'); }catch(e){}
+if(recalRec && recalRec.id !== RECAL.id) recalRec = null;
+let recal = (recalRec && !recalRec.cleared) ? recalRec : null;
+function clearRecal(){
+  recal = null;
+  try{ localStorage.setItem(RECAL_KEY, JSON.stringify({ id: RECAL.id, cleared: true })); }catch(e){}
+}
+/* Plafond de reversement cumulé pour un encaissé donné : la règle
+   normale (74 %), ou la pente réduite du recalibrage tant qu'il court. */
+function ceilingFor(mise){
+  if(recal && mise < RECAL.miseEnd) return RECAL.paidBase + RECAL.ratio*(mise - RECAL.miseBase);
+  return CEILING_RATIO*mise;
+}
 let totalMise = parseFloat(safeGetItem(TOTAL_MISE_KEY)) || 0;
 let totalPaid = parseFloat(safeGetItem(TOTAL_PAID_KEY)) || 0;
 function saveTotals(){
@@ -4385,6 +4433,7 @@ if(resetBankBtn) resetBankBtn.addEventListener('click', ()=>{
   totalMise = 0;
   totalPaid = 0;
   saveTotals();
+  clearRecal();
   resetOutcomeBatch();
   resetBankBtn.hidden = true;
   flashBankResetToken();
@@ -4415,8 +4464,8 @@ function fundedCategory(catKey){
   if(startIdx===undefined) return catKey;
   for(let i=startIdx;i<PAYOUT_LADDER.length;i++){
     const tier = PAYOUT_LADDER[i];
-    const projected = totalMise>0 ? (totalPaid+tier.cost)/totalMise : 0;
-    if(projected <= CEILING_RATIO || i===PAYOUT_LADDER.length-1){
+    const covered = totalMise>0 ? (totalPaid+tier.cost <= ceilingFor(totalMise) + 1e-9) : true;
+    if(covered || i===PAYOUT_LADDER.length-1){
       totalPaid += tier.cost;
       saveTotals();
       return tier.cat;
@@ -4482,11 +4531,16 @@ const OUTCOME_COST = { prison: 0.68 };
 PAYOUT_LADDER.forEach(t=>{ OUTCOME_COST[t.cat] = t.cost; });
 
 
-function buildOutcomeBatch(size){
+function buildOutcomeBatch(size, recipe, ratio, baseSize){
+  // par défaut : la recette du cycle complet ; le recalibrage passe la
+  // sienne, avec sa pente de reversement réduite
+  recipe   = recipe   || OUTCOME_RECIPE;
+  ratio    = ratio    || CEILING_RATIO;
+  baseSize = baseSize || OUTCOME_BATCH_SIZE;
   const counts = {};
   let assigned = 0;
-  OUTCOME_RECIPE.forEach(r=>{
-    const n = Math.round(r.n * size / OUTCOME_BATCH_SIZE);
+  recipe.forEach(r=>{
+    const n = Math.round(r.n * size / baseSize);
     counts[r.cat] = n;
     assigned += n;
   });
@@ -4494,7 +4548,7 @@ function buildOutcomeBatch(size){
   // garde-fou : le cycle entier doit tenir sous la part reversée
   {
     let tot = 0; Object.keys(counts).forEach(c=>{ tot += counts[c]*(OUTCOME_COST[c]||0); });
-    const cap = size*AVG_MISE*CEILING_RATIO;
+    const cap = size*AVG_MISE*ratio;
     if(tot > cap + 1e-9) throw new Error('OUTCOME_RECIPE : '+tot.toFixed(0)+' € de lots pour un plafond de '+cap.toFixed(0)+' €');
   }
 
@@ -4535,7 +4589,7 @@ function buildOutcomeBatch(size){
   const nSeq = remaining.length;
   for(let pos=0; pos<nSeq; pos++){
     cumMise += AVG_MISE;
-    const headroom = cumMise*CEILING_RATIO - cumPaid;
+    const headroom = cumMise*ratio - cumPaid;
     const affGood = [], affSmall = [];
     for(let i=0;i<remaining.length;i++){
       if(OUTCOME_COST[remaining[i]] > headroom) continue;
@@ -4578,7 +4632,7 @@ function buildOutcomeBatch(size){
     let mise=0, paid=0;
     for(let k=0;k<arr.length;k++){
       mise += AVG_MISE; paid += OUTCOME_COST[arr[k]];
-      if(paid > mise*CEILING_RATIO + 1e-9) return false;
+      if(paid > mise*ratio + 1e-9) return false;
     }
     return true;
   };
@@ -4590,7 +4644,7 @@ function buildOutcomeBatch(size){
     let mise=0, paid=0;
     for(let p=0; p<=arr.length; p++){
       // insérer à p = payer `cost` à la partie p+1, avant les suivantes
-      if((mise+AVG_MISE)*CEILING_RATIO - paid >= cost) candidates.push(p);
+      if((mise+AVG_MISE)*ratio - paid >= cost) candidates.push(p);
       if(p<arr.length){ mise += AVG_MISE; paid += OUTCOME_COST[arr[p]]; }
     }
     // on garde celles qui laissent TOUS les préfixes suivants sous le plafond
@@ -4652,6 +4706,21 @@ let outcomeState = loadOutcomeState();
 function saveOutcomeState(){
   try{ localStorage.setItem(OUTCOME_BATCH_KEY, JSON.stringify(outcomeState)); }catch(e){}
 }
+/* Application unique du recalibrage (voir RECAL) : les compteurs sont
+   posés à l'état réel et la file est reconstruite pour le reste du
+   cycle. Aucune trace en mémoire = premier chargement depuis le
+   recalibrage ; une trace (appliqué ou effacé) = plus rien à faire. */
+if(!recalRec){
+  totalMise = RECAL.miseBase;
+  totalPaid = RECAL.paidBase;
+  saveTotals();
+  recal = { id: RECAL.id, at: Date.now() };
+  try{ localStorage.setItem(RECAL_KEY, JSON.stringify(recal)); }catch(e){}
+  const batch = buildOutcomeBatch(RECAL.games, RECAL.recipe, RECAL.ratio, RECAL.games);
+  const mystN = batch.filter(c=>c==='alternative').length;
+  outcomeState = { version: OUTCOME_BATCH_VERSION, batch, pos: 0, mystN, mystB: Math.min(RECAL.mystB, mystN) };
+  saveOutcomeState();
+}
 // Un nouveau lot de résultats est régénéré automatiquement à
 // l'épuisement du précédent (jamais de rupture de stock) et à chaque
 // remise à zéro de la cagnotte (nouveau direct = nouveau lot).
@@ -4664,7 +4733,7 @@ function saveOutcomeState(){
 function outcomeCovered(cat){
   const cost = OUTCOME_COST[cat];
   if(cost===undefined) return true;
-  return totalPaid + cost <= CEILING_RATIO*totalMise + 1e-9;
+  return totalPaid + cost <= ceilingFor(totalMise) + 1e-9;
 }
 /* ---------- Repère discret de l'animateur ----------
    Un point de 5 px, presque invisible, en bas à gauche de l'écran
@@ -4678,7 +4747,7 @@ function peekNextOutcome(){
   if(outcomeState.pos >= outcomeState.batch.length) return null;
   const b = outcomeState.batch, pos = outcomeState.pos;
   // même règle de couverture qu'au tirage, la mise de la partie à venir comprise
-  const covered = cat => { const c = OUTCOME_COST[cat]; return c===undefined || totalPaid + c <= CEILING_RATIO*(totalMise + AVG_MISE) + 1e-9; };
+  const covered = cat => { const c = OUTCOME_COST[cat]; return c===undefined || totalPaid + c <= ceilingFor(totalMise + AVG_MISE) + 1e-9; };
   if(covered(b[pos])) return b[pos];
   for(let j=pos+1;j<b.length;j++) if(covered(b[j])) return b[j];
   return 'commune';
