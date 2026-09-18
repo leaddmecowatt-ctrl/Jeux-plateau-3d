@@ -103,7 +103,7 @@ décoration). Le contexte WebGL perdu est rattrapé (`webglcontextlost`).
 
 ## Historique utile
 
-- Branche de travail à jour : `claude/claude-code-discussion-bug-nw46cl`
-  (`main` est resté au tout premier upload : ne pas partir de `main`).
+- `main` est la référence, à jour du 18/09/2026 (tout le jeu, ce dossier compris).
+  Les branches `claude/*` sont l'historique des sessions précédentes.
 - `git log` est la documentation la plus précise : chaque commit dit ce qui a changé
   et pourquoi, en français.

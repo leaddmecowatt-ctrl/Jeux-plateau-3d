@@ -6,13 +6,14 @@ tout seul en ouvrant le dépôt. Ici, c'est pour un humain.
 
 ## 1. Récupérer le bon code
 
-Le dépôt GitHub est `leaddmecowatt-ctrl/Jeux-plateau-3d`. **Attention** : la branche
-`main` contient seulement le tout premier fichier. Tout le jeu est sur la branche
-**`claude/claude-code-discussion-bug-nw46cl`** (285+ commits). En ouvrant le dépôt dans
-Claude Code, dire dès le premier message :
+Le dépôt GitHub est `leaddmecowatt-ctrl/Jeux-plateau-3d`. La branche **`main`** contient
+tout le jeu, à jour du 18/09/2026 : cloner le dépôt suffit. Les branches `claude/*` sont
+l'historique des sessions précédentes, il n'y a rien à y chercher.
 
-> Travaille sur la branche `claude/claude-code-discussion-bug-nw46cl`, pas sur `main`.
-> Lis `CLAUDE.md` et `docs/TRANSMISSION.md` avant tout.
+En ouvrant le dépôt dans Claude Code, un bon premier message :
+
+> Lis `CLAUDE.md` et `docs/TRANSMISSION.md` avant tout. Construis le bundle et ouvre-le
+> pour vérifier qu'il n'y a aucune erreur, puis dis-moi ce que tu as compris du jeu.
 
 ## 2. Ce que c'est
 
