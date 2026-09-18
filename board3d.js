@@ -4359,37 +4359,37 @@ const CA_CYCLE = 4500;           // chiffre d'affaires d'un cycle (euros) : tout
 const MARGIN_TARGET = 0.26;      // marge garantie sur le cycle et à chaque instant, lots comptés à leur VALEUR MARCHÉ (revente)
 const CEILING_RATIO = 1 - MARGIN_TARGET;  // part maximale reversée (dérivée, ne pas régler ici)
 
-/* ---------- Recalibrage en cours de cycle (18/09/2026) ----------
-   Constat à 1 500 € encaissés, aux prix annoncés par l'hôte : 1 490 €
-   de lots déjà sortis (6 coffrets, 1 ETB, 3 tripacks, 20 boosters —
-   pour l'essentiel à la touche forcée, donc invisibles pour cette
-   comptabilité), là où la règle des 26 % en autorisait 1 110. Soit
-   380 € d'avance sur la courbe de reversement.
-   Plutôt que de bloquer tous les gros lots jusqu'à ce que la cagnotte
-   rattrape (une soixantaine de parties à communes : le direct meurt),
-   l'avance est ÉTALÉE sur le reste du cycle : sur les 3 000 € restants,
-   la part reversée passe de 74 % à 61,3 % (1 840 € au lieu de 2 220),
-   et la file des lots est reconstruite avec le stock qui reste
-   réellement. Au terme du cycle (4 500 €), la règle normale reprend.
+/* ---------- Recalibrage sur le stock réel (18/09/2026, soir) ----------
+   L'hôte a sorti des lots à la touche forcée (hors comptabilité) et le
+   plan initial ne correspond plus à rien. On repart de ce qu'il RESTE
+   en stock, à zéro de compteur, avec une marge relevée de 26 % à 41 %
+   (part reversée 59 % au lieu de 74 %) pour rattraper l'avance prise :
+     4 ETB 30 ans · 3 coffrets ex (+1 entamé, dont les packs vont aux
+     lots mystère) · 2 tripacks · 20 boosters · communes/promos à volonté.
+   Ce stock est étalé sur 3 300 € encaissés (367 parties à 9 €) : c'est
+   ce qu'il faut pour le reverser à 59 %. Au-delà, le jeu reprend le plan
+   standard et la règle des 26 % — il faudra un nouveau stock.
+   Bilan attendu sur tout le direct (1 500 € déjà faits + 3 300) : environ
+   28 % de marge, soit l'objectif initial retrouvé.
    Appliqué UNE seule fois (clé pika_recal) ; « Démarrage cagnotte »
    l'efface définitivement, et il ne se réapplique jamais ensuite. */
 const RECAL_KEY = 'pika_recal';
 const RECAL = {
-  id: '2026-09-18',
-  miseBase: 1500,                       // encaissé au moment du recalibrage
-  paidBase: 1500 * CEILING_RATIO,       // 1 110 € : point « sur la courbe » dans les unités du jeu
-  miseEnd: 4500,                        // fin du cycle
-  ratio: 1840 / 3000,                   // part reversée sur le reste du cycle (61,3 %)
-  games: Math.round(3000 / AVG_MISE),   // 333 parties restantes
-  mystB: 20,                            // boosters restants pour les lots mystère (30 × 2/3)
+  id: '2026-09-18b',
+  miseBase: 0,                          // nouveau départ de compteur
+  paidBase: 0,
+  miseEnd: 3300,                        // horizon du stock restant
+  ratio: 0.59,                          // part reversée : marge 41 %
+  games: Math.round(3300 / AVG_MISE),   // 367 parties
+  mystB: 3,                             // packs du coffret entamé, pour les lots mystère
   recipe: [
-    { cat:'jackpot300',  n:4  },   // ETB 30 ans : 5 − 1 sorti
-    { cat:'etb',         n:0  },   // coffrets : budget du cycle déjà dépassé (6 sortis pour 2 prévus)
-    { cat:'booster50',   n:0  },   // tripacks : les 3 du cycle sont sortis
-    { cat:'gradee',      n:0  },   // duopacks : les 6 ont été ouverts
-    { cat:'booster8',    n:31 },   // boosters : 51 − 20 sortis
-    { cat:'alternative', n:50 },   // Zone Safari / promos : réduit pour tenir sous 61,3 %
-    { cat:'prison',      n:13 },
+    { cat:'jackpot300',  n:4  },   // ETB 30 ans
+    { cat:'etb',         n:3  },   // coffrets ex entiers
+    { cat:'booster50',   n:2  },   // tripacks
+    { cat:'gradee',      n:0  },   // duopacks : plus en stock
+    { cat:'booster8',    n:20 },   // boosters
+    { cat:'alternative', n:25 },   // Zone Safari / promos (cartes, gratuites pour l'hôte)
+    { cat:'prison',      n:15 },
   ],
 };
 let recalRec = null;
