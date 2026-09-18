@@ -6,6 +6,8 @@ tripacks, coffrets, ETB). L'animateur pilote au clavier, l'image est
 diffusée sur une télé, souvent **pivotée à la verticale**.
 
 Ce fichier s'adresse à Claude Code. Le guide humain est dans `docs/TRANSMISSION.md`.
+**Avant tout chantier, lire `docs/PLAN-ALLEGEMENT.md`** : c'est le contrat (but, ordre,
+méthode, ce qui est fait). Le mettre à jour après.
 Tout est en français, y compris le code et les messages de commit — garder cette langue.
 
 ## Fichiers
