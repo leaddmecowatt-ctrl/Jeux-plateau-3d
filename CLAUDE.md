@@ -109,6 +109,12 @@ l'overlay sur la zone du plateau et publie `--celeb-box-h` pour que la CSS s'y m
 **Qualité** : `applyQuality()`, `setEcoMode()` (mode éco : plus de flou, d'ombres ni de
 décoration). Le contexte WebGL perdu est rattrapé (`webglcontextlost`).
 
+**Appels de dessin** : les loupiotes du liseré, les halos sous les lots, les loupiotes
+tournantes, les étincelles et les disques d'ombre sont des **lots instanciés** (`SpriteBatch`,
+`DiscBatch`) : une famille = un appel de dessin, rendu identique aux sprites un par un
+(vérifié au pixel). 344 → 268 appels par image. Les 4 loupiotes d'angle restent des sprites
+(elles croisent l'ornement d'angle : seul le tri sprite par sprite garde l'ordre exact).
+
 **Fond ondulant** : `#bgWave`, un seul `<canvas>` + shader WebGL (script en bas de
 `Nsldkso.html`) : onde ±2,2 px, période 8 s, cadence bridée à 30/s. En éco et en
 `prefers-reduced-motion` l'onde se fige ; sans WebGL, `html.bg-static` remet la photo en

@@ -682,6 +682,86 @@ function makeSprite(texture, scale){
   return spr;
 }
 
+/* ---------- Lots de sprites : un appel de dessin par famille ----------
+   Chaque THREE.Sprite coûte un appel de dessin. Les loupiotes du liseré
+   (48), les halos sous les lots (12), les 4 loupiotes tournantes et les
+   48 étincelles en faisaient 112 par image, pour deux textures et un seul
+   mode de fondu. Un lot (batch) = un quad par sprite, instancié, orienté
+   face caméra dans le shader, avec sa position, sa taille et son opacité
+   par instance. Même texture, même fondu additif, même atténuation avec
+   la distance, mêmes corrections de tonalité et de couleur
+   (MeshBasicMaterial et SpriteMaterial partagent ces morceaux de shader) :
+   le pixel rendu est le même, en UN appel au lieu de N. */
+class SpriteBatch {
+  constructor(map, capacity, { opacity = 1, blending = THREE.AdditiveBlending, renderOrder = 0 } = {}){
+    const plane = new THREE.PlaneGeometry(1, 1);
+    const geo = new THREE.InstancedBufferGeometry();
+    geo.index = plane.index;
+    geo.setAttribute('position', plane.attributes.position);
+    geo.setAttribute('uv', plane.attributes.uv);
+    this.pos   = new THREE.InstancedBufferAttribute(new Float32Array(capacity*3), 3).setUsage(THREE.DynamicDrawUsage);
+    this.size  = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1).setUsage(THREE.DynamicDrawUsage);
+    this.alpha = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1).setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('iPos', this.pos);
+    geo.setAttribute('iSize', this.size);
+    geo.setAttribute('iAlpha', this.alpha);
+    geo.instanceCount = 0;
+    const mat = new THREE.MeshBasicMaterial({ map, transparent:true, depthWrite:false, blending, opacity });
+    mat.onBeforeCompile = (sh)=>{
+      // centre en espace vue + quad face caméra, exactement comme le shader des sprites
+      sh.vertexShader = 'attribute vec3 iPos; attribute float iSize; attribute float iAlpha; varying float vAlpha;\n'
+        + sh.vertexShader.replace('#include <project_vertex>',
+          'vAlpha = iAlpha;\nvec4 mvPosition = modelViewMatrix * vec4(iPos, 1.0);\nmvPosition.xy += transformed.xy * iSize;\ngl_Position = projectionMatrix * mvPosition;');
+      sh.fragmentShader = 'varying float vAlpha;\n'
+        + sh.fragmentShader.replace('#include <alphamap_fragment>', '#include <alphamap_fragment>\ndiffuseColor.a *= vAlpha;');
+    };
+    mat.customProgramCacheKey = ()=>'SpriteBatch';
+    this.mesh = new THREE.Mesh(geo, mat);
+    this.mesh.frustumCulled = false;   // les instances sont partout : la boîte du quad unitaire ne veut rien dire
+    this.mesh.renderOrder = renderOrder;
+    this.count = 0;
+  }
+  add(x,y,z, size, alpha){ const i = this.count++; this.mesh.geometry.instanceCount = this.count; this.set(i,x,y,z,size,alpha); return i; }
+  set(i,x,y,z, size, alpha){ this.pos.setXYZ(i,x,y,z); this.size.setX(i,size); this.alpha.setX(i,alpha); this.pos.needsUpdate = this.size.needsUpdate = this.alpha.needsUpdate = true; }
+  setPos(i,x,y,z){ this.pos.setXYZ(i,x,y,z); this.pos.needsUpdate = true; }
+  setSize(i,s){ this.size.setX(i,s); this.size.needsUpdate = true; }
+  setAlpha(i,a){ this.alpha.setX(i,a); this.alpha.needsUpdate = true; }
+}
+
+/* Les disques d'ombre sous les lots : un InstancedMesh (un appel), chaque
+   disque avec sa matrice (position, rayon) et son opacité. Même cercle à
+   20 segments, même noir, même fondu qu'avant. */
+class DiscBatch {
+  constructor(capacity, { renderOrder = -1 } = {}){
+    const geo = new THREE.CircleGeometry(1, 20);
+    this.alpha = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1).setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('iAlpha', this.alpha);
+    const mat = new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:1 });
+    mat.onBeforeCompile = (sh)=>{
+      sh.vertexShader = 'attribute float iAlpha; varying float vAlpha;\n'
+        + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvAlpha = iAlpha;');
+      sh.fragmentShader = 'varying float vAlpha;\n'
+        + sh.fragmentShader.replace('#include <alphamap_fragment>', '#include <alphamap_fragment>\ndiffuseColor.a *= vAlpha;');
+    };
+    mat.customProgramCacheKey = ()=>'DiscBatch';
+    this.mesh = new THREE.InstancedMesh(geo, mat, capacity);
+    this.mesh.count = 0;
+    this.mesh.frustumCulled = false;
+    // dessinés avant les autres transparents : ils sont posés sur la case,
+    // rien de transparent ne passe dessous, et ils écrivent la profondeur
+    this.mesh.renderOrder = renderOrder;
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this._m = new THREE.Matrix4(); this._p = new THREE.Vector3(); this._s = new THREE.Vector3();
+    this._q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI/2, 0, 0));   // à plat
+  }
+  add(x,y,z, radius, alpha){ const i = this.mesh.count++; this.set(i,x,y,z,radius,alpha); return i; }
+  set(i,x,y,z, radius, alpha){
+    this._m.compose(this._p.set(x,y,z), this._q, this._s.set(radius,radius,radius));
+    this.mesh.setMatrixAt(i, this._m); this.mesh.instanceMatrix.needsUpdate = true;
+    this.alpha.setX(i, alpha); this.alpha.needsUpdate = true;
+  }
+}
+
 function numberTexture(n){
   const size=128;
   const cvs=document.createElement('canvas'); cvs.width=cvs.height=size;
@@ -1065,7 +1145,16 @@ function makeGlowDotTexture(colorCss){
 }
 const goldDotTex = makeGlowDotTexture('rgba(255,214,120,1)');
 const brightGoldTex = makeGlowDotTexture('rgba(255,245,210,1)');
+/* Sous les lots : disques d'ombre et halos, un appel de dessin chacun. Les
+   halos passent avant les cartes flottantes (qui sont au-dessus d'eux) et
+   après les disques, comme le tri par profondeur le faisait sprite par
+   sprite. */
+const discBatch = new DiscBatch(N_TILES);
+boardGroup.add(discBatch.mesh);
+const haloBatch = new SpriteBatch(goldDotTex, N_TILES, { renderOrder:-0.5 });
+boardGroup.add(haloBatch.mesh);
 const trimLights = [];
+let rimBatch = null;
 const perimeterPts = [];
 {
   const half = (N_SIDE*CELL+0.7)/2;
@@ -1074,27 +1163,39 @@ const perimeterPts = [];
   for(let i=1;i<perEdge;i++){ perimeterPts.push([half, -half+(i/(perEdge-1))*half*2]); }
   for(let i=1;i<perEdge;i++){ perimeterPts.push([half-(i/(perEdge-1))*half*2, half]); }
   for(let i=1;i<perEdge-1;i++){ perimeterPts.push([-half, half-(i/(perEdge-1))*half*2]); }
+  // les 48 loupiotes en un appel de dessin (SpriteBatch) ; l'opacité de
+  // chacune est animée plus bas, image par image. Ordre de dessin normal
+  // (trié à la profondeur du centre du plateau) : aux quatre angles la
+  // loupiote croise l'ornement doré, et c'est cet ordre-là qui la laisse
+  // passer par-dessus lui comme avant — vérifié au pixel.
+  rimBatch = new SpriteBatch(goldDotTex, perimeterPts.length);
+  boardGroup.add(rimBatch.mesh);
   perimeterPts.forEach(([x,z],idx)=>{
-    const mat = new THREE.SpriteMaterial({
-      map: goldDotTex,
-      transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.55
-    });
-    const spr = new THREE.Sprite(mat);
-    spr.scale.set(0.26,0.26,0.26);
-    spr.position.set(x,0.03,z);
-    boardGroup.add(spr);
-    trimLights.push({ spr, idx });
+    // Les 4 loupiotes d'angle restent des sprites à part entière : elles
+    // croisent l'ornement doré de l'angle, et seul le tri par profondeur
+    // sprite par sprite les fait passer dessus ou dessous exactement
+    // comme avant, quelle que soit la caméra. 4 appels pour 4 pixels
+    // justes ; les 44 autres sont dans le lot.
+    if(Math.abs(x) === half && Math.abs(z) === half){
+      const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: goldDotTex, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.55
+      }));
+      spr.scale.set(0.26,0.26,0.26);
+      spr.position.set(x,0.03,z);
+      boardGroup.add(spr);
+      trimLights.push({ spr, idx });
+    } else {
+      trimLights.push({ i: rimBatch.add(x,0.03,z, 0.26, .55), idx });
+    }
   });
 }
 /* 4 loupiotes brillantes qui parcourent réellement le pourtour, en
    continu, comme sur une roue de la fortune */
 const orbiterLights = [];
+const orbiterBatch = new SpriteBatch(brightGoldTex, 4);
+boardGroup.add(orbiterBatch.mesh);
 for(let k=0;k<4;k++){
-  const spr = makeSprite(brightGoldTex, 0.42);
-  spr.material.blending = THREE.AdditiveBlending;
-  spr.position.y = 0.04;
-  boardGroup.add(spr);
-  orbiterLights.push({ spr, offset:k/4 });
+  orbiterLights.push({ i: orbiterBatch.add(0,0.04,0, 0.42, 1), offset:k/4 });
 }
 function perimeterPosAt(u){ // u in [0,1)
   const n = perimeterPts.length;
@@ -1654,32 +1755,19 @@ for(let i=0;i<N_TILES;i++){
     topGroup.add(floatObj);
   }
   if(floatObj){
-    shadowDisc = new THREE.Mesh(
-      new THREE.CircleGeometry(catDef.tier==='float' ? 0.28 : 0.22,20),
-      new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:.3})
-    );
-    shadowDisc.rotation.x = -Math.PI/2;
-    shadowDisc.position.y = tileTopY+0.005;
-    group.add(shadowDisc);
+    // un disque de plus dans le lot instancié : même cercle, même noir à
+    // 30 %, en un appel de dessin pour toutes les cases
+    const discRadius = catDef.tier==='float' ? 0.28 : 0.22;
+    shadowDisc = { i: discBatch.add(world.x, tileTopY+0.005, world.z, discRadius, .3), radius: discRadius };
 
     // halo doré supplémentaire sous les gros lots (plus intense = plus gros)
     if(catDef.tier==='float'){
       const glowScale = { gradee:0.58, booster50:0.72, etb:0.86, jackpot300:1.05 }[catKey] || 0.58;
-      const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-        map:goldDotTex, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.55
-      }));
-      glow.position.y = tileTopY+0.06;
-      glow.scale.set(glowScale,glowScale,glowScale);
-      group.add(glow);
+      haloBatch.add(world.x, tileTopY+0.06, world.z, glowScale, .55);
     } else if(catDef.tier==='glyph' && !data.isVisite){
       // même halo scintillant, plus discret, sous le médaillon
       // Chance/Caisse/Prison pour qu'il ne se perde pas dans le décor.
-      const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-        map:goldDotTex, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.45
-      }));
-      glow.position.y = tileTopY+0.05;
-      glow.scale.set(0.68,0.68,0.68);
-      group.add(glow);
+      haloBatch.add(world.x, tileTopY+0.05, world.z, 0.68, .45);
     }
   }
 
@@ -3551,12 +3639,15 @@ function startWalk(fromIdx, count, stepDuration){
    de dé, pas seulement au gros gain final. Pool de sprites réutilisés
    pour ne rien allouer en boucle pendant l'animation. */
 const SPARKLE_POOL_SIZE = 48;
+// Un seul appel de dessin pour tout le pool (SpriteBatch) ; une étincelle
+// éteinte a une taille nulle. Dessinées après le reste des transparents :
+// devant une carte elles s'ajoutent dessus, derrière elles sont cachées
+// par sa profondeur — comme les sprites triés un par un.
+const sparkleBatch = new SpriteBatch(brightGoldTex, SPARKLE_POOL_SIZE, { renderOrder:1 });
+scene.add(sparkleBatch.mesh);
 const sparklePool = Array.from({length:SPARKLE_POOL_SIZE}, ()=>{
-  const mat = new THREE.SpriteMaterial({map:brightGoldTex, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:0});
-  const spr = new THREE.Sprite(mat);
-  spr.visible = false;
-  scene.add(spr);
-  return { spr, vx:0, vy:0, vz:0, life:0, maxLife:1 };
+  const i = sparkleBatch.add(0,0,0, 0, 0);
+  return { i, on:false, x:0, y:0, z:0, s:0, vx:0, vy:0, vz:0, life:0, maxLife:1 };
 });
 let sparkleCursor = 0;
 function spawnSparkles(x,y,z,count,spread,upSpeed,lifeMin,lifeMax){
@@ -3571,23 +3662,22 @@ function spawnSparkles(x,y,z,count,spread,upSpeed,lifeMin,lifeMax){
     p.vy = upSpeed*(0.6+Math.random()*0.7);
     p.life = 0;
     p.maxLife = lifeMin + Math.random()*(lifeMax-lifeMin);
-    p.spr.position.set(x, y, z);
-    const s = 0.13+Math.random()*0.1;
-    p.spr.scale.set(s,s,s);
-    p.spr.material.opacity = 1;
-    p.spr.visible = true;
+    p.x = x; p.y = y; p.z = z;
+    p.s = 0.13+Math.random()*0.1;
+    p.on = true;
+    sparkleBatch.set(p.i, x,y,z, p.s, 1);
   }
 }
 function updateSparkles(dt){
   for(const p of sparklePool){
-    if(!p.spr.visible) continue;
+    if(!p.on) continue;
     p.life += dt;
-    if(p.life >= p.maxLife){ p.spr.visible = false; continue; }
+    if(p.life >= p.maxLife){ p.on = false; sparkleBatch.setSize(p.i, 0); continue; }
     p.vy -= dt*1.8;
-    p.spr.position.x += p.vx*dt;
-    p.spr.position.y += p.vy*dt;
-    p.spr.position.z += p.vz*dt;
-    p.spr.material.opacity = 1 - p.life/p.maxLife;
+    p.x += p.vx*dt;
+    p.y += p.vy*dt;
+    p.z += p.vz*dt;
+    sparkleBatch.set(p.i, p.x,p.y,p.z, p.s, 1 - p.life/p.maxLife);
   }
 }
 
@@ -3756,14 +3846,15 @@ function frameStep(dt, t){
 
   // en mode éco les loupiotes sont masquées : inutile de les animer
   if(!ecoMode) trimLights.forEach(tl=>{
-    tl.spr.material.opacity = reduceMotion ? 0.5 : 0.28 + 0.45*Math.max(0, Math.sin(t*2.2 - tl.idx*0.5));
+    const a = reduceMotion ? 0.5 : 0.28 + 0.45*Math.max(0, Math.sin(t*2.2 - tl.idx*0.5));
+    if(tl.spr) tl.spr.material.opacity = a; else rimBatch.setAlpha(tl.i, a);
   });
   if(!reduceMotion && !ecoMode){
     orbiterLights.forEach(ol=>{
       const u = (t*0.06 + ol.offset) % 1;
       const [x,z] = perimeterPosAt(u);
-      ol.spr.position.set(x,0.05,z);
-      ol.spr.material.opacity = 0.85 + Math.sin(t*6)*0.15;
+      orbiterBatch.setPos(ol.i, x,0.05,z);
+      orbiterBatch.setAlpha(ol.i, 0.85 + Math.sin(t*6)*0.15);
     });
   }
 
@@ -3840,8 +3931,8 @@ function frameStep(dt, t){
         // plus le lot monte, plus son ombre s'élargit et s'efface
         const liftN = Math.min(1, tile.floatLiftCur/0.9);
         const sk = k*(1 + liftN*0.35);
-        tile.shadowDisc.scale.set(sk,sk,sk);
-        tile.shadowDisc.material.opacity = 0.3*k*(1 - liftN*0.55);
+        discBatch.set(tile.shadowDisc.i, tile.world.x, tile.tileTopY+0.005, tile.world.z,
+                      tile.shadowDisc.radius*sk, 0.3*k*(1 - liftN*0.55));
       }
       if(tile.holoShine && !reduceMotion){
         tile.holoShine.tex.offset.x = (t*tile.holoShine.speed + tile.holoShine.phase) % 1;
@@ -4202,12 +4293,13 @@ function setEcoMode(on){
   // La classe « eco » coupe aussi la décoration COTÉ PAGE (voir la CSS) :
   // le coût d'une page n'est pas seulement celui de la scène 3D.
   document.documentElement.classList.toggle('eco', on);
-  trimLights.forEach(tl=>{ tl.spr.visible = !on; });
-  orbiterLights.forEach(ol=>{ ol.spr.visible = !on; });
+  rimBatch.mesh.visible = !on;
+  trimLights.forEach(tl=>{ if(tl.spr) tl.spr.visible = !on; });
+  orbiterBatch.mesh.visible = !on;
   // 40 disques d'ombre sous les lots flottants : transparents, donc
   // triés et dessinés à chaque image. Sans ombres portées (coupées
   // juste au-dessus), ils n'ont de toute façon plus de sens.
-  tiles.forEach(t=>{ if(t.shadowDisc) t.shadowDisc.visible = !on; });
+  discBatch.mesh.visible = !on;
   scene.traverse(o=>{ if(o.material){ (Array.isArray(o.material)?o.material:[o.material]).forEach(m=>{ m.needsUpdate = true; }); } });
 }
 /* Crans supplémentaires (portable + grand écran) :
