@@ -1,5 +1,10 @@
 # Plan d'allègement — Pikapoly
 
+> **Décision de l'animateur, 18/09/2026 : réécriture à zéro.** Le cahier des
+> charges est `docs/CAHIER-DES-CHARGES.md`. Ce plan reste utile comme liste
+> des pièges mesurés dans l'ancien code (fond, bloom, verrous, CSS en double) :
+> la réécriture ne doit pas les reproduire.
+
 État au 18/09/2026, branche `claude/code-refactoring-clarity-wqplw1`.
 Ce fichier est **le contrat** de toute session qui touche au code : on le lit
 avant, on le met à jour après. Il remplace les explications de vive voix.

@@ -6,8 +6,10 @@ tripacks, coffrets, ETB). L'animateur pilote au clavier, l'image est
 diffusée sur une télé, souvent **pivotée à la verticale**.
 
 Ce fichier s'adresse à Claude Code. Le guide humain est dans `docs/TRANSMISSION.md`.
-**Avant tout chantier, lire `docs/PLAN-ALLEGEMENT.md`** : c'est le contrat (but, ordre,
-méthode, ce qui est fait). Le mettre à jour après.
+**Décision du 18/09/2026 : le jeu est réécrit à zéro.** Le cahier des charges est
+`docs/CAHIER-DES-CHARGES.md` (tout ce que le nouveau jeu doit reproduire, extrait du code) ;
+`docs/PLAN-ALLEGEMENT.md` liste les pièges mesurés de l'ancien code à ne pas reproduire.
+Ce fichier décrit l'ancien code, qui fait foi en cas de doute sur un comportement.
 Tout est en français, y compris le code et les messages de commit — garder cette langue.
 
 ## Fichiers
