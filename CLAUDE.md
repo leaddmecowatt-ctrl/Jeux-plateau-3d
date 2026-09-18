@@ -105,6 +105,12 @@ l'overlay sur la zone du plateau et publie `--celeb-box-h` pour que la CSS s'y m
 **Qualité** : `applyQuality()`, `setEcoMode()` (mode éco : plus de flou, d'ombres ni de
 décoration). Le contexte WebGL perdu est rattrapé (`webglcontextlost`).
 
+**Fond ondulant** : `#bgWave`, un seul `<canvas>` + shader WebGL (script en bas de
+`Nsldkso.html`) : onde ±2,2 px, période 8 s, cadence bridée à 30/s. En éco et en
+`prefers-reduced-motion` l'onde se fige ; sans WebGL, `html.bg-static` remet la photo en
+fond CSS. **Ne jamais revenir aux bandes CSS** : les 36 calques GPU étaient le poste le plus
+cher de la page (mesures et historique des 4 approches dans le commentaire de `#bgWave`).
+
 ## Invariants — ne pas casser
 
 - Un lot annoncé ne s'efface **jamais tout seul** : seulement B, C ou D.

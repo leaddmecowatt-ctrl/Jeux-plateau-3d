@@ -20,23 +20,37 @@ body{overflow:hidden;color:#fff}
   display:flex;flex-direction:column;
   position:relative;
 }
-/* Fond vivant, troisième approche, bien plus légère que les deux
-   précédentes (filtre SVG feTurbulence+feDisplacementMap, puis un
-   <canvas> redessiné par bandes en JS à chaque frame) : la photo est
-   coupée en 10 bandes horizontales fixes (une fois, au chargement/
-   redimensionnement, jamais par frame), chacune animée par un simple
-   transform:translateX() en CSS pur. Un transform animé en CSS est
-   composité par le GPU sans jamais repasser par le thread principal
-   ni redessiner quoi que ce soit une fois lancé — le travail par
-   frame tombe donc à ~zéro, contrairement aux deux tentatives
-   précédentes qui redessinaient/refiltraient l'image à chaque frame.
-   Chaque bande garde son propre petit décalage/vitesse/délai (comme
-   les nuages/étoiles déjà animés ailleurs sur cette page) pour un
-   mouvement organique, pas synchronisé. */
-#bgBands{
-  position:absolute; inset:0; overflow:hidden;
+/* Fond vivant, quatrième approche — et la première qui ne coûte
+   (presque) rien. Historique, pour ne pas y revenir :
+     1. filtre SVG feTurbulence + feDisplacementMap : refiltrait tout
+        l'écran à chaque image, saccadait ;
+     2. un <canvas> 2D redessiné par bandes en JS à chaque image :
+        travail sur le thread principal à chaque image, saccadait ;
+     3. 36 <div> en bandes, chacune animée par transform:translateX()
+        en CSS : zéro travail JS, mais 36 calques GPU permanents
+        recomposés à chaque image — mesuré comme LE poste le plus cher
+        de la page, jusqu'à saturer la mémoire vidéo de la télé et
+        faire lâcher le contexte WebGL (voir plus bas).
+   Aujourd'hui : UN seul <canvas> et un shader WebGL minuscule. La
+   photo est une texture, l'ondulation est une ligne de calcul par
+   pixel, faite par le GPU — exactement le genre de travail pour
+   lequel il est conçu. Un seul calque, un seul appel de dessin par
+   image, aucun travail JS entre deux images, cadence bridée à 30/s.
+   L'onde est la même qu'avant (±2,2 px, période 8 s, 1,4 tour sur
+   la hauteur), mais continue : plus de bandes, donc plus de jonction
+   à masquer. Le voile #bgGlow, l'orage (filtre CSS) et le mode éco
+   (onde figée) s'appliquent comme avant, sur cet unique élément.
+   Si WebGL manque ou lâche, html.bg-static remet la photo en simple
+   fond CSS : même image, sans onde — jamais d'écran noir. */
+#bgWave{
+  position:absolute; inset:0; width:100%; height:100%; display:block;
   z-index:0; pointer-events:none;
 }
+html.bg-static #bgWave{
+  background-image:url("./assets/bg/dragon_sky.jpg");
+  background-repeat:no-repeat; background-size:cover; background-position:top center;
+}
+html.bg-static #bgWave.wide{ background-image:url("./assets/bg/dragon_sky_wide.jpg"); }
 /* Respiration lumineuse du ciel : un voile clair dont seule l'OPACITÉ
    est animée (composée sur le GPU, coût nul). L'ancienne version animait
    « filter:brightness/saturate » sur tout l'écran : un filtre plein
@@ -61,35 +75,14 @@ html.storm #bgGlow{ display:none; }
 }
 @media (min-aspect-ratio: 1/1){ #bgFill{ display:block; } }
 /* Écran large : vraie version paysage de l'image (même scène, cadrée
-   large), avec le même découpage en bandes et la même ondulation. */
-.bg-band.wide, #bgFill.wide{ background-image:url("./assets/bg/dragon_sky_wide.jpg"); }
+   large) ; le shader du fond choisit la même (voir le script en bas). */
+#bgFill.wide{ background-image:url("./assets/bg/dragon_sky_wide.jpg"); }
 @keyframes dragonGlow{
   0%,100%{ opacity:0; }
   50%{ opacity:1; }
 }
-.bg-band{
-  position:absolute; left:0; width:100%;
-  background-image:url("./assets/bg/dragon_sky.jpg");
-  background-repeat:no-repeat;
-  --amp:2.2px;
-  animation-name:bandDrift; animation-timing-function:ease-in-out; animation-iteration-count:infinite;
-  animation-duration:8s;
-  will-change:transform;
-}
-@keyframes bandDrift{ 0%,100%{ transform:translateX(calc(var(--amp) * -1)); } 50%{ transform:translateX(var(--amp)); } }
-/* Avec une amplitude et une durée IDENTIQUES sur toutes les bandes, seul
-   le déphasage (animation-delay) varie d'une bande à l'autre — et ce
-   déphasage est fixé par bande en JS (voir layout() plus bas) comme une
-   fraction continue de la position verticale, pas par un cycle de
-   quelques profils répétés. Deux bandes voisines ont donc un décalage de
-   phase minuscule entre elles : leur position instantanée ne peut jamais
-   sauter, ce qui élimine la "marche" visible à la jonction — l'amplitude
-   seule (sans changement de phase abrupt) ne suffisait pas, l'essai
-   précédent avec 6 profils cycliques le montrait encore. */
-@media (prefers-reduced-motion: reduce){
-  #bgBands{ animation:none; }
-  .bg-band{ animation:none; }
-}
+/* prefers-reduced-motion et le mode éco figent l'onde : géré dans le
+   script du fond (une image dessinée sans décalage, puis plus rien). */
 /* Voile sombre entre la photo de fond et le plateau : la photo seule
    (très claire/chargée) écrasait le contraste du plateau, qui se
    voyait mal par-dessus. Un peu plus sombre sur les bords qu'au
@@ -205,26 +198,21 @@ html.storm #bgGlow{ display:none; }
 html.eco .fall-star{ display:none; }
 html.eco #bgFill{ filter:brightness(0.45) saturate(1.15); }
 
-/* LE poste le plus cher de toute la page, mesuré, et de loin.
-   Le fond est découpé en 36 bandes pour lui donner une ondulation. Chaque
-   bande porte « will-change:transform », ce qui force le navigateur à lui
-   allouer SON PROPRE calque GPU : 36 grands calques, chacun gardant sa
-   copie rasterisée de la photo de fond, tous recomposés à chaque image —
-   et d'autant plus grands que l'écran est grand, d'où une télé qui souffre
-   plus qu'un petit écran, et une mémoire GPU qui sature jusqu'à faire
-   lâcher le contexte.
-   Tout ça pour un balancement de ±2,2 pixels, invisible à l'œil.
-   En éco on fige l'ondulation et on rend les bandes à des éléments
-   ordinaires : la photo de fond est EXACTEMENT la même, seul le
-   tremblement disparaît.
-   Mesuré (télé 1080x1920 pivotée, mode éco, images rendues en 4 s) :
+/* Le fond en 36 bandes était LE poste le plus cher de toute la page,
+   mesuré, et de loin (télé 1080x1920 pivotée, mode éco, images rendues
+   en 4 s) :
      bandes animées ............................ 44
      figées seulement .......................... 52  (+18 %)
      sans will-change seulement ................ 52  (+18 %)
      figées ET sans will-change ................ 76  (+73 %)
-   Les deux ensemble valent bien plus que chacun séparément : tant qu'une
-   animation tourne dessus, le calque reste promu malgré tout. */
-html.eco .bg-band{ animation:none !important; will-change:auto; }
+   Chaque bande portait « will-change:transform » : 36 calques GPU,
+   chacun avec sa copie rasterisée de la photo, recomposés à chaque
+   image, d'autant plus grands que l'écran est grand — jusqu'à saturer
+   la mémoire vidéo et faire lâcher le contexte WebGL. Tout ça pour un
+   balancement de ±2,2 px. Le fond est désormais un seul <canvas> et un
+   shader (voir #bgWave tout en haut) ; en éco il fige simplement son
+   onde, comme le faisaient les bandes. Ces chiffres restent ici pour
+   qu'on n'y revienne pas. */
 
 /* Nuages blancs dessinés en CSS : désactivés à la demande — l'utilisateur
    veut que ce soient les vrais nuages peints DANS la photo de fond qui
@@ -538,8 +526,8 @@ html.display-mode .display-badge{ display:block; }
 .impact-flash.hit{ opacity:.55; transition:opacity .04s ease-out; }
 .impact-flash.blast{ opacity:1; transition:opacity .05s ease-out; }
 /* Orage du jackpot : le décor s'assombrit pendant la séquence */
-.bg-band, #bgFill{ transition:filter .5s ease; }
-html.storm .bg-band{ filter:brightness(.22) saturate(.6); }
+#bgWave, #bgFill{ transition:filter .5s ease; }
+html.storm #bgWave{ filter:brightness(.22) saturate(.6); }
 html.storm #bgFill{ filter:blur(22px) brightness(.10) saturate(.8); }
 
 /* Éclair qui zèbre l'écran sur les gros lots, en plus des confettis. */
@@ -1202,20 +1190,7 @@ if(new URLSearchParams(location.search).get('view')==='display'){
 </script>
 <div id="app">
   <div id="bgFill" aria-hidden="true"></div>
-  <div id="bgBands" aria-hidden="true">
-    <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
-    <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
-    <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
-    <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
-    <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
-    <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
-    <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
-    <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
-    <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
-    <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
-    <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
-    <div class="bg-band"></div><div class="bg-band"></div><div class="bg-band"></div>
-  </div>
+  <canvas id="bgWave" aria-hidden="true"></canvas>
   <div id="bgGlow" aria-hidden="true"></div>
   <div class="top-hud">
     <div class="brand"><span class="brand-star" id="brandStarL">★</span> PIKAPOLY <span class="brand-star" id="brandStarR">★</span></div>
@@ -1411,21 +1386,78 @@ if(new URLSearchParams(location.search).get('view')==='display'){
 </div>
 
 <script>
-/* Calcule UNE FOIS (au chargement + à chaque resize/rotation — jamais
-   par frame d'animation) la position/taille "cover" de la photo de
-   fond, puis répartit ce calcul sur les 10 bandes de #bgBands via
-   background-size/background-position en pixels. L'ondulation elle-
-   même (translateX) est ensuite gérée entièrement par les animations
-   CSS déclarées dans le <style> — ce script ne tourne plus jamais une
-   fois la mise en page posée, contrairement aux deux tentatives
-   précédentes qui redessinaient quelque chose à chaque frame. */
+/* Le fond ondulant : un <canvas>, un shader, un appel de dessin par
+   image (voir le commentaire de #bgWave dans le <style>).
+   La mise en page (« cover » de la photo, choix portrait/paysage) est
+   calculée au chargement et à chaque redimensionnement, jamais entre
+   deux images ; entre deux images il ne se passe RIEN en JS, le GPU
+   applique seul le décalage sinusoïdal à chaque pixel.
+   Cadence bridée à 30 images/s : l'onde avance de 0,55 px/s au plus,
+   une cadence supérieure ne changerait rien à l'œil.
+   Onde figée (une seule image dessinée, décalage nul, puis arrêt) si
+   prefers-reduced-motion, en mode éco (html.eco, posé par board3d.js)
+   ou onglet caché. Sans WebGL, ou si le contexte lâche : html.bg-static
+   remet la même photo en fond CSS, sans onde. */
 (function(){
-  var container = document.getElementById('bgBands');
-  if(!container) return;
-  var bands = container.querySelectorAll('.bg-band');
+  var cvs = document.getElementById('bgWave');
+  if(!cvs) return;
+  var html = document.documentElement;
   var fill = document.getElementById('bgFill');
-  var img = new Image();       // portrait (téléphone)
+  var AMP = 2.2, WAVE_CYCLES = 1.4, DURATION_S = 8, FPS = 30;
+  var img = new Image();       // portrait (téléphone, télé pivotée)
   var imgWide = new Image();   // paysage (ordinateur) : même scène cadrée large
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  function statique(){ html.classList.add('bg-static'); }
+  var gl = null;
+  try{ gl = cvs.getContext('webgl', {alpha:true, antialias:false, depth:false, stencil:false, powerPreference:'low-power'}); }catch(e){}
+  if(!gl){ statique(); return; }
+
+  var VS = 'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
+  var FS = '#ifdef GL_FRAGMENT_PRECISION_HIGH\nprecision highp float;\n#else\nprecision mediump float;\n#endif\n'
+    + 'uniform sampler2D t;uniform vec2 res;uniform vec4 geo;uniform float time,amp;uniform vec2 wave;'
+    // geo = (offsetX, drawW, drawH, dpr) en px CSS ; res en px physiques ; y écran vers le bas
+    + 'void main(){vec2 s=vec2(gl_FragCoord.x,res.y-gl_FragCoord.y)/geo.w;float ch=res.y/geo.w;'
+    + 'float ph=time/wave.y+(s.y/ch)*wave.x;float dx=-amp*cos(6.2831853*ph);'
+    + 'vec2 uv=vec2((s.x-geo.x-dx)/geo.y,s.y/geo.z);'
+    + 'if(uv.x<0.||uv.x>1.||uv.y>1.)discard;gl_FragColor=texture2D(t,uv);}';
+  function shader(type, src){
+    var sh = gl.createShader(type); gl.shaderSource(sh, src); gl.compileShader(sh);
+    if(!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
+    return sh;
+  }
+  var prog, U = {}, tex = {}, geo = null, raf = null, last = 0;
+  function init(){
+    prog = gl.createProgram();
+    gl.attachShader(prog, shader(gl.VERTEX_SHADER, VS));
+    gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, FS));
+    gl.linkProgram(prog);
+    if(!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+    gl.useProgram(prog);
+    var buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    // un seul triangle qui déborde de l'écran : couvre tout, 3 sommets
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+    var loc = gl.getAttribLocation(prog, 'p');
+    gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    ['t','res','geo','time','amp','wave'].forEach(function(n){ U[n] = gl.getUniformLocation(prog, n); });
+    gl.uniform1i(U.t, 0);
+    gl.uniform2f(U.wave, WAVE_CYCLES, DURATION_S);
+    gl.clearColor(0,0,0,0);
+    tex = {};
+  }
+  function texture(im){
+    // taille non puissance de 2 : CLAMP + LINEAR, sans mipmaps (WebGL 1)
+    var t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, im);
+    return t;
+  }
+  try{ init(); }catch(e){ statique(); return; }
 
   function layout(){
     var app = document.getElementById('app');
@@ -1435,36 +1467,55 @@ if(new URLSearchParams(location.search).get('view')==='display'){
     var src = wide ? imgWide : img;
     var iw = src.naturalWidth, ih = src.naturalHeight;
     if(!iw || !ih) return;
-    for(var k=0;k<bands.length;k++) bands[k].classList.toggle('wide', wide);
+    cvs.classList.toggle('wide', wide);
     if(fill) fill.classList.toggle('wide', wide);
-    // "cover" : l'image remplit toute la hauteur et déborde en largeur
-    // (jamais l'inverse sur ce format portrait/téléphone) — la marge
-    // horizontale ainsi créée est ce qui permet à chaque bande de se
-    // décaler de quelques px sans jamais révéler de bord vide.
-    // « cover » : l'image choisie (portrait ou paysage) a quasiment le
-    // format de l'écran, elle remplit tout sans déformation ni coupe
-    // visible ; la marge horizontale laisse les bandes onduler de
+    // « cover », calé en haut : l'image choisie (portrait ou paysage) a
+    // quasiment le format de l'écran, elle remplit tout sans déformation
+    // ni coupe visible ; la marge horizontale laisse l'onde décaler de
     // quelques px sans révéler de bord.
     var scale = Math.max(cw/iw, ch/ih);
-    var drawW = iw*scale, drawH = ih*scale;
-    var offsetX = (cw-drawW)/2;
-    var n = bands.length;
-    var bandH = ch/n;
-    for(var i=0;i<n;i++){
-      var b = bands[i];
-      b.style.top = (i*bandH)+'px';
-      b.style.height = (bandH+1)+'px'; // +1px : recouvrement léger, pas de trait entre bandes
-      b.style.backgroundSize = drawW+'px '+drawH+'px';
-      b.style.backgroundPosition = offsetX+'px '+(-i*bandH)+'px';
-      // Vague continue de haut en bas : le déphasage de chaque bande
-      // avance d'une fraction infime et régulière de la durée totale
-      // (WAVE_CYCLES tours complets sur toute la hauteur), jamais par
-      // paliers — deux bandes voisines ont donc quasiment la même phase
-      // à tout instant, donc quasiment le même décalage horizontal.
-      var WAVE_CYCLES = 1.4, DURATION_S = 8;
-      b.style.animationDelay = (-(i/n) * WAVE_CYCLES * DURATION_S) + 's';
-    }
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var pw = Math.round(cw*dpr), ph = Math.round(ch*dpr);
+    if(cvs.width !== pw || cvs.height !== ph){ cvs.width = pw; cvs.height = ph; }
+    gl.viewport(0, 0, pw, ph);
+    var key = wide ? 'wide' : 'tall';
+    if(!tex[key]) tex[key] = texture(src);
+    gl.bindTexture(gl.TEXTURE_2D, tex[key]);
+    gl.uniform2f(U.res, pw, ph);
+    gl.uniform4f(U.geo, (cw - iw*scale)/2, iw*scale, ih*scale, dpr);
+    geo = true;
+    start();
   }
+  function actif(){ return !reduce.matches && !html.classList.contains('eco') && !document.hidden; }
+  function draw(now){
+    if(!geo) return;
+    gl.uniform1f(U.time, (now/1000) % DURATION_S);
+    gl.uniform1f(U.amp, actif() ? AMP : 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+  function tick(now){
+    raf = null;
+    if(!actif()){ draw(now); return; }        // dernière image : onde figée
+    if(now - last >= 1000/FPS){ last = now; draw(now); }
+    raf = requestAnimationFrame(tick);
+  }
+  function start(){
+    if(!geo) return;
+    if(!actif()){ draw(performance.now()); return; }
+    if(raf === null) raf = requestAnimationFrame(tick);
+  }
+  // éco / orage : board3d.js pose ses classes sur <html> ; on suit
+  new MutationObserver(start).observe(html, {attributes:true, attributeFilter:['class']});
+  document.addEventListener('visibilitychange', start);
+  if(reduce.addEventListener) reduce.addEventListener('change', start);
+  cvs.addEventListener('webglcontextlost', function(e){
+    // Pas de preventDefault : on n'attend pas de restauration. Le fond
+    // CSS prend le relais aussitôt, sans onde ; la mémoire vidéo est
+    // sans doute déjà à bout et le jeu bascule en éco de son côté.
+    geo = null; if(raf !== null){ cancelAnimationFrame(raf); raf = null; }
+    statique();
+  }, false);
   window.addEventListener('resize', layout, {passive:true});
   window.addEventListener('orientationchange', function(){ setTimeout(layout,150); }, {passive:true});
   if(window.ResizeObserver){ new ResizeObserver(layout).observe(document.getElementById('app')); }
