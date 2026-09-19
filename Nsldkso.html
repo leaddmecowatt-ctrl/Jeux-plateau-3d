@@ -1486,23 +1486,28 @@ if(new URLSearchParams(location.search).get('view')==='display'){
     geo = true;
     start();
   }
+  // l'état « actif » est recalculé quand quelque chose change (classe
+  // sur <html>, onglet caché, préférence de mouvement), pas 60 fois par
+  // seconde : tick() lit un booléen
+  var estActif = true;
   function actif(){ return !reduce.matches && !html.classList.contains('eco') && !document.hidden; }
   function draw(now){
     if(!geo) return;
     gl.uniform1f(U.time, (now/1000) % DURATION_S);
-    gl.uniform1f(U.amp, actif() ? AMP : 0);
+    gl.uniform1f(U.amp, estActif ? AMP : 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
   function tick(now){
     raf = null;
-    if(!actif()){ draw(now); return; }        // dernière image : onde figée
+    if(!estActif){ draw(now); return; }       // dernière image : onde figée
     if(now - last >= 1000/FPS){ last = now; draw(now); }
     raf = requestAnimationFrame(tick);
   }
   function start(){
+    estActif = actif();
     if(!geo) return;
-    if(!actif()){ draw(performance.now()); return; }
+    if(!estActif){ draw(performance.now()); return; }
     if(raf === null) raf = requestAnimationFrame(tick);
   }
   // éco / orage : board3d.js pose ses classes sur <html> ; on suit

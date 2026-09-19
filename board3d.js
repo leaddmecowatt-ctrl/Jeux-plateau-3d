@@ -717,6 +717,7 @@ class SpriteBatch {
     };
     mat.customProgramCacheKey = ()=>'SpriteBatch';
     this.mesh = new THREE.Mesh(geo, mat);
+    this.mesh.matrixAutoUpdate = false;   // le lot reste à l'origine, ce sont les instances qui se placent
     this.mesh.frustumCulled = false;   // les instances sont partout : la boîte du quad unitaire ne veut rien dire
     this.mesh.renderOrder = renderOrder;
     this.count = 0;
@@ -746,6 +747,7 @@ class DiscBatch {
     mat.customProgramCacheKey = ()=>'DiscBatch';
     this.mesh = new THREE.InstancedMesh(geo, mat, capacity);
     this.mesh.count = 0;
+    this.mesh.matrixAutoUpdate = false;   // idem : le lot reste à l'origine
     this.mesh.frustumCulled = false;
     // dessinés avant les autres transparents : ils sont posés sur la case,
     // rien de transparent ne passe dessous, et ils écrivent la profondeur
@@ -1512,6 +1514,7 @@ function makeCornerOrnamentTexture(){
     orn.rotation.x = -Math.PI/2;
     orn.rotation.z = Math.atan2(sx,sz) + Math.PI; // pointe vers l'extérieur du plateau
     orn.position.set(sx*cornerHalf, 0.025, sz*cornerHalf);
+    orn.updateMatrix(); orn.matrixAutoUpdate = false;   // ne bouge jamais
     boardGroup.add(orn);
   });
 }
@@ -1595,6 +1598,62 @@ boardGroup.add(tileRivetInst);
 const _instDummy = new THREE.Object3D();
 const _yAxis = new THREE.Vector3(0,1,0);
 
+/* Socle, corps et face des 36 cases : trois familles d'InstancedMesh au
+   lieu de 108 meshes (un appel de dessin chacun, plus autant dans la
+   passe d'ombres pour les corps). Même géométrie, même matériau, même
+   éclairage ; la couleur d'accent de chaque corps (diffuse ET émissive)
+   passe par la couleur d'instance. Le corps et la face suivent la « ola »
+   et la respiration de leur case exactement comme quand ils étaient
+   enfants de topGroup : leur matrice est recomposée à chaque image dans
+   la boucle d'animation, comme le liseré et les rivets déjà instanciés. */
+const tileBaseInst = new THREE.InstancedMesh(
+  new THREE.BoxGeometry(TILE+0.05,0.08,TILE+0.05),
+  new THREE.MeshStandardMaterial({color:0x050505, roughness:.6, metalness:.3}), N_TILES);
+tileBaseInst.receiveShadow = true;
+boardGroup.add(tileBaseInst);
+const BODY_H = 0.14, BODY_BOTTOM = 0.135;
+const tileBodyMat = new THREE.MeshStandardMaterial({
+  color:0xffffff, roughness:.7, metalness:.12, emissive:0xffffff, emissiveIntensity:.32
+});
+// l'émissif suit la couleur d'instance comme la diffuse (blanc × couleur
+// d'instance = la couleur d'accent, pour les deux)
+tileBodyMat.onBeforeCompile = (sh)=>{
+  sh.fragmentShader = sh.fragmentShader.replace('vec3 totalEmissiveRadiance = emissive;', 'vec3 totalEmissiveRadiance = emissive * vColor;');
+};
+tileBodyMat.customProgramCacheKey = ()=>'tileBody';
+const tileBodyInst = new THREE.InstancedMesh(new THREE.BoxGeometry(TILE,BODY_H,TILE), tileBodyMat, N_TILES);
+tileBodyInst.castShadow = true; tileBodyInst.receiveShadow = true;
+boardGroup.add(tileBodyInst);
+const tileFaceGeo = new THREE.PlaneGeometry(TILE*0.94,TILE*0.94);
+const tileFaceInsts = new Map();   // texture -> InstancedMesh (une famille par photo de case)
+function faceInstanceFor(tex){
+  if(!tileFaceInsts.has(tex)){
+    const m = new THREE.InstancedMesh(tileFaceGeo, new THREE.MeshBasicMaterial({map:tex}), N_TILES);
+    m.count = 0; m.receiveShadow = true;
+    boardGroup.add(m);
+    tileFaceInsts.set(tex, m);
+  }
+  return tileFaceInsts.get(tex);
+}
+const _faceRx = new THREE.Matrix4().makeRotationX(-Math.PI/2);
+const _mA = new THREE.Matrix4(), _mB = new THREE.Matrix4();
+/* Matrices du corps et de la face d'une case pour une hauteur posY et
+   une respiration b (échelle en y de topGroup) : le même produit
+   group × topGroup × local qu'avant, développé. */
+function setTileInstances(tile, posY, b){
+  const yaw = tile.yaw, w = tile.world;
+  _instDummy.position.set(w.x, posY + (BODY_BOTTOM + BODY_H/2)*b, w.z);
+  _instDummy.rotation.set(0, yaw, 0);
+  _instDummy.scale.set(1, b, 1);
+  _instDummy.updateMatrix();
+  tileBodyInst.setMatrixAt(tile.bezelIndex, _instDummy.matrix);
+  _mA.makeTranslation(w.x, posY + (tile.tileTopY+0.02)*b, w.z);
+  _mA.multiply(_mB.makeRotationY(yaw));
+  _mA.multiply(_mB.makeScale(1, b, 1));
+  _mA.multiply(_faceRx);
+  tile.faceInst.setMatrixAt(tile.faceIndex, _mA);
+}
+
 for(let i=0;i<N_TILES;i++){
   const {r,c} = ringPos(i);
   const world = toWorld(r,c);
@@ -1608,13 +1667,12 @@ for(let i=0;i<N_TILES;i++){
   group.rotation.y = outwardYaw(r,c);
   boardGroup.add(group);
 
-  const baseTile = new THREE.Mesh(
-    new THREE.BoxGeometry(TILE+0.05,0.08,TILE+0.05),
-    new THREE.MeshStandardMaterial({color:0x050505, roughness:.6, metalness:.3})
-  );
-  baseTile.position.y = 0.04;
-  baseTile.receiveShadow = true;
-  group.add(baseTile);
+  // socle : instance i, posée une fois pour toutes (il ne bouge jamais)
+  _instDummy.position.set(world.x, 0.04, world.z);
+  _instDummy.rotation.set(0, outwardYaw(r,c), 0);
+  _instDummy.scale.set(1,1,1);
+  _instDummy.updateMatrix();
+  tileBaseInst.setMatrixAt(i, _instDummy.matrix);
 
   // Sous-groupe "carte" : tout ce qui doit flotter/rebondir ensemble
   // (corps coloré, photo, numéro, halo, lot flottant) — le socle
@@ -1633,23 +1691,8 @@ for(let i=0;i<N_TILES;i++){
   tileCollarInst.setMatrixAt(i, _instDummy.matrix);
 
   const accentColor = SWATCH_COLORS[catDef.swatch];
-  const sideMat = new THREE.MeshStandardMaterial({
-    color:new THREE.Color(accentColor),roughness:.7,metalness:.12,
-    emissive:new THREE.Color(accentColor),emissiveIntensity:.32
-  });
-  // Corps de la case légèrement épaissi (0.14 au lieu de 0.08 à
-  // l'origine) : un vrai relief avec des flancs colorés visibles,
-  // façon jeton de casino, sans pour autant faire une case si haute
-  // qu'elle cache la photo de la case juste derrière elle dans la
-  // même rangée (vu la caméra en plongée, une case trop épaisse
-  // masque celle qui la suit — testé à 0.30, beaucoup trop).
-  // Posé directement sur la collerette (qui culmine à 0.135).
-  const BODY_H = 0.14, BODY_BOTTOM = 0.135;
-  const bodyTile = new THREE.Mesh(new THREE.BoxGeometry(TILE,BODY_H,TILE), sideMat);
-  bodyTile.position.y = BODY_BOTTOM + BODY_H/2;
-  bodyTile.castShadow = true;
-  bodyTile.receiveShadow = true;
-  topGroup.add(bodyTile);
+  // corps : instance i, couleur d'accent (diffuse + émissive, voir tileBodyMat)
+  tileBodyInst.setColorAt(i, new THREE.Color(accentColor));
 
   // liseré noir en léger retrait entre le corps coloré et la carte,
   // avec quatre rivets dorés aux coins façon plaque vissée — leurs
@@ -1692,17 +1735,14 @@ for(let i=0;i<N_TILES;i++){
     // getFlatPhotoFace dessine désormais son propre fond + symbole)
     faceTex = getFlatPhotoFace(catKey, accentColor, null);
   }
-  const faceMat = new THREE.MeshBasicMaterial({map:faceTex});
-  const face = new THREE.Mesh(new THREE.PlaneGeometry(TILE*0.94,TILE*0.94), faceMat);
-  face.rotation.x = -Math.PI/2;
   // Marge généreuse au-dessus du liseré : la carte (topGroup, qui
   // inclut la photo ET le liseré/rivets via leurs InstancedMesh remis
   // à jour chaque frame) respire et rebondit ensemble, donc l'écart
   // entre eux reste constant — +0.02 est juste une marge de rendu
   // pour éviter tout z-fighting entre la photo et le liseré.
-  face.position.y = tileTopY+0.02;
-  face.receiveShadow = true;
-  topGroup.add(face);
+  // face : une instance dans la famille de sa photo
+  const faceInst = faceInstanceFor(faceTex);
+  const faceIndex = faceInst.count++;
 
   const numSpr = makeSprite(numberTexture(caseNum), 0.2);
   numSpr.position.set(TILE*0.35, tileTopY+0.01, TILE*0.36);
@@ -1729,7 +1769,13 @@ for(let i=0;i<N_TILES;i++){
     // qu'on regarde le plateau depuis le côté opposé (le plan tourné
     // vers l'extérieur montre alors sa face arrière, non texturée par
     // défaut avec THREE.FrontSide).
-    const mat = new THREE.MeshBasicMaterial({map:tex, transparent:true, side:THREE.DoubleSide});
+    /* forceSinglePass : three.js dessine sinon chaque matériau transparent
+       double face DEUX fois (dos puis face) et le marque « à recompiler »
+       à chaque passage — mesuré comme le premier poste JS au repos. Sur
+       un PLAN, un seul côté est visible à la fois : une passe donne le
+       même pixel. Idem pour le reflet holo, la colonne de lumière et
+       les éclairs (fondu additif : l'ordre des faces ne change rien). */
+    const mat = new THREE.MeshBasicMaterial({map:tex, transparent:true, side:THREE.DoubleSide, forceSinglePass:true});
     floatObj = new THREE.Mesh(new THREE.PlaneGeometry(w,h), mat);
     floatObj.position.y = tileTopY + 0.32 + h*0.5;
     topGroup.add(floatObj);
@@ -1741,7 +1787,7 @@ for(let i=0;i<N_TILES;i++){
     const shineTex = holoShineBaseTex.clone();
     shineTex.needsUpdate = true;
     const shineMat = new THREE.MeshBasicMaterial({
-      map:shineTex, transparent:true, depthWrite:false, side:THREE.DoubleSide,
+      map:shineTex, transparent:true, depthWrite:false, side:THREE.DoubleSide, forceSinglePass:true,
       blending:THREE.AdditiveBlending, opacity:.32
     });
     const shineMesh = new THREE.Mesh(new THREE.PlaneGeometry(w,h), shineMat);
@@ -1782,6 +1828,7 @@ for(let i=0;i<N_TILES;i++){
     floatBaseOff: catDef.tier==='float' ? 0.32 + floatBaseScale*0.5 : 0.3,
     floatLiftCur: 0,
     bezelBase, rivetPositions, rivetY:RIVET_Y, bezelIndex:i,
+    yaw: outwardYaw(r,c), faceInst, faceIndex,
     phase: Math.random()*Math.PI*2,
     breathePhase: ((r+c)%8)*0.4
   });
@@ -1789,6 +1836,17 @@ for(let i=0;i<N_TILES;i++){
 tileCollarInst.instanceMatrix.needsUpdate = true;
 tileBezelInst.instanceMatrix.needsUpdate = true;
 tileRivetInst.instanceMatrix.needsUpdate = true;
+tileBaseInst.instanceMatrix.needsUpdate = true;
+tileBodyInst.instanceColor.needsUpdate = true;
+// corps et faces : position de repos (ola à 0, respiration à 1) — c'est
+// l'état que garde prefers-reduced-motion, où la boucle ne les touche pas
+tiles.forEach(t=>{ setTileInstances(t, 0, 1); });
+tileBodyInst.instanceMatrix.needsUpdate = true;
+tileFaceInsts.forEach(m=>{ m.instanceMatrix.needsUpdate = true; });
+/* Le groupe de chaque case ne bouge jamais (position et orientation
+   posées une fois) : sa matrice n'a pas à être recalculée 60 fois par
+   seconde. Ses enfants animés (topGroup) se recalculent normalement. */
+tiles.forEach(t=>{ t.group.updateMatrix(); t.group.matrixAutoUpdate = false; });
 
 /* Index catégorie -> liste des cases correspondantes, utilisé par le
    système de lot prédéterminé (voir plus bas) pour amener visuellement
@@ -1956,7 +2014,7 @@ function startJackpotStorm(){
   cineSpin = 0.5;
   cineBegin('orbit');
   const geo = new THREE.CylinderGeometry(0.44, 0.26, 7.5, 28, 1, true);
-  const mat = new THREE.MeshBasicMaterial({ map: beamTex, color:0xffd27a, transparent:true, opacity:0, blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide });
+  const mat = new THREE.MeshBasicMaterial({ map: beamTex, color:0xffd27a, transparent:true, opacity:0, blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide, forceSinglePass:true });
   beamMesh = new THREE.Mesh(geo, mat);
   beamMesh.position.set(x, y + 3.75, z);
   beamMesh.scale.set(1, 0.01, 1);
@@ -2071,7 +2129,7 @@ function updateStorm(t, dt){
 const shockRing = new THREE.Mesh(
   new THREE.RingGeometry(0.40, 0.50, 48),
   new THREE.MeshBasicMaterial({color:0xffe9ae, transparent:true, opacity:0,
-    blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide})
+    blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide, forceSinglePass:true})
 );
 shockRing.rotation.x = -Math.PI/2;
 shockRing.visible = false;
@@ -2079,7 +2137,7 @@ scene.add(shockRing);
 const impactGlow = new THREE.Mesh(
   new THREE.CircleGeometry(0.62, 32),
   new THREE.MeshBasicMaterial({color:0xffd98a, transparent:true, opacity:0,
-    blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide})
+    blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide, forceSinglePass:true})
 );
 impactGlow.rotation.x = -Math.PI/2;
 impactGlow.visible = false;
@@ -3882,7 +3940,9 @@ function frameStep(dt, t){
       // des enfants de topGroup) : on les remet à jour ici pour
       // qu'ils suivent exactement le même mouvement que la carte,
       // sans jamais s'en désynchroniser.
+      setTileInstances(tile, posY, breathe);
       _instDummy.rotation.set(0,0,0);
+      _instDummy.scale.set(1,1,1);
       _instDummy.position.set(tile.bezelBase.x, tile.bezelBase.y+posY, tile.bezelBase.z);
       _instDummy.updateMatrix();
       tileBezelInst.setMatrixAt(tile.bezelIndex, _instDummy.matrix);
@@ -3954,6 +4014,8 @@ function frameStep(dt, t){
   if(!reduceMotion){
     tileBezelInst.instanceMatrix.needsUpdate = true;
     tileRivetInst.instanceMatrix.needsUpdate = true;
+    tileBodyInst.instanceMatrix.needsUpdate = true;
+    tileFaceInsts.forEach(m=>{ m.instanceMatrix.needsUpdate = true; });
   }
 
   // marche continue du pion sur tout le trajet demandé
@@ -4880,6 +4942,12 @@ let placeBannerGen = 0;
    Pokémon — Salle du Champion") qui déborderait du bandeau à taille
    fixe — on repart de la taille CSS max à chaque nouveau texte, puis
    on réduit tant que ça dépasse la largeur disponible. */
+/* La boucle de réduction lit scrollWidth à chaque pas : chaque lecture
+   force un recalcul de mise en page (mesuré en tête du profil pendant un
+   déplacement, où le nom change à chaque case franchie). Le résultat ne
+   dépend que du texte, de la largeur disponible et de la taille de base :
+   on le mémorise, et un même nom ne coûte plus qu'une affectation. */
+const placeBannerFit = new Map();
 function fitPlaceBanner(){
   if(!placeBanner) return;
   placeBanner.style.fontSize = '';
@@ -4887,12 +4955,15 @@ function fitPlaceBanner(){
   if(!wrap) return;
   const maxW = wrap.clientWidth*0.96;
   let size = parseFloat(getComputedStyle(placeBanner).fontSize);
+  const key = placeBanner.textContent+'|'+maxW+'|'+size;
+  if(placeBannerFit.has(key)){ placeBanner.style.fontSize = placeBannerFit.get(key); return; }
   let guard = 0;
   while(placeBanner.scrollWidth > maxW && size > 13 && guard < 40){
     size -= 1;
     placeBanner.style.fontSize = size+'px';
     guard++;
   }
+  placeBannerFit.set(key, placeBanner.style.fontSize);
 }
 /* Le nom du lieu reste affiché en grand tant que le pion y est —
    on ne fait un fondu (sortie/entrée) que lors d'un changement de

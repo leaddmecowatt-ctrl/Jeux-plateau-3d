@@ -103,17 +103,30 @@ de la marge en direct.
 et les unités `vh`/`vw` n'y correspondent plus aux axes. `fitCelebToBoard()` cale
 l'overlay sur la zone du plateau et publie `--celeb-box-h` pour que la CSS s'y mesure.
 
+**Ce qui ne bouge jamais a sa matrice figée** (`matrixAutoUpdate=false` après un
+`updateMatrix()`) : groupes des cases, ornements d'angle, lots instanciés. Si un de ces objets
+doit un jour bouger, rappeler `updateMatrix()` après l'avoir déplacé.
+
 **Célébration** : `celebrate()`, `showLotPreview()`, `clearCelebration()`,
 `stopCelebLoop()`. `celebLocked` empêche la boucle de confettis d'effacer une annonce.
 
 **Qualité** : `applyQuality()`, `setEcoMode()` (mode éco : plus de flou, d'ombres ni de
 décoration). Le contexte WebGL perdu est rattrapé (`webglcontextlost`).
 
-**Appels de dessin** : les loupiotes du liseré, les halos sous les lots, les loupiotes
-tournantes, les étincelles et les disques d'ombre sont des **lots instanciés** (`SpriteBatch`,
-`DiscBatch`) : une famille = un appel de dessin, rendu identique aux sprites un par un
-(vérifié au pixel). 344 → 268 appels par image. Les 4 loupiotes d'angle restent des sprites
-(elles croisent l'ornement d'angle : seul le tri sprite par sprite garde l'ordre exact).
+**Appels de dessin** (344 → 121 par image, rendu vérifié identique au pixel) :
+- loupiotes du liseré, halos sous les lots, loupiotes tournantes, étincelles, disques d'ombre :
+  **lots instanciés** (`SpriteBatch`, `DiscBatch`), une famille = un appel. Les 4 loupiotes
+  d'angle restent des sprites (elles croisent l'ornement d'angle : seul le tri sprite par
+  sprite garde l'ordre exact) ;
+- socle, corps et face des 36 cases : `tileBaseInst`, `tileBodyInst` (couleur d'accent par
+  instance, diffuse et émissive), une `InstancedMesh` par photo de face (`tileFaceInsts`).
+  `setTileInstances()` recompose leurs matrices à chaque image pour suivre la « ola » et la
+  respiration de `topGroup`, comme le liseré et les rivets ;
+- tout plan transparent double face porte `forceSinglePass:true` : sans lui three.js le
+  dessine deux fois et le marque « à recompiler » à chaque image (premier poste JS au repos).
+  Sur un plan, une passe donne le même pixel.
+Pour mesurer : `renderer.info.render.calls` après `renderer.info.reset()` sur une image
+complète (sonde temporaire, jamais commitée).
 
 **Fond ondulant** : `#bgWave`, un seul `<canvas>` + shader WebGL (script en bas de
 `Nsldkso.html`) : onde ±2,2 px, période 8 s, cadence bridée à 30/s. En éco et en
