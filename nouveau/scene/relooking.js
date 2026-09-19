@@ -202,8 +202,8 @@ export function construireChapeau(capMesh, bandMesh, headBone, root){
      bord, pas de la tête. Le nouveau bord est un peu plus large, la calotte
      un peu plus ronde ; posé au ras de l'ancien. */
   const centre = new THREE.Vector3((bb.min.x+bb.max.x)/2, bb.min.y + H*0.10, (bb.min.z+bb.max.z)/2);
-  const Rb = W*0.60;         // rayon du bord
-  const Rd = W*0.31;         // rayon de la calotte
+  const Rb = W*0.43;         // rayon du bord : un peu plus étroit que l'ancienne casquette
+  const Rd = W*0.26;         // rayon de la calotte
   const paille = texturePaille();
   const mat = new THREE.MeshStandardMaterial({ map: paille, color: 0xffffff, roughness: 0.92, metalness: 0, envMapIntensity: 0.3, side: THREE.DoubleSide });
   paille.repeat.set(6, 2);

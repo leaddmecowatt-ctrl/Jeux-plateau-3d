@@ -588,7 +588,7 @@ export function creerPion(sc){
       model.traverse(o=>{ if(o.isMesh && o.material){ if(o.material.name==='Cap_Red' || (o.userData.matName==='Cap_Red')) cap = o; if(o.material.name==='HatBand_Red' || o.userData.matName==='HatBand_Red') band = o; } });
       if(cap) construireChapeau(cap, band, bones.Head, root);
       // proportions chibi : la tête (et son chapeau) plus grosse que nature
-      bones.Head.scale.setScalar(1.22);
+      bones.Head.scale.setScalar(1.06);
     }
     if(sq.manquants.length) return;
     if(sq.mode !== 'kenney'){
