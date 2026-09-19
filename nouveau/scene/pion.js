@@ -8,6 +8,9 @@ import { GLTFLoader } from '../../vendor/three/examples/jsm/loaders/GLTFLoader.j
 import { N_TILES } from '../regles/plateau.js';
 import { reconnaitreSquelette, mesurerJambes, viserAvec, orienterMonde } from './squelette.js';
 import { relookerPeau, construireChapeau } from './relooking.js';
+/* Relooking façon figurine (chapeau modélisé, visage repeint, tête chibi) :
+   l'animateur préfère le personnage d'origine. À rebasculer si besoin. */
+const RELOOKING_PION = false;
 
 /* Hauteur du pion sur le plateau : celle réglée pour le modèle d'origine,
    un peu plus pour un autre modèle (présence à l'écran). */
@@ -535,7 +538,7 @@ export function creerPion(sc){
       if(oldMat.name === 'skin') skinMat = newMat;
       // clignement : zones des yeux connues pour la texture du modèle d'origine seulement
       if(sq.mode === 'kenney' && oldMat.map && oldMat.map.image && (oldMat.map.image.width || oldMat.map.image.naturalWidth) && !blinkAssigned){
-        blink = relookerPeau(newMat, oldMat.map); blinkAssigned = true;
+        blink = RELOOKING_PION ? relookerPeau(newMat, oldMat.map) : setupBlink(newMat, oldMat.map); blinkAssigned = true;
       }
     });
     /* Filet de sécurité : texture de peau rechargée depuis le data: URI du
@@ -550,7 +553,7 @@ export function creerPion(sc){
           const tex = await new THREE.TextureLoader().loadAsync(uri);
           tex.flipY = false; tex.colorSpace = THREE.SRGBColorSpace;
           skinMat.map = tex; skinMat.needsUpdate = true;
-          blink = relookerPeau(skinMat, tex); blinkAssigned = true;
+          blink = RELOOKING_PION ? relookerPeau(skinMat, tex) : setupBlink(skinMat, tex); blinkAssigned = true;
         }
       }catch(e){ console.warn('Texture du personnage : repli impossible', e); }
     }
@@ -583,7 +586,7 @@ export function creerPion(sc){
     pion.mixer = mixer;
     const bones = sq.bones;
     pion.bones = bones;
-    if(sq.mode === 'kenney' && bones.Head){
+    if(RELOOKING_PION && sq.mode === 'kenney' && bones.Head){
       let cap = null, band = null;
       model.traverse(o=>{ if(o.isMesh && o.material){ if(o.material.name==='Cap_Red' || (o.userData.matName==='Cap_Red')) cap = o; if(o.material.name==='HatBand_Red' || o.userData.matName==='HatBand_Red') band = o; } });
       if(cap) construireChapeau(cap, band, bones.Head, root);
