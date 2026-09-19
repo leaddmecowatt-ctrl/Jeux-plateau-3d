@@ -1078,7 +1078,8 @@ html:not(.rotated) .key-hint{font-size:clamp(14px,1.1vw,24px); bottom:1.6vh;}
   .tv-rules ul{ margin:0;padding:0;list-style:none;display:flex;flex-wrap:wrap;justify-content:center;gap:.4vh 2.2vw;font-size:clamp(12px,1.45vw,26px);color:#f3e6c4; }
   .tv-rules li{ margin:0; white-space:nowrap; }
   .tv-keys{ display:none; }
-  .board-row{ grid-template-rows:1fr auto auto; }
+  .board-row{ grid-template-rows:62vh auto auto; }
+  .board-col{ height:62vh; }
   /* écrans superposés : en fraction de l'écran */
   .card-grid{ width:min(94vw,1500px); gap:1.2vw; }
   .card-draw-title{ font-size:clamp(24px,3.4vw,64px); }
@@ -1153,7 +1154,13 @@ html.rotated .tv-rules .tv-title{display:none;}
 html.rotated .tv-rules ul{margin:0;padding:0;list-style:none;display:flex;flex-wrap:wrap;justify-content:center;gap:.4vw 2.2vh;font-size:clamp(12px,1.45vh,26px);color:#f3e6c4;}
 html.rotated .tv-rules li{margin:0; white-space:nowrap;}
 html.rotated .tv-keys{display:none;}
-html.rotated .board-row{grid-template-rows:1fr auto auto;}
+/* Safari (image pivotée) : avec « 1fr » et height:100 %, la zone du plateau
+   prenait toute la hauteur, les panneaux passaient hors écran et le lot,
+   centré dans une boîte plus grande que l'écran, disparaissait. Hauteur du
+   plateau EXPLICITE (62 % de la hauteur de l'interface = 62vw en pivoté),
+   le reste aux panneaux. Même valeur que ce que Chrome calculait. */
+html.rotated .board-row{grid-template-rows:62vw auto auto;}
+html.rotated .board-col{height:62vw;}
 
 /* Télé pivotée : le panneau des règles n'est pas affiché — il s'adresse
    à l'animateur, pas au public. Rien d'autre ne bouge : la grille du

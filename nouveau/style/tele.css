@@ -87,11 +87,12 @@ html.vertical .brand{ font-size:clamp(14px,calc(1.7*var(--uw)),30px); }
 html.vertical .place-banner-wrap{ height:clamp(56px,calc(6.5*var(--uh)),120px); margin:calc(.4*var(--uh)) 0 calc(.2*var(--uh)); }
 html.vertical .place-banner{ font-size:clamp(30px,calc(5.4*var(--uw)),84px); }
 html.vertical .main-row{ padding:calc(.3*var(--uh)) calc(2*var(--uw)) calc(1*var(--uh)); }
+/* hauteur du plateau explicite : Safari ne résout pas « 1fr » + height:100 % ici */
 html.vertical .board-row{
-  display:grid; grid-template-columns:56% 1fr; grid-template-rows:1fr auto auto;
+  display:grid; grid-template-columns:56% 1fr; grid-template-rows:calc(62*var(--uh)) auto auto;
   column-gap:calc(2*var(--uw)); row-gap:calc(1.2*var(--uh)); align-items:stretch; justify-items:stretch;
 }
-html.vertical .board-col{ grid-column:1 / 3; grid-row:1; min-height:0; height:auto; }
+html.vertical .board-col{ grid-column:1 / 3; grid-row:1; min-height:0; height:calc(62*var(--uh)); }
 html.vertical .tv-panel{ gap:calc(1*var(--uh)); flex:none; }
 html.vertical .tv-left{ grid-column:1; grid-row:2; }
 html.vertical .tv-right{ grid-column:2; grid-row:2; }
