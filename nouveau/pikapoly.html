@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="fr" data-rot="0">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Pikapoly — Plateau Live 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style/base.css">
+<link rel="stylesheet" href="style/overlays.css">
+<link rel="stylesheet" href="style/tele.css">
+</head>
+<body>
+<script>
+if(new URLSearchParams(location.search).get('view')==='display'){
+  document.documentElement.classList.add('display-mode');
+}
+</script>
+<div id="app">
+  <div id="bgFill" aria-hidden="true"></div>
+  <canvas id="bgWave" aria-hidden="true"></canvas>
+  <div id="bgGlow" aria-hidden="true"></div>
+  <div class="top-hud">
+    <div class="brand"><span class="brand-star" id="brandStarL">★</span> PIKAPOLY <span class="brand-star" id="brandStarR">★</span></div>
+    <div class="place-banner-wrap"><div class="place-banner" id="placeBanner">Départ</div></div>
+    <div class="key-hint" id="keyHint" aria-live="polite"></div>
+    <div class="cue-dot" id="cueDot" aria-hidden="true"></div>
+  </div>
+
+  <div class="main-row">
+    <!-- Étoiles qui tombent dans les marges (décoration, coupée en éco) -->
+    <div class="bg-fall" aria-hidden="true">
+      <div class="fall-star" style="left:4%;width:22px;height:22px;animation-duration:14s;animation-delay:-2s"></div>
+      <div class="fall-star" style="left:9%;width:14px;height:14px;animation-duration:17s;animation-delay:-8s"></div>
+      <div class="fall-star" style="left:3%;width:17px;height:17px;animation-duration:11s;animation-delay:-5s"></div>
+      <div class="fall-star" style="left:6%;width:12px;height:12px;animation-duration:19s;animation-delay:-1s"></div>
+      <div class="fall-star" style="right:5%;width:24px;height:24px;animation-duration:16s;animation-delay:-9s"></div>
+      <div class="fall-star" style="right:10%;width:13px;height:13px;animation-duration:13s;animation-delay:-4s"></div>
+      <div class="fall-star" style="right:9%;width:16px;height:16px;animation-duration:20s;animation-delay:-12s"></div>
+      <div class="fall-star" style="right:3%;width:11px;height:11px;animation-duration:15s;animation-delay:-6s"></div>
+    </div>
+
+    <div class="board-row">
+      <div class="tv-panel tv-left" aria-hidden="true">
+        <div class="tv-card tv-legend-card">
+          <div class="tv-title">🎁 Lots à gagner</div>
+          <div class="tv-legend" id="tvLegend"></div>
+          <div class="tv-badges"><span class="b-chance">? Chance</span><span class="b-chest">🎁 Caisse</span></div>
+        </div>
+      </div>
+      <div class="board-col">
+        <div class="board-wrap" id="boardWrap">
+          <canvas id="gl"></canvas>
+          <div class="results-ticker" id="resultsTicker" aria-hidden="true"></div>
+          <div class="bank-reset-flash" id="bankResetFlash" aria-hidden="true">
+            <img src="../assets/ui/jeton_confirm.png" alt="">
+          </div>
+        </div>
+      </div>
+      <div class="tv-panel tv-right" aria-hidden="true">
+        <div class="tv-card">
+          <div class="tv-title">Partie en cours</div>
+          <div class="tv-rolls" id="tvRolls">Lancer 0 / 3</div>
+          <div class="tv-total" id="tvTotal">Prêt à jouer</div>
+          <div class="tv-status" id="tvStatus"></div>
+        </div>
+        <div class="tv-card">
+          <div class="tv-title">Derniers gains</div>
+          <div class="tv-results" id="tvResults"></div>
+        </div>
+        <div class="tv-card tv-rules">
+          <div class="tv-title">Règles</div>
+          <ul>
+            <li>3 lancers par partie, +1 lancer par double</li>
+            <li>Après chaque lancer : je garde le lot ou je relance</li>
+            <li>Prison : fin de partie, carte de consolation</li>
+            <li>Chance et Caisse déplacent le pion</li>
+          </ul>
+          <div class="tv-keys">F : plein écran · R : pivoter l'image</div>
+        </div>
+      </div>
+      <!-- Panneau animateur : masqué (pilotage au clavier), les boutons
+           Annuler / Démarrage cagnotte restent dans la page comme avant. -->
+      <div class="side-panel">
+        <button class="resetbank" id="resetBankBtn" type="button">🔄 Démarrage cagnotte (remise à 0€)</button>
+        <button class="startbtn" id="startBtn" type="button">▶ DÉMARRER LA PARTIE</button>
+        <button class="validate" id="validate" type="button">🃏 TIRER LES CARTES</button>
+        <button class="winbtn" id="winBtn" type="button" hidden>🎉 LOT REMPORTÉ</button>
+        <button class="undobtn" id="undoBtn" type="button" hidden>↩ ANNULER LE DERNIER LOT</button>
+        <button class="reset" id="reset" type="button">RECOMMENCER</button>
+      </div>
+    </div>
+  </div>
+
+  <span id="status" hidden>Le joueur est prêt sur Départ.</span>
+  <div class="display-badge">🖥️ Écran public — lecture seule</div>
+  <div class="impact-flash" id="impactFlash" aria-hidden="true"></div>
+  <div class="lightning-bolt" id="lightningBolt" aria-hidden="true">
+    <svg viewBox="0 0 100 160" preserveAspectRatio="xMidYMid meet">
+      <polygon points="58,0 18,90 46,90 32,160 88,60 56,60" fill="url(#boltGrad)"/>
+      <defs>
+        <linearGradient id="boltGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#fff6d8"/>
+          <stop offset=".5" stop-color="#ffe27a"/>
+          <stop offset="1" stop-color="#e9c34a"/>
+        </linearGradient>
+      </defs>
+    </svg>
+  </div>
+
+  <div class="card-draw-overlay" id="cardDrawOverlay" aria-hidden="true">
+    <div class="card-draw-title">Tirage en cours…</div>
+    <div class="card-grid" id="cardGrid"></div>
+    <div class="card-draw-total" id="cardDrawTotal"></div>
+  </div>
+
+  <div class="mystery-overlay" id="mysteryOverlay" aria-hidden="true">
+    <div class="card-draw-title">Lot mystère</div>
+    <div class="mystery-stage" id="mysteryStage">
+      <div class="mystery-card" id="mysteryCard0">
+        <div class="face back"><span>?</span></div>
+        <div class="face front"><img alt=""><div class="mystery-label">Booster</div></div>
+      </div>
+      <div class="mystery-card" id="mysteryCard1">
+        <div class="face back"><span>?</span></div>
+        <div class="face front"><img alt=""><div class="mystery-label">Carte rare</div></div>
+      </div>
+      <div class="mystery-shade" id="mysteryShade"></div>
+    </div>
+    <div class="mystery-result" id="mysteryResult"></div>
+  </div>
+
+  <div class="celebration" id="celebration" aria-hidden="true">
+    <div class="celeb-rays" id="celebRays"></div>
+    <canvas id="celebCanvas"></canvas>
+    <div class="celeb-text" id="celebText">
+      <img class="celeb-photo" id="celebPhoto" alt="" hidden>
+      <span id="celebMain">🎉 Lot remporté !</span>
+      <div class="celeb-sub" id="celebSub" hidden></div>
+    </div>
+  </div>
+  <div class="screen-btns" id="screenBtns">
+    <button type="button" id="rotBtn" title="Pivoter l'image (télé tournée) — touche R">⟳ Pivoter</button>
+    <button type="button" id="fsBtn" title="Plein écran — touche F">⛶ Plein écran</button>
+  </div>
+</div>
+<script type="importmap">
+{ "imports": { "three": "../vendor/three/three.module.min.js" } }
+</script>
+<script type="module" src="./jeu.js"></script>
+</body>
+</html>

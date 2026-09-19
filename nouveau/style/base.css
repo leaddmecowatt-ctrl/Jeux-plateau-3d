@@ -1,0 +1,223 @@
+/* Pikapoly — charte, page, plateau, bannière, repères animateur.
+   Unités d'interface : --uw / --uh valent 1 % de la largeur / hauteur de
+   l'INTERFACE (pas de l'écran). Quand l'image est pivotée (télé tournée,
+   touche R), #app tourne d'un quart de tour et les deux s'échangent : la
+   mise en page verticale (tele.css) est ainsi écrite une seule fois. */
+:root{
+  --gold:#e9c34a; --gold-bright:#ffe27a; --black:#0a0a0a; --black2:#161208;
+  --blue:#1a56db; --red:#e0323f; --white:#f7fbff; --ink:#1a1204;
+  --uw:1vw; --uh:1vh;
+}
+html.rotated{ --uw:1vh; --uh:1vw; }
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;width:100%;height:100%;background:#000;font-family:Arial,Helvetica,sans-serif}
+body{overflow:hidden;color:#fff}
+#app{
+  width:100vw;height:100dvh;overflow:hidden;
+  display:flex;flex-direction:column;
+  position:relative;
+}
+/* Pivot 90° / 270° : toute l'interface tourne dans l'écran horizontal. */
+html.rotated #app{ width:100dvh; height:100vw; transform-origin:top left; }
+html.rot90 #app{ transform:rotate(90deg) translateY(-100%); }
+html.rot270 #app{ transform:rotate(-90deg) translateX(-100%); }
+
+/* ---------- fond : un canvas + shader (fond/onde.js) ---------- */
+#bgWave{ position:absolute; inset:0; width:100%; height:100%; display:block; z-index:0; pointer-events:none; }
+html.bg-static #bgWave{
+  background-image:url("../../assets/bg/dragon_sky.jpg");
+  background-repeat:no-repeat; background-size:cover; background-position:top center;
+}
+html.bg-static #bgWave.wide{ background-image:url("../../assets/bg/dragon_sky_wide.jpg"); }
+/* voile clair dont seule l'opacité respire */
+#bgGlow{
+  position:absolute; inset:0; z-index:0; pointer-events:none;
+  background:rgba(255,236,190,.075); opacity:0; will-change:opacity;
+  animation:dragonGlow 9s ease-in-out infinite;
+}
+html.storm #bgGlow{ display:none; }
+@keyframes dragonGlow{ 0%,100%{ opacity:0; } 50%{ opacity:1; } }
+/* écran large : les côtés sont remplis par la même image floutée */
+#bgFill{
+  position:absolute; inset:-6%; z-index:0; pointer-events:none; display:none;
+  background-image:url("../../assets/bg/dragon_sky.jpg");
+  background-repeat:no-repeat; background-size:cover; background-position:center;
+  filter:blur(22px) brightness(0.45) saturate(1.15);
+}
+@media (min-aspect-ratio: 1/1){ #bgFill{ display:block; } }
+html.rotated #bgFill{ display:block; }
+#bgFill.wide{ background-image:url("../../assets/bg/dragon_sky_wide.jpg"); }
+#bgWave, #bgFill{ transition:filter .5s ease; }
+html.storm #bgWave{ filter:brightness(.22) saturate(.6); }
+html.storm #bgFill{ filter:blur(22px) brightness(.10) saturate(.8); }
+/* vignette entre la photo et le plateau */
+#app::after{
+  content:""; position:absolute; inset:0; z-index:0; pointer-events:none;
+  background:radial-gradient(ellipse at center, rgba(4,7,18,.32) 0%, rgba(4,7,18,.32) 45%, rgba(4,7,18,.6) 100%);
+}
+
+/* ---------- haut : titre et bannière du lieu ---------- */
+.top-hud{
+  flex:0 0 auto; display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+  padding:max(10px,calc(env(safe-area-inset-top) + 6px)) 12px 4px;
+  position:relative;z-index:5;
+}
+.brand{
+  font-size:10px;font-weight:900;letter-spacing:.14em;color:var(--gold-bright);opacity:.8;
+  text-shadow:0 0 8px rgba(255,226,122,.5),0 1px 3px rgba(0,0,0,.8);pointer-events:none;
+}
+.brand-star{ transition:color .8s ease; }
+.brand-star.cue{ color:#fff1c8; }
+.place-banner-wrap{
+  flex:0 0 auto;width:100%;height:clamp(38px,9vw,58px);margin:6px 0 2px;
+  display:flex;align-items:center;justify-content:center;overflow:hidden;pointer-events:none;
+}
+.place-banner{
+  font-family:'Cinzel',Georgia,'Times New Roman',serif;font-weight:900;
+  font-size:clamp(19px,6.2vw,32px);letter-spacing:.05em;text-transform:uppercase;
+  text-align:center;white-space:nowrap;
+  background:linear-gradient(180deg,#fff6d8 10%,var(--gold-bright) 55%,var(--gold) 100%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:var(--gold-bright);
+  filter:drop-shadow(0 0 14px rgba(255,226,122,.6)) drop-shadow(0 2px 3px rgba(0,0,0,.75));
+  opacity:0;transform:translateY(10px) scale(.94);
+  transition:opacity .45s cubic-bezier(.22,.9,.32,1), transform .45s cubic-bezier(.22,.9,.32,1);
+}
+.place-banner::before, .place-banner::after{ content:'✦';font-size:.5em;vertical-align:middle;margin:0 .4em;opacity:.85; }
+.place-banner.show{ opacity:1; transform:translateY(0) scale(1); }
+
+/* ---------- zone principale ---------- */
+.main-row{
+  flex:1 1 auto;min-height:0;position:relative;
+  display:flex;flex-direction:column;align-items:stretch;
+  padding:2px 10px 4px;overflow:hidden;
+}
+.board-row{
+  flex:1 1 auto;min-height:0;position:relative;z-index:1;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+}
+.board-col{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;flex:1 1 auto;min-height:0}
+.board-wrap{ width:min(97vw,88vh,900px); aspect-ratio:1/1; position:relative;z-index:1; }
+/* ombre portée du plateau : un dégradé fixe, jamais un filtre sur le canvas */
+.board-wrap::before{
+  content:''; position:absolute; left:6%; right:6%; top:38%; bottom:-2%;
+  background:radial-gradient(ellipse at 50% 60%, rgba(0,0,0,.6) 0%, rgba(0,0,0,.35) 40%, rgba(0,0,0,0) 72%);
+  pointer-events:none;
+}
+#gl{ position:absolute;inset:0;width:100%;height:100%;display:block;border-radius:14px;cursor:grab;touch-action:none; }
+#gl:active{cursor:grabbing}
+.gl-fallback{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  text-align:center;padding:20px;font-size:13px;color:#cfe6ff;
+  background:radial-gradient(circle at 50% 40%,#0b2852,#040d1f);border-radius:14px;
+}
+
+/* étoiles qui tombent dans les marges (jamais devant le plateau) */
+.fall-star{
+  position:absolute;top:-12%;opacity:0;
+  background:radial-gradient(circle,#fff 0%,var(--gold-bright) 45%,var(--gold) 75%,transparent 100%);
+  clip-path:polygon(50% 0%,63% 37%,100% 50%,63% 63%,50% 100%,37% 63%,0% 50%,37% 37%);
+  filter:drop-shadow(0 0 4px rgba(255,226,122,.75));
+  animation-name:fallDrift;animation-timing-function:linear;animation-iteration-count:infinite;
+}
+@keyframes fallDrift{
+  0%{transform:translateY(0) rotate(0deg) scale(1);opacity:0}
+  8%{opacity:.85}
+  20%{transform:translateY(23vh) rotate(64deg) scale(.65)}
+  35%{transform:translateY(40vh) rotate(112deg) scale(1)}
+  50%{transform:translateY(57vh) rotate(160deg) scale(.65)}
+  65%{transform:translateY(75vh) rotate(208deg) scale(1)}
+  80%{transform:translateY(92vh) rotate(256deg) scale(.65)}
+  92%{opacity:.85}
+  100%{transform:translateY(115vh) rotate(320deg) scale(1);opacity:0}
+}
+@media (prefers-reduced-motion: reduce){ .fall-star{ display:none; } }
+/* mode éco : la décoration de la page (étoiles, flou) */
+html.eco .fall-star{ display:none; }
+html.eco #bgFill{ filter:brightness(0.45) saturate(1.15); }
+
+/* ---------- panneau animateur : masqué, tout se pilote au clavier ---------- */
+.side-panel{ display:none; }
+button:disabled{opacity:.48;filter:grayscale(.7)}
+button:active:not(:disabled){transform:translateY(1px)}
+
+/* ---------- repères et retours animateur (jamais sur l'écran public) ---------- */
+.key-hint{
+  position:absolute;left:50%;bottom:16px;transform:translateX(-50%);z-index:95;
+  background:rgba(10,8,2,.88);border:1px solid var(--gold);color:var(--gold-bright);
+  font-size:13px;font-weight:800;letter-spacing:.02em;padding:7px 14px;border-radius:20px;
+  max-width:92vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  opacity:0;transition:opacity .2s ease;pointer-events:none;
+}
+.key-hint.show{ opacity:1; }
+.cue-dot{
+  position:absolute;left:7px;bottom:7px;width:5px;height:5px;border-radius:50%;
+  opacity:0;pointer-events:none;z-index:80;transition:opacity .8s ease;
+}
+.cue-dot.etb{ background:#ffd27a; opacity:.22; }
+.cue-dot.coffret{ background:#9db8ff; opacity:.22; }
+.cue-dot.forced{ background:#ffffff; opacity:.26; }
+html.display-mode .cue-dot{ display:none; }
+.screen-btns{
+  position:absolute;right:10px;bottom:10px;z-index:96;display:flex;gap:8px;
+  opacity:0;transition:opacity .4s ease;pointer-events:none;
+}
+.screen-btns.show{ opacity:1;pointer-events:auto; }
+.screen-btns button{
+  font:900 13px/1 Arial,Helvetica,sans-serif;color:var(--gold-bright);
+  background:rgba(10,8,2,.82);border:1px solid var(--gold);border-radius:20px;padding:9px 14px;
+  cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.5);
+}
+.screen-btns button:hover{ background:rgba(40,30,8,.95); }
+html.display-mode .screen-btns{ display:none; }
+
+/* ---------- écran public ---------- */
+.display-badge{
+  display:none;position:absolute;right:14px;bottom:14px;z-index:60;
+  background:rgba(10,8,2,.8);border:1px solid var(--gold);color:var(--gold-bright);
+  font-size:10px;font-weight:800;letter-spacing:.05em;padding:4px 10px;border-radius:20px;pointer-events:none;
+}
+html.display-mode .display-badge{ display:block; }
+.results-ticker{
+  display:none;position:absolute;left:8px;right:8px;bottom:8px;z-index:3;
+  align-items:center;justify-content:center;gap:7px;pointer-events:none;
+}
+html.display-mode .results-ticker{ display:flex }
+.results-ticker .ticker-item{
+  width:36px;height:36px;border-radius:8px;overflow:hidden;flex:none;
+  border:2px solid var(--gold-bright);background:#0c0c0c;
+  box-shadow:0 2px 8px rgba(0,0,0,.65),0 0 8px rgba(255,226,122,.35);
+}
+.results-ticker .ticker-item img{ width:100%;height:100%;object-fit:cover;display:block }
+.results-ticker .ticker-item.new{ animation:tickerPop .5s cubic-bezier(.2,1.6,.4,1) }
+@keyframes tickerPop{ from{transform:scale(.3);opacity:0} to{transform:scale(1);opacity:1} }
+
+/* jeton de confirmation « Démarrage cagnotte » : flash au centre du plateau */
+.bank-reset-flash{
+  position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;
+  pointer-events:none;opacity:0;visibility:hidden;transition:opacity .3s ease;
+}
+.bank-reset-flash.show{opacity:1;visibility:visible;animation:bankFlashPop .5s cubic-bezier(.2,1.6,.4,1)}
+.bank-reset-flash img{
+  width:min(30vw,150px);height:auto;
+  filter:drop-shadow(0 10px 24px rgba(0,0,0,.6)) drop-shadow(0 0 30px rgba(255,110,40,.65));
+}
+@keyframes bankFlashPop{from{transform:scale(.5) rotate(-8deg);opacity:0}to{transform:scale(1) rotate(0);opacity:1}}
+
+/* panneaux télé : masqués sauf dans les dispositions de tele.css */
+.tv-panel{ display:none; }
+
+/* écrans larges (tablette / paysage) : cadre 3:2 plein hauteur */
+@media (min-width:760px) and (min-aspect-ratio: 1/1){
+  .board-row{flex-direction:row;align-items:stretch;justify-content:center;gap:12px}
+  .board-col{flex:1 1 auto;justify-content:center;height:100%}
+  .board-wrap{width:auto;height:100%;max-height:900px;max-width:100%;aspect-ratio:3/2;flex:0 0 auto;align-self:center}
+}
+@media(max-height:760px){
+  .top-hud{padding-top:max(18px,calc(env(safe-area-inset-top) + 10px))}
+  .main-row{padding-top:0}.board-wrap{width:min(92vw,84vh,640px)}
+}
+/* téléphone : le plateau domine, cadre 2:3 */
+@media(max-width:480px){
+  .main-row{padding:2px 6px 4px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .board-wrap{width:min(99vw,94vh,760px);aspect-ratio:2/3}
+}

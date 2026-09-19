@@ -338,8 +338,173 @@ def build(out_path):
     return out_path
 
 
+
+# ==========================================================================
+# Le NOUVEAU jeu (dossier nouveau/) : même livraison — un seul fichier —
+# mais une page qui référence ses feuilles de style par <link>, un point
+# d'entrée jeu.js qui importe une vingtaine de modules locaux, et des
+# chemins d'assets relatifs à chaque fichier (../assets/… depuis nouveau/,
+# ../../assets/… depuis nouveau/style/). Les modules ne sont pas listés à
+# la main : ils sont découverts en suivant les `import` depuis l'entrée.
+# L'ancien jeu (build() ci-dessus) n'est pas touché.
+# ==========================================================================
+ASSET_RE = re.compile(r"(?:\.\./)+assets/[A-Za-z0-9_/.\-]+\.(?:jpg|jpeg|png|webp|glb)|\./assets/[A-Za-z0-9_/.\-]+\.(?:jpg|jpeg|png|webp|glb)")
+
+def token_for_path(path):
+    return '__' + re.sub(r'[^A-Za-z0-9]', '_', path).upper() + '__'
+
+def discover_modules(entry):
+    """Tous les modules locaux atteignables depuis l'entrée, par leurs imports."""
+    seen, order = set(), []
+    def visit(path):
+        for spec in IMPORT_RE.findall(load(path)):
+            if spec == 'three': continue
+            dep = os.path.normpath(os.path.join(os.path.dirname(path), spec)).replace(os.sep, '/')
+            if dep not in seen:
+                seen.add(dep); visit(dep); order.append(dep)
+    visit(entry)
+    return order
+
+def rewrite_imports_generic(src, own_path, tokens):
+    own_dir = os.path.dirname(own_path)
+    def repl(m):
+        prefix, quoted = m.group(1), m.group(2)
+        spec = quoted[1:-1]
+        if spec == 'three':
+            token = '__THREE__'
+        else:
+            resolved = os.path.normpath(os.path.join(own_dir, spec)).replace(os.sep, '/')
+            if resolved not in tokens:
+                raise SystemExit(f"build.py: {own_path} importe '{spec}' ({resolved}), introuvable")
+            token = tokens[resolved]
+        return prefix + "'" + token + "'"
+    return IMPORT_RE_FULL.sub(repl, src)
+
+def build_nouveau(page, entry, out_path):
+    html = load(page)
+    page_dir = os.path.dirname(page)
+    head = re.search(r'<head>.*?</head>', html, re.S).group(0)
+    body = re.search(r'<body>(.*)</body>', html, re.S).group(1)
+
+    # ---- feuilles de style : chaque <link rel="stylesheet" href="…"> local devient un <style> ----
+    def inline_link(m):
+        href = m.group(1)
+        if href.startswith('http'): return m.group(0)
+        css_path = os.path.normpath(os.path.join(page_dir, href)).replace(os.sep, '/')
+        return '<style data-src="%s">\n%s\n</style>' % (href, resolve_assets(load(css_path), css_path, 'css'))
+    # ---- assets : incrustés UNE fois, référencés par variable CSS ou window.__ASSETS ----
+    data_uris = {}     # chemin réel -> data: URI
+    glb_b64 = {}       # chemin réel -> base64 (le modèle 3D voyage en chaîne, voir build())
+    css_vars = {}      # variable CSS -> data: URI
+    var_of = {}        # chemin réel -> variable CSS
+    js_used = set()    # chemins réels lus depuis JS/HTML
+    def register(literal, base_dir):
+        full = os.path.normpath(os.path.join(base_dir, literal)).replace(os.sep, '/')
+        if full in data_uris or full in glb_b64: return full
+        with open(os.path.join(ROOT, full), 'rb') as f: raw = f.read()
+        if full.endswith('.glb'):
+            glb_b64[full] = base64.b64encode(inline_glb_images(raw)).decode('ascii')
+        else:
+            mime = mimetypes.guess_type(full)[0] or 'application/octet-stream'
+            data_uris[full] = 'data:%s;base64,%s' % (mime, base64.b64encode(raw).decode('ascii'))
+        return full
+    def resolve_assets(text, own_path, kind):
+        # une URL écrite dans une feuille de style se résout depuis la feuille ;
+        # écrite dans un module JS (ou la page), depuis la PAGE — comme le navigateur
+        base_dir = os.path.dirname(own_path) if kind == 'css' else page_dir
+        literals = sorted(set(ASSET_RE.findall(text)), key=len, reverse=True)
+        for lit in literals:
+            full = register(lit, base_dir)
+            if kind == 'css':
+                if full not in var_of:
+                    var_of[full] = '--asset-%d' % len(var_of)
+                    css_vars[var_of[full]] = data_uris[full]
+                for form in ('url("%s")' % lit, "url('%s')" % lit, 'url(%s)' % lit):
+                    text = text.replace(form, 'var(%s)' % var_of[full])
+            elif kind == 'html':
+                if ('src="%s"' % lit) in text:
+                    js_used.add(full)
+                    text = text.replace('src="%s"' % lit, 'data-asset="%s"' % full)
+            else:  # js
+                pat = re.compile('([\'"])' + re.escape(lit) + '\\1')
+                if full in glb_b64:
+                    text, n = pat.subn(lambda m, f=full: json.dumps(f), text)
+                else:
+                    text, n = pat.subn(lambda m, f=full: 'window.__ASSETS[' + json.dumps(f) + ']', text)
+                    if n: js_used.add(full)
+            if lit in text:
+                raise SystemExit('build.py: référence non gérée à %s dans %s' % (lit, own_path))
+        return text
+    head = re.sub(r'<link[^>]*rel=["\']stylesheet["\'][^>]*href=["\']([^"\']+)["\'][^>]*>', inline_link, head)
+    body = resolve_assets(body, page, 'html')
+
+    # ---- modules : découverts depuis l'entrée, tokens dérivés du chemin complet ----
+    modules = discover_modules(entry)
+    tokens = {THREE_CORE: '__THREE__'}
+    for m in modules + [entry]: tokens[m] = token_for_path(m)
+    module_src = {THREE_CORE: load(THREE_CORE)}
+    for m in modules + [entry]:
+        module_src[m] = rewrite_imports_generic(resolve_assets(load(m), m, 'js'), m, tokens)
+    # ordre topologique : un module n'est mis en blob qu'après ses dépendances
+    remaining, order, resolved = list(modules), [THREE_CORE], {'__THREE__'}
+    guard = 0
+    while remaining:
+        guard += 1
+        if guard > 10 * (len(modules) + 1):
+            raise SystemExit(f"build.py: import circulaire ou non résolu parmi {remaining}")
+        for m in list(remaining):
+            deps = set()
+            for spec in IMPORT_RE.findall(load(m)):
+                deps.add('__THREE__' if spec == 'three' else tokens[os.path.normpath(os.path.join(os.path.dirname(m), spec)).replace(os.sep, '/')])
+            if deps <= resolved:
+                order.append(m); resolved.add(tokens[m]); remaining.remove(m)
+    bundle_sources = {tokens[m]: module_src[m] for m in order}
+    bundle_sources['__ENTRY__'] = module_src[entry]
+    load_order = [tokens[m] for m in order] + ['__ENTRY__']
+
+    assets_map = {p: uri for p, uri in data_uris.items() if p in js_used and p not in var_of}
+    getters = ''.join(
+        'Object.defineProperty(window.__ASSETS,%s,{get:function(){var v=getComputedStyle(document.documentElement)'
+        '.getPropertyValue(%s).trim();var m=/^url\\((["\']?)([\\s\\S]*)\\1\\)$/.exec(v);return m?m[2]:v;}});'
+        % (json.dumps(p), json.dumps(var_of[p]))
+        for p in sorted(js_used) if p in var_of)
+    assets_script = ('<style>:root{' + ''.join('%s:url("%s");' % (k, v) for k, v in css_vars.items()) + '}</style>\n'
+        + '<script>window.__ASSETS = ' + json.dumps(assets_map) + ';' + getters + '</script>')
+    head = head.replace('</head>', assets_script + '\n</head>')
+    body = body + ('<script>document.querySelectorAll("img[data-asset]").forEach(function(i){'
+                   ' i.src = window.__ASSETS[i.getAttribute("data-asset")] || ""; });</script>\n')
+    bootstrap_lines = [
+        "<script>", "window.__GLB_B64 = " + json.dumps(glb_b64) + ";", "</script>",
+        "<script>", "(function(){", "  var SRC = " + json.dumps(bundle_sources) + ";", "  var urls = {};",
+        "  function blobify(token){", "    var code = SRC[token];",
+        "    for (var k in urls) { code = code.split(k).join(urls[k]); }",
+        "    var blob = new Blob([code], {type:'text/javascript'});", "    urls[token] = URL.createObjectURL(blob);", "  }",
+    ]
+    for tok in load_order: bootstrap_lines.append(f"  blobify('{tok}');")
+    bootstrap_lines += ["  var s = document.createElement('script');", "  s.type = 'module';", "  s.src = urls['__ENTRY__'];",
+                        "  document.body.appendChild(s);", "})();", "</script>"]
+    bootstrap = '\n'.join(bootstrap_lines)
+    body = re.sub(r'<script type=["\']importmap["\']>.*?</script>\s*', '', body, flags=re.S)
+    body, n = re.subn(r'<script[^>]*type=["\']module["\'][^>]*src=["\'][^"\']+["\'][^>]*>\s*</script>', lambda m: bootstrap, body)
+    assert n == 1, "build.py: balise <script type=module> de l'entrée introuvable"
+    html_tag = re.search(r'<html[^>]*>', html).group(0)
+    out = ('<!doctype html>\n' + html_tag + '\n' + head + '\n<body>' + body + '</body>\n</html>\n')
+    out, n_strip = re.subn(r'data:image/(?:avif|webp);base64,[A-Za-z0-9+/=]+', 'data:,', out)
+    print(f'build.py: {len(modules)} modules locaux, {len(data_uris)+len(glb_b64)} assets, {n_strip} image(s) de test neutralisée(s)')
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)) or '.', exist_ok=True)
+    with open(out_path, 'w', encoding='utf-8') as f:
+        f.write(out)
+    print(f'done: {out_path} ({len(out)} bytes)')
+    return out_path
+
+
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
     ap.add_argument('--out', required=True, help='output HTML path')
+    ap.add_argument('--nouveau', action='store_true',
+                    help='construit le NOUVEAU jeu (nouveau/pikapoly.html + nouveau/jeu.js) au lieu de l\'ancien')
     args = ap.parse_args()
-    build(args.out)
+    if args.nouveau:
+        build_nouveau('nouveau/pikapoly.html', 'nouveau/jeu.js', args.out)
+    else:
+        build(args.out)
