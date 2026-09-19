@@ -46,7 +46,7 @@ construit**, pour que la page coûte moins cher à la télé et ne lâche plus.
 | 1 | Règle d'argent isolée dans `regles/argent.js`, 11 tests (`node --test tests/*.test.mjs`) | `44c0d0e` | rien : même comportement, vérifié |
 | 2 | Fond : 36 bandes → 1 canvas + shader. Diff pixel avant/après : 1,2–1,5/255 | `1eb5969` | **sur la télé** : fluidité d'un jackpot |
 | 2b | Sprites et disques d'ombre en lots instanciés : 344 → 268 appels de dessin par image. Diff pixel : seuls le médaillon Prison (qui pulse) et le pion (au repos) diffèrent, comme entre deux captures de l'ancien | `a3a0f1d` | **sur la télé** : fluidité |
-| 2c | Socle/corps/face des cases instanciés, plans double face en une passe (`forceSinglePass`), nom de lieu en cache, matrices figées : 268 → 121 appels par image, plus de recompilation de shader par image. Diff pixel : idem 2b | *(ce commit)* | **sur la télé** : fluidité |
+| 2c | Socle/corps/face des cases instanciés, plans double face en une passe (`forceSinglePass`), nom de lieu en cache, matrices figées : 268 → 121 appels par image, plus de recompilation de shader par image. Diff pixel : idem 2b | `e26f71e` | **sur la télé** : fluidité |
 
 ## Reste, dans l'ordre
 
