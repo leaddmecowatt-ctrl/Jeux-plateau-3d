@@ -728,6 +728,12 @@ html.storm #bgFill{ filter:blur(22px) brightness(.10) saturate(.8); }
   transform:translateZ(0);will-change:transform;backface-visibility:hidden;
 }
 .card-draw-overlay, .mystery-overlay{ transform:translateZ(0);will-change:transform;backface-visibility:hidden; }
+/* Télé pivotée : #app porte lui-même un transform, et l'overlay peut y être
+   aplati avec le reste. Ses enfants (panneau, photo, canvas des confettis)
+   gardent chacun leur couche, et l'ensemble passe au-dessus de tout. */
+html.rotated .celebration, html.rotated .card-draw-overlay, html.rotated .mystery-overlay{ z-index:200; }
+.celeb-text, #celebCanvas, .celeb-rays{ transform:translateZ(0);backface-visibility:hidden; }
+.celebration.flip .celeb-text{ transform:none; }
 .celebration.show{opacity:1;visibility:visible}
 .celebration.shake{animation:celebShake .5s ease}
 @keyframes celebShake{

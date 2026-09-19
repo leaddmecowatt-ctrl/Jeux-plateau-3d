@@ -162,6 +162,9 @@
    derrière le canvas WebGL du plateau quel que soit son z-index (le lot ne
    « venait devant » que le temps de l'animation .shake). */
 .celebration, .card-draw-overlay, .mystery-overlay{ transform:translateZ(0);will-change:transform;backface-visibility:hidden; }
+html.rotated .celebration, html.rotated .card-draw-overlay, html.rotated .mystery-overlay{ z-index:200; }
+.celeb-text, #celebCanvas, .celeb-rays{ transform:translateZ(0);backface-visibility:hidden; }
+.celebration.flip .celeb-text{ transform:none; }
 .celebration.show{opacity:1;visibility:visible}
 .celebration.shake{animation:celebShake .5s ease}
 @keyframes celebShake{
