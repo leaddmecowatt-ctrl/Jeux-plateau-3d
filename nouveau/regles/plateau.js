@@ -62,14 +62,16 @@ export const POKEMON_PLACES = [
 ];
 if(POKEMON_PLACES.length !== N_TILES) throw new Error('POKEMON_PLACES : '+POKEMON_PLACES.length+' noms pour '+N_TILES);
 
-/* Préposition de « Rendez-vous … » : reprise telle quelle de l'ancien jeu
-   (indexée sur les 40 anciens lieux, seuls les 36 premiers servent). */
+/* Préposition de « Rendez-vous … », alignée sur les 36 lieux ci-dessus
+   (l'ancien code gardait la liste des 40 anciens lieux : « à la
+   Carmin-sur-Mer », « à l'Parmanie »). */
 const PLACE_PREP = [
-  '', '', '', 'au ', 'à la ', 'au ', '', '', 'à la ', '',
-  '', '', 'à la ', 'à la ', '', 'au ', '', "à l'", '', 'au ',
-  "à l'", '', '', 'à la ', 'à la ', 'au ', 'à la ', '', '', '',
-  '', '', '', '', '', '', 'à la ', "à l'", 'à la ', 'à la ',
+  '', '', '', 'au ', 'à la ', 'au ', '', 'à la ', '', '',
+  '', 'à la ', 'à la ', '', 'au ', '', "à l'", '', "à l'", '',
+  '', 'à la ', 'à la ', 'à la ', '', '', '', '', '', '',
+  '', '', 'à la ', "à l'", 'à la ', 'à la ',
 ];
+if(PLACE_PREP.length !== N_TILES) throw new Error('PLACE_PREP : '+PLACE_PREP.length+' entrées pour '+N_TILES);
 export function shortPlaceName(idx){
   if(idx<0) return 'Départ';
   if(idx===LAST) return 'Salle du Champion';

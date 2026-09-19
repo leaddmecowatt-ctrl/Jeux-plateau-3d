@@ -1,16 +1,64 @@
 # Pikapoly — Plateau Live 3D
 
-Jeu de plateau 3D (façon Monopoly, 40 cases) joué **en direct** : les
+Jeu de plateau 3D (façon Monopoly, 36 cases) joué **en direct** : les
 spectateurs misent, un pion avance, et remporte des lots Pokémon (boosters,
 tripacks, coffrets, ETB). L'animateur pilote au clavier, l'image est
 diffusée sur une télé, souvent **pivotée à la verticale**.
 
 Ce fichier s'adresse à Claude Code. Le guide humain est dans `docs/TRANSMISSION.md`.
-**Décision du 18/09/2026 : le jeu est réécrit à zéro.** Le cahier des charges est
-`docs/CAHIER-DES-CHARGES.md` (tout ce que le nouveau jeu doit reproduire, extrait du code) ;
-`docs/PLAN-ALLEGEMENT.md` liste les pièges mesurés de l'ancien code à ne pas reproduire.
-Ce fichier décrit l'ancien code, qui fait foi en cas de doute sur un comportement.
 Tout est en français, y compris le code et les messages de commit — garder cette langue.
+
+**Deux jeux cohabitent dans ce dépôt, décision de l'animateur du 19/09/2026 :**
+
+| | l'ancien jeu (référence, intact) | le nouveau jeu (`nouveau/`) |
+|---|---|---|
+| page | `Nsldkso.html` | `nouveau/pikapoly.html` + `nouveau/style/*.css` |
+| code | `board3d.js` (~6 350 lignes, un seul fichier) | `nouveau/jeu.js` + ~25 modules par responsabilité |
+| bundle | `python3 tools/build.py --out dist/pikajackpot.html` | `python3 tools/build.py --nouveau --out dist/pikapoly-nouveau.html` |
+| tests | `node --test tests/*.test.mjs` | `node --test tests/*.test.mjs nouveau/tests/*.test.mjs` |
+
+L'ancien jeu **fait foi** sur tout comportement (il a été réglé des mois sur la
+vraie télé) ; on ne le modifie plus. Le nouveau reproduit le même résultat à
+l'écran avec une construction propre (cahier des charges :
+`docs/CAHIER-DES-CHARGES.md`, pièges mesurés : `docs/PLAN-ALLEGEMENT.md`). Ils
+partagent `regles/argent.js`, `assets/`, `vendor/three/` et les clés
+`localStorage`. Rien ne remplace rien tant que l'animateur ne l'a pas décidé.
+
+## Le nouveau jeu — `nouveau/`
+
+Un fichier par responsabilité, un seul état de partie, un seul mécanisme par
+problème. La frontière : `regles/` **décide** (pur, testé en Node), le reste
+**encaisse et affiche**.
+
+| dossier / fichier | rôle |
+|---|---|
+| `regles/plateau.js` | données du plateau : cases, lieux, catégories, couleurs, niveaux, messages, jeux Chance/Caisse |
+| `regles/planificateur.js` | dés pipés : `planTotal`, `canReachTarget`, `computeCardDraw` (tout tirage passe par un `rng` injectable) |
+| `regles/file.js` | file des lots (`nextPredeterminedOutcome`, `peekNextOutcome`), lot mystère, anti-malchance (`drawCard`) |
+| `regles/deroule.js` | une partie : lancers, double, lot forcé, `decisionArrivee` (jackpot / prison / auto / attente) |
+| `etat/partie.js` | **l'objet d'état unique** `etat` : partie, comptabilité, file, pity, annulation ; seul endroit qui lit et écrit la mémoire |
+| `etat/stockage.js` | `localStorage` (clés inchangées) et `BroadcastChannel` |
+| `scene/rendu.js` | renderer, bloom, qualité adaptative, mode éco, contexte WebGL perdu, boucle ; retourne le contexte `sc` |
+| `scene/textures.js` | toutes les textures dessinées au canvas (faces, cartes flottantes, plaque centrale, ornements…), cache par catégorie |
+| `scene/plateau3d.js`, `scene/lumieres.js`, `scene/camera.js`, `scene/pion.js` | le plateau, les lumières, la caméra (cadrage, cinéma, punch), le pion (marche en cinématique inverse) |
+| `scene/effets/*.js` | étincelles, impacts + secousse, pluie d'or, orage : chacun `start` / `stop` / `update` |
+| `ui/celebration.js` | aperçu du lot et célébrations, **un seul compteur de génération** (`gen`) pour tout ce qui est différé |
+| `ui/tirage.js`, `ui/mystere.js` | les deux overlays animés |
+| `ui/panneaux.js`, `ui/reperes.js`, `ui/clavier.js`, `ui/orientation.js`, `ui/ecranPublic.js`, `ui/son.js` | textes et boutons, repères animateur, touches, pivot + dispositions télé, `?view=display`, Web Audio |
+| `fond/onde.js` | le fond : un canvas + shader |
+| `style/base.css`, `style/overlays.css`, `style/tele.css` | charte ; overlays (`position:absolute` dans `#app`) ; les deux dispositions télé — la verticale **une seule fois**, en `--uw` / `--uh` (1 % de l'interface, échangés quand `html.rotated`) |
+| `jeu.js` | le chef d'orchestre : `drawAndMove`, `move`, `resolveChanceChest`, `claimCurrentLot`, `restart`, annulation |
+
+Dispositions télé : `ui/orientation.js` pose `html.tv-large` (écran large) ou
+`html.vertical` (télé en portrait **ou** image pivotée) ; `tele.css` ne connaît
+que ces classes. Les overlays vivent dans `#app` et tournent avec lui.
+
+Vérification du nouveau jeu : tests Node (19 pour le nouveau, 11 pour l'argent),
+bundle chargé dans Chromium sans erreur console, captures 1280×720, 1080×1920 et
+pivotées comparées à l'ancien bundle. Le cloud n'a pas de GPU (~1 image/s) :
+timings, marche du pion, confettis et sons **ne se vérifient que sur la télé**.
+
+## L'ancien jeu — ce qui suit décrit `board3d.js` et `Nsldkso.html`
 
 ## Fichiers
 
@@ -127,6 +175,7 @@ cher de la page (mesures et historique des 4 approches dans le commentaire de `#
 ## Historique utile
 
 - `main` est la référence, à jour du 18/09/2026 (tout le jeu, ce dossier compris).
-  Les branches `claude/*` sont l'historique des sessions précédentes.
+  Les branches `claude/*` sont l'historique des sessions précédentes ;
+  `claude/nouveau-jeu-a-cote` porte la construction du nouveau jeu.
 - `git log` est la documentation la plus précise : chaque commit dit ce qui a changé
   et pourquoi, en français.
