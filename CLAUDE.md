@@ -18,7 +18,8 @@ Tout est en français, y compris le code et les messages de commit — garder ce
 | tests | `node --test tests/*.test.mjs` | `node --test tests/*.test.mjs nouveau/tests/*.test.mjs` |
 
 L'ancien jeu **fait foi** sur tout comportement (il a été réglé des mois sur la
-vraie télé) ; on ne le modifie plus. Le nouveau reproduit le même résultat à
+vraie télé) ; c'est celui que l'animateur utilise. On n'y touche que sur sa
+demande, par des corrections minimales (ex. la couche de composition des overlays). Le nouveau reproduit le même résultat à
 l'écran avec une construction propre (cahier des charges :
 `docs/CAHIER-DES-CHARGES.md`, pièges mesurés : `docs/PLAN-ALLEGEMENT.md`). Ils
 partagent `regles/argent.js`, `assets/`, `vendor/three/` et les clés
