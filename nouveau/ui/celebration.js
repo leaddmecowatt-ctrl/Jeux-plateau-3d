@@ -43,15 +43,15 @@ export function creerCelebration(deps){
   function fitToBoard(){
     if(!celeb || !deps.wrap || !deps.appEl) return;
     if(!deps.estVertical()){
+      if(celeb.parentElement !== deps.appEl) deps.appEl.appendChild(celeb);
       celeb.style.top = ''; celeb.style.height = ''; celeb.style.bottom = '';
       celeb.style.removeProperty('--celeb-box-h');
       return;
     }
-    let top = 0, el = deps.wrap;
-    while(el && el !== deps.appEl){ top += el.offsetTop; el = el.offsetParent; }
-    celeb.style.top = top + 'px';
-    celeb.style.height = deps.wrap.offsetHeight + 'px';
-    celeb.style.bottom = 'auto';
+    // enfant de la zone du plateau : frère du canvas WebGL, même contexte
+    // d'empilement, Safari ne peut plus le peindre derrière (image pivotée)
+    if(celeb.parentElement !== deps.wrap) deps.wrap.appendChild(celeb);
+    celeb.style.top = '0'; celeb.style.height = '100%'; celeb.style.bottom = 'auto';
     celeb.style.setProperty('--celeb-box-h', deps.wrap.offsetHeight + 'px');
   }
   function resizeCanvas(){

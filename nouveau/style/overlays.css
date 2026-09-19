@@ -163,6 +163,7 @@
    « venait devant » que le temps de l'animation .shake). */
 .celebration, .card-draw-overlay, .mystery-overlay{ transform:translateZ(0);will-change:transform;backface-visibility:hidden; }
 html.rotated .celebration, html.rotated .card-draw-overlay, html.rotated .mystery-overlay{ z-index:200; }
+.board-wrap > .celebration{ position:absolute; inset:0; z-index:40; border-radius:14px; }
 .celeb-text, #celebCanvas, .celeb-rays{ transform:translateZ(0);backface-visibility:hidden; }
 .celebration.flip .celeb-text{ transform:none; }
 .celebration.show{opacity:1;visibility:visible}

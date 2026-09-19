@@ -732,6 +732,8 @@ html.storm #bgFill{ filter:blur(22px) brightness(.10) saturate(.8); }
    aplati avec le reste. Ses enfants (panneau, photo, canvas des confettis)
    gardent chacun leur couche, et l'ensemble passe au-dessus de tout. */
 html.rotated .celebration, html.rotated .card-draw-overlay, html.rotated .mystery-overlay{ z-index:200; }
+/* télé verticale : l'overlay du lot vit dans la zone du plateau (voir fitCelebToBoard) */
+.board-wrap > .celebration{ position:absolute; inset:0; z-index:40; border-radius:14px; }
 .celeb-text, #celebCanvas, .celeb-rays{ transform:translateZ(0);backface-visibility:hidden; }
 .celebration.flip .celeb-text{ transform:none; }
 .celebration.show{opacity:1;visibility:visible}

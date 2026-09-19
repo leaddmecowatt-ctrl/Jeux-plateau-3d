@@ -5686,17 +5686,19 @@ function verticalTvLayout(){
 function fitCelebToBoard(){
   if(!celeb || !wrap || !appEl) return;
   if(!verticalTvLayout()){
+    if(celeb.parentElement !== appEl) appEl.appendChild(celeb);
     celeb.style.top = ''; celeb.style.height = ''; celeb.style.bottom = '';
     celeb.style.removeProperty('--celeb-box-h');
     return;
   }
-  // position du plateau dans le repère de #app (offsets de mise en page,
-  // insensibles à la rotation CSS), pas getBoundingClientRect (pivoté)
-  let top = 0, el = wrap;
-  while(el && el !== appEl){ top += el.offsetTop; el = el.offsetParent; }
-  celeb.style.top = top + 'px';
-  celeb.style.height = wrap.offsetHeight + 'px';
-  celeb.style.bottom = 'auto';
+  /* Télé verticale : l'overlay est calé sur la zone du plateau. Plutôt que
+     de le positionner depuis #app (où Safari, sur l'image pivotée, finissait
+     par le peindre DERRIÈRE le canvas WebGL une fois l'animation d'entrée
+     terminée), il devient un enfant de .board-wrap : frère du canvas, même
+     contexte d'empilement, z-index supérieur — l'ordre ne dépend plus des
+     couches de composition. Sa taille est celle du plateau, sans mesure. */
+  if(celeb.parentElement !== wrap) wrap.appendChild(celeb);
+  celeb.style.top = '0'; celeb.style.height = '100%'; celeb.style.bottom = 'auto';
   /* Hauteur RÉELLE de l'overlay, publiée pour la CSS : les tailles de la
      photo et du panneau sont écrites en vh/vw, or en télé pivotée #app
      est tourné de 90° et ces unités ne correspondent plus à ses axes.
