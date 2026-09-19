@@ -113,6 +113,11 @@ calque** (`will-change:transform`, `backface-visibility:hidden`), sinon Safari l
 le canvas du plateau sauf pendant une animation (le lot « apparaissait une seconde »). Chromium ne
 montre aucun de ces deux bugs : les tester ici ne prouve rien, seul le Mac/la télé tranche.
 
+**Diagnostic à distance — touche I** : une fenêtre native affiche navigateur, tailles, classes,
+rectangles des panneaux/du plateau/de la célébration, et **quel élément est réellement au-dessus**
+de chacun (`elementFromPoint`). Demander une photo de cette fenêtre (après R, puis après D) avant
+toute hypothèse sur un problème vu seulement sur le Mac ou la télé.
+
 **Ce qui ne bouge jamais a sa matrice figée** (`matrixAutoUpdate=false` après un
 `updateMatrix()`) : groupes des cases, ornements d'angle, lots instanciés. Si un de ces objets
 doit un jour bouger, rappeler `updateMatrix()` après l'avoir déplacé.

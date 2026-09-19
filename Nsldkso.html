@@ -1572,6 +1572,39 @@ if(new URLSearchParams(location.search).get('view')==='display'){
   imgWide.src = './assets/bg/dragon_sky_wide.jpg';
 })();
 </script>
+<script>
+/* Diagnostic à distance — touche I : une fenêtre native (alert) affiche
+   les mesures internes de la page (navigateur, tailles, ce qui est visible
+   et QUEL élément est réellement au-dessus des panneaux et du lot). Sert
+   quand la télé ou le Mac montre un problème que Chromium n'a pas : une
+   photo de cette fenêtre vaut tous les tests à l'aveugle. Sans effet sur
+   le jeu tant qu'on n'appuie pas sur I. */
+window.addEventListener('keydown', function(e){
+  if((e.key||'').toLowerCase() !== 'i') return;
+  var tag = (document.activeElement && document.activeElement.tagName) || '';
+  if(tag === 'INPUT' || tag === 'TEXTAREA') return;
+  function r(el){ if(!el) return 'absent'; var b = el.getBoundingClientRect(); return Math.round(b.left)+','+Math.round(b.top)+' '+Math.round(b.width)+'x'+Math.round(b.height); }
+  function cs(el, props){ if(!el) return 'absent'; var c = getComputedStyle(el); return props.map(function(p){ return p+'='+c.getPropertyValue(p); }).join(' '); }
+  function dessus(el){ if(!el) return 'absent'; var b = el.getBoundingClientRect(); if(!b.width || !b.height) return 'boîte vide'; var top = document.elementFromPoint(b.left + b.width/2, b.top + b.height/2); if(!top) return 'hors écran'; return (top.id ? '#'+top.id : top.tagName.toLowerCase()+(top.className && typeof top.className === 'string' ? '.'+top.className.split(' ')[0] : '')) + (el.contains(top) || top === el ? ' (lui-même)' : ' (AUTRE)'); }
+  var q = function(sel){ return document.querySelector(sel); };
+  var gl = q('#gl'), celeb = q('#celebration'), photo = q('#celebPhoto');
+  var lignes = [
+    'nav: ' + navigator.userAgent.replace(/^.*\) /, '').slice(0, 60),
+    'fenêtre: ' + window.innerWidth + 'x' + window.innerHeight + ' dpr ' + devicePixelRatio + ' · html: ' + document.documentElement.className,
+    'media 3/4: ' + (matchMedia('(max-aspect-ratio: 3/4) and (min-height: 1100px)').matches),
+    '#app: ' + r(q('#app')) + ' · #bgLayer: ' + r(q('#bgLayer')),
+    'top-hud: ' + r(q('.top-hud')) + ' dessus=' + dessus(q('.top-hud')),
+    'board-wrap: ' + r(q('.board-wrap')) + ' · #gl css ' + r(gl) + ' attrs ' + (gl ? gl.width+'x'+gl.height : '-'),
+    'tv-left: ' + r(q('.tv-left')) + ' ' + cs(q('.tv-left'), ['display','visibility','opacity']) + ' dessus=' + dessus(q('.tv-left')),
+    'tv-right: ' + r(q('.tv-right')) + ' dessus=' + dessus(q('.tv-right')),
+    'side-panel: ' + r(q('.side-panel')) + ' ' + cs(q('.side-panel'), ['display']),
+    'celebration: ' + (celeb ? celeb.className : 'absent') + ' ' + r(celeb) + ' ' + cs(celeb, ['opacity','visibility','z-index','transform']),
+    'celebPhoto: ' + (photo ? (photo.hidden ? 'hidden' : 'visible') + ' ' + r(photo) + ' dessus=' + dessus(photo) : 'absent'),
+    'tvResults: ' + ((q('#tvResults')||{}).children||[]).length + ' élément(s)',
+  ];
+  alert(lignes.join('\n'));
+});
+</script>
 <script type="importmap">
 { "imports": { "three": "./vendor/three/three.module.min.js" } }
 </script>
