@@ -89,6 +89,7 @@ Pour recalibrer à nouveau (demander à Claude) :
 | changer la photo d'un lot | `assets/lots/<catégorie>.jpg`, même nom |
 | changer le texte annoncé | `CATEGORY_MESSAGES` |
 | changer l'intensité d'une célébration | `TIER_LEVEL` |
+| changer la part de boosters dans les lots mystère (7 sur 10) | `MYSTERY_BOOSTER_SHARE` dans `regles/argent.js` |
 | ajouter un raccourci clavier | le `addEventListener('keydown'` |
 | changer la mise en page télé verticale | CSS `html.rotated …` dans `Nsldkso.html` |
 

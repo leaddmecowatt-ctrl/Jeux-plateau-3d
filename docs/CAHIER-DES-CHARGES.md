@@ -104,8 +104,9 @@ Règles de case :
   (booster / carte), une ombre saute de l'une à l'autre, vite puis de plus
   en plus lentement, et finit sur la carte **non** gagnante. Le résultat
   est décidé avant (`drawMysterySub`) : probabilité = boosters restants /
-  lots mystère restants du cycle (30 boosters par cycle standard, `mystB`
-  du recalibrage sinon), compteurs persistés avec la file.
+  lots mystère restants, avec **7 lots mystère sur 10 en boosters**
+  (`MYSTERY_BOOSTER_SHARE`, `boostersMystere()`), compteurs persistés avec
+  la file et recalculés sur les lots restants si la part change.
 - À l'arrivée sur une case de lot : **aperçu du lot** (photo en grand,
   sans confettis) qui **reste affiché** tant que l'animateur commente.
   Il ne s'efface que par B, C ou D (invariant).

@@ -53,7 +53,6 @@ export const RECAL = {
   miseEnd: 3300,                        // horizon du stock restant
   ratio: 0.59,                          // part reversée : marge 41 %
   games: Math.round(3300 / AVG_MISE),   // 367 parties
-  mystB: 3,                             // packs du coffret entamé, pour les lots mystère
   recipe: [
     { cat:'jackpot300',  n:4  },   // ETB 30 ans
     { cat:'etb',         n:3  },   // coffrets ex entiers
@@ -167,12 +166,14 @@ export const OUTCOME_RECIPE = [
 
 /* ---------- Lot mystère ----------
    La case « Lot Mystère » (catégorie alternative) donne soit un booster,
-   soit une carte rare. L'hôte n'a que MYSTERY_BOOSTERS boosters par
-   cycle : le tirage booster/carte est calibré pour en donner EXACTEMENT
-   ce nombre sur les lots mystère du cycle (probabilité = boosters
-   restants / lots mystère restants), jamais plus. Compteurs persistés
-   avec la file. */
-export const MYSTERY_BOOSTERS = 30;
+   soit une carte rare. Décision de l'animateur (19/09/2026) : SEPT lots
+   mystère sur DIX sont des boosters. Le tirage booster/carte est calibré
+   pour tenir exactement cette part sur les lots mystère du cycle
+   (probabilité = boosters restants / lots mystère restants), jamais plus,
+   jamais moins. Compteurs persistés avec la file. La part s'applique
+   aussi à une file déjà en cours (voir loadOutcomeState dans board3d.js). */
+export const MYSTERY_BOOSTER_SHARE = 0.7;
+export function boostersMystere(mystN){ return Math.round(mystN * MYSTERY_BOOSTER_SHARE); }
 
 /* Chances par partie de chaque lot (recette / taille du cycle), pour la
    plaque centrale du plateau et la légende télé — le reste (commune) est

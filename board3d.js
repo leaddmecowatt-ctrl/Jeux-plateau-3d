@@ -8,7 +8,7 @@ import { UnrealBloomPass } from './vendor/three/examples/jsm/postprocessing/Unre
    file des lots. Module pur : ni DOM, ni three.js, ni localStorage, donc
    vérifiable hors navigateur (`node --test tests/*.test.mjs`). */
 import {
-  AVG_MISE, RECAL, OUTCOME_COST, OUTCOME_BATCH_SIZE, MYSTERY_BOOSTERS,
+  AVG_MISE, RECAL, OUTCOME_COST, OUTCOME_BATCH_SIZE, MYSTERY_BOOSTER_SHARE, boostersMystere,
   ceilingFor as plafondPour, tierFor, estCouvert, chancesParLot,
   buildOutcomeBatch,
 } from './regles/argent.js';
@@ -4604,6 +4604,16 @@ function loadOutcomeState(){
       const parsed = JSON.parse(raw);
       if(parsed && parsed.version===OUTCOME_BATCH_VERSION && Array.isArray(parsed.batch)
          && typeof parsed.pos==='number' && parsed.pos < parsed.batch.length){
+        // Une file déjà en cours garde sa position et ses lots, mais si la
+        // part de boosters des lots mystère a changé depuis qu'elle a été
+        // construite, le quota est recalculé sur les lots mystère RESTANTS :
+        // la nouvelle règle s'applique dès la prochaine partie, sans
+        // reconstruire la file ni toucher à la comptabilité.
+        if(parsed.mystShare !== MYSTERY_BOOSTER_SHARE && typeof parsed.mystN === 'number'){
+          parsed.mystB = boostersMystere(parsed.mystN);
+          parsed.mystShare = MYSTERY_BOOSTER_SHARE;
+          try{ localStorage.setItem(OUTCOME_BATCH_KEY, JSON.stringify(parsed)); }catch(e){}
+        }
         return parsed;
       }
     }
@@ -4613,13 +4623,13 @@ function loadOutcomeState(){
 function newOutcomeState(){
   const batch = buildOutcomeBatch(OUTCOME_BATCH_SIZE);
   const mystN = batch.filter(c=>c==='alternative').length;
-  return { version: OUTCOME_BATCH_VERSION, batch, pos: 0, mystN, mystB: Math.min(MYSTERY_BOOSTERS, mystN) };
+  return { version: OUTCOME_BATCH_VERSION, batch, pos: 0, mystN, mystB: boostersMystere(mystN), mystShare: MYSTERY_BOOSTER_SHARE };
 }
 function drawMysterySub(){
   const st = outcomeState;
   if(typeof st.mystN !== 'number' || typeof st.mystB !== 'number'){
     st.mystN = st.batch.slice(st.pos).filter(c=>c==='alternative').length + 1;
-    st.mystB = Math.min(MYSTERY_BOOSTERS, st.mystN);
+    st.mystB = boostersMystere(st.mystN);
   }
   const p = st.mystN > 0 ? st.mystB/st.mystN : 0;
   const sub = Math.random() < p ? 'booster' : 'carte';
@@ -4644,7 +4654,7 @@ if(!recalRec){
   try{ localStorage.setItem(RECAL_KEY, JSON.stringify(recal)); }catch(e){}
   const batch = buildOutcomeBatch(RECAL.games, RECAL.recipe, RECAL.ratio, RECAL.games);
   const mystN = batch.filter(c=>c==='alternative').length;
-  outcomeState = { version: OUTCOME_BATCH_VERSION, batch, pos: 0, mystN, mystB: Math.min(RECAL.mystB, mystN) };
+  outcomeState = { version: OUTCOME_BATCH_VERSION, batch, pos: 0, mystN, mystB: boostersMystere(mystN), mystShare: MYSTERY_BOOSTER_SHARE };
   saveOutcomeState();
 }
 // Un nouveau lot de résultats est régénéré automatiquement à
