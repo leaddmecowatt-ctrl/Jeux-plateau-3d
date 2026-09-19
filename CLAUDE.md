@@ -103,6 +103,16 @@ de la marge en direct.
 et les unités `vh`/`vw` n'y correspondent plus aux axes. `fitCelebToBoard()` cale
 l'overlay sur la zone du plateau et publie `--celeb-box-h` pour que la CSS s'y mesure.
 
+**Safari (Mac, iPhone) et `#app` pivoté** : un canvas WebGL placé *dans* `#app` transformé est
+composé au-dessus de tout le reste, quel que soit le z-index (vu sur la télé : après R, seuls
+les deux canvas restaient). D'où deux règles : (1) **les fonds sont hors de `#app`**, dans
+`#bgLayer`, frère à la racine qui reprend exactement sa géométrie et sa rotation (`html.rotated
+#bgLayer`, `rot90`, `rot270`), derrière lui (z-index 0 contre 1) ; (2) **les overlays fixes**
+(`.celebration`, `.card-draw-overlay`, `.mystery-overlay`, `.impact-flash`) sont **promus en
+calque** (`will-change:transform`, `backface-visibility:hidden`), sinon Safari les peint derrière
+le canvas du plateau sauf pendant une animation (le lot « apparaissait une seconde »). Chromium ne
+montre aucun de ces deux bugs : les tester ici ne prouve rien, seul le Mac/la télé tranche.
+
 **Ce qui ne bouge jamais a sa matrice figée** (`matrixAutoUpdate=false` après un
 `updateMatrix()`) : groupes des cases, ornements d'angle, lots instanciés. Si un de ces objets
 doit un jour bouger, rappeler `updateMatrix()` après l'avoir déplacé.

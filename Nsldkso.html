@@ -19,6 +19,7 @@ body{overflow:hidden;color:#fff}
   width:100vw;height:100dvh;overflow:hidden;
   display:flex;flex-direction:column;
   position:relative;
+  z-index:1;   /* au-dessus du fond (#bgWave, z-index 0, frère juste avant) */
 }
 /* Fond vivant, quatrième approche — et la première qui ne coûte
    (presque) rien. Historique, pour ne pas y revenir :
@@ -42,9 +43,22 @@ body{overflow:hidden;color:#fff}
    (onde figée) s'appliquent comme avant, sur cet unique élément.
    Si WebGL manque ou lâche, html.bg-static remet la photo en simple
    fond CSS : même image, sans onde — jamais d'écran noir. */
+/* Les fonds (#bgFill flouté, #bgWave ondulant) sont HORS de #app, exprès.
+   Sur Safari (Mac, iPhone), quand #app est pivoté (transform), un canvas
+   WebGL placé DEDANS est composé au-dessus de tout le reste du contenu
+   de #app, quel que soit son z-index : après R, il ne restait à l'écran
+   que les deux canvas (plateau et fond), sans bandeau, ni légende, ni
+   panneaux. Mesuré sur la vraie télé. #bgLayer est un frère de #app à
+   la racine, avec exactement sa géométrie et sa rotation (règles plus
+   bas), derrière lui (z-index 0 contre 1) : l'empilement redevient celui
+   des 36 bandes d'avant, et dedans les deux fonds gardent leurs règles. */
+#bgLayer{
+  position:fixed; left:0; top:0; width:100vw; height:100dvh; overflow:hidden;
+  z-index:0; pointer-events:none;
+}
 #bgWave{
   position:absolute; inset:0; width:100%; height:100%; display:block;
-  z-index:0; pointer-events:none;
+  pointer-events:none;
 }
 html.bg-static #bgWave{
   background-image:url("./assets/bg/dragon_sky.jpg");
@@ -429,6 +443,9 @@ html.display-mode .display-badge{ display:block; }
 
 /* ---------- Overlay de tirage de cartes (remplace les dés) ---------- */
 .card-draw-overlay{
+  /* même correctif Safari que .celebration : overlay fixe dans #app pivoté,
+     promu en calque pour ne jamais passer derrière le canvas 3D */
+  will-change:transform;-webkit-backface-visibility:hidden;backface-visibility:hidden;
   position:fixed;inset:0;z-index:55;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
   background:rgba(6,4,1,.86);opacity:0;visibility:hidden;transition:opacity .25s ease;padding:20px;
 }
@@ -436,6 +453,9 @@ html.display-mode .display-badge{ display:block; }
 
 /* ---------- Lot mystère : deux cartes noires, une ombre qui choisit ---------- */
 .mystery-overlay{
+  /* même correctif Safari que .celebration : overlay fixe dans #app pivoté,
+     promu en calque pour ne jamais passer derrière le canvas 3D */
+  will-change:transform;-webkit-backface-visibility:hidden;backface-visibility:hidden;
   position:fixed;inset:0;z-index:56;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
   background:rgba(6,4,1,.9);opacity:0;visibility:hidden;transition:opacity .25s ease;padding:20px;
 }
@@ -520,6 +540,9 @@ html.display-mode .display-badge{ display:block; }
   50%{ box-shadow:0 0 26px rgba(255,226,122,.95); filter:brightness(1.25); }
 }
 .impact-flash{
+  /* même correctif Safari que .celebration : overlay fixe dans #app pivoté,
+     promu en calque pour ne jamais passer derrière le canvas 3D */
+  will-change:transform;-webkit-backface-visibility:hidden;backface-visibility:hidden;
   position:fixed;inset:0;z-index:90;background:#fff8e0;opacity:0;pointer-events:none;
   transition:opacity .08s ease-out;
 }
@@ -717,12 +740,23 @@ html.storm #bgFill{ filter:blur(22px) brightness(.10) saturate(.8); }
 .celebration{
   position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
   pointer-events:none;opacity:0;visibility:hidden;transition:opacity .25s ease;
+  /* Safari (Mac, iPhone) peint cet overlay DERRIÈRE le canvas 3D quand
+     #app est pivoté (télé verticale) : le canvas WebGL a sa propre
+     couche de composition, et un calque NON promu passe dessous quel que
+     soit son z-index. L'overlay n'était promu que pendant une animation
+     (fondu d'opacité, secousse) : le lot apparaissait une fraction de
+     seconde puis disparaissait, et « Lot remporté » ne montrait rien.
+     Sous Chrome l'empilement est correct, d'où un bug invisible en test.
+     Promotion permanente en calque : rien ne change à la mise en page ni
+     à l'image, seule la façon dont Safari compose ce calque. */
+  will-change:transform;transform:translateZ(0);
+  -webkit-backface-visibility:hidden;backface-visibility:hidden;
 }
 .celebration.show{opacity:1;visibility:visible}
 .celebration.shake{animation:celebShake .5s ease}
 @keyframes celebShake{
-  0%,100%{transform:translate(0,0)} 20%{transform:translate(-8px,4px)} 40%{transform:translate(7px,-5px)}
-  60%{transform:translate(-6px,-3px)} 80%{transform:translate(5px,5px)}
+  0%,100%{transform:translate3d(0,0,0)} 20%{transform:translate3d(-8px,4px,0)} 40%{transform:translate3d(7px,-5px,0)}
+  60%{transform:translate3d(-6px,-3px,0)} 80%{transform:translate3d(5px,5px,0)}
 }
 #celebCanvas{position:absolute;inset:0;width:100%;height:100%}
 .celeb-text{
@@ -1088,6 +1122,10 @@ html:not(.rotated) .key-hint{font-size:clamp(14px,1.1vw,24px); bottom:1.6vh;}
 html.rotated #app{ width:100dvh; height:100vw; transform-origin:top left; }
 html.rot90 #app{ transform:rotate(90deg) translateY(-100%); }
 html.rot270 #app{ transform:rotate(-90deg) translateX(-100%); }
+/* les fonds (#bgLayer, frère de #app) suivent exactement la même rotation */
+html.rotated #bgLayer{ width:100dvh; height:100vw; transform-origin:top left; }
+html.rot90 #bgLayer{ transform:rotate(90deg) translateY(-100%); }
+html.rot270 #bgLayer{ transform:rotate(-90deg) translateX(-100%); }
 html.rotated #bgFill{ display:block; }
 html.rotated #app{font-size:clamp(16px,2vh,34px);}
 html.rotated .top-hud{padding:1.2vw 3vh .4vw;}
@@ -1188,9 +1226,13 @@ if(new URLSearchParams(location.search).get('view')==='display'){
   document.documentElement.classList.add('display-mode');
 }
 </script>
+<!-- Les fonds sont HORS de #app (voir la CSS de #bgLayer) : même
+     géométrie et même rotation que #app, mais derrière lui. -->
+<div id="bgLayer" aria-hidden="true">
+  <div id="bgFill"></div>
+  <canvas id="bgWave"></canvas>
+</div>
 <div id="app">
-  <div id="bgFill" aria-hidden="true"></div>
-  <canvas id="bgWave" aria-hidden="true"></canvas>
   <div id="bgGlow" aria-hidden="true"></div>
   <div class="top-hud">
     <div class="brand"><span class="brand-star" id="brandStarL">★</span> PIKAPOLY <span class="brand-star" id="brandStarR">★</span></div>
