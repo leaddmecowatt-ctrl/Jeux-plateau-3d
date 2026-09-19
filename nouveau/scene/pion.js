@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from '../../vendor/three/examples/jsm/loaders/GLTFLoader.js';
 import { N_TILES } from '../regles/plateau.js';
 import { reconnaitreSquelette, mesurerJambes, viserAvec, orienterMonde } from './squelette.js';
+import { relookerPeau, construireChapeau } from './relooking.js';
 
 /* Hauteur du pion sur le plateau : celle réglée pour le modèle d'origine,
    un peu plus pour un autre modèle (présence à l'écran). */
@@ -518,6 +519,7 @@ export function creerPion(sc){
       if(!o.isMesh) return;
       o.castShadow = true; o.receiveShadow = true;
       const oldMat = o.material;
+      o.userData.matName = oldMat.name;
       /* Un modèle fourni avec ses propres matériaux PBR (normales, rugosité)
          les garde : on ne fait qu'y brancher l'environnement de reflets. */
       if(sq.mode !== 'kenney' && oldMat && (oldMat.isMeshStandardMaterial || oldMat.isMeshPhysicalMaterial)){
@@ -533,7 +535,7 @@ export function creerPion(sc){
       if(oldMat.name === 'skin') skinMat = newMat;
       // clignement : zones des yeux connues pour la texture du modèle d'origine seulement
       if(sq.mode === 'kenney' && oldMat.map && oldMat.map.image && (oldMat.map.image.width || oldMat.map.image.naturalWidth) && !blinkAssigned){
-        blink = setupBlink(newMat, oldMat.map); blinkAssigned = true;
+        blink = relookerPeau(newMat, oldMat.map); blinkAssigned = true;
       }
     });
     /* Filet de sécurité : texture de peau rechargée depuis le data: URI du
@@ -548,7 +550,7 @@ export function creerPion(sc){
           const tex = await new THREE.TextureLoader().loadAsync(uri);
           tex.flipY = false; tex.colorSpace = THREE.SRGBColorSpace;
           skinMat.map = tex; skinMat.needsUpdate = true;
-          blink = setupBlink(skinMat, tex); blinkAssigned = true;
+          blink = relookerPeau(skinMat, tex); blinkAssigned = true;
         }
       }catch(e){ console.warn('Texture du personnage : repli impossible', e); }
     }
@@ -581,6 +583,11 @@ export function creerPion(sc){
     pion.mixer = mixer;
     const bones = sq.bones;
     pion.bones = bones;
+    if(sq.mode === 'kenney' && bones.Head){
+      let cap = null, band = null;
+      model.traverse(o=>{ if(o.isMesh && o.material){ if(o.material.name==='Cap_Red' || (o.userData.matName==='Cap_Red')) cap = o; if(o.material.name==='HatBand_Red' || o.userData.matName==='HatBand_Red') band = o; } });
+      if(cap) construireChapeau(cap, band, bones.Head, root);
+    }
     if(sq.manquants.length) return;
     if(sq.mode !== 'kenney'){
       /* mesures des jambes sur le modèle posé : remplacent les constantes

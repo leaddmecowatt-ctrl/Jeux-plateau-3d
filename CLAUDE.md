@@ -41,6 +41,7 @@ problème. La frontière : `regles/` **décide** (pur, testé en Node), le reste
 | `scene/rendu.js` | renderer, SMAA (anti-crénelage, avant le bloom qui reste la dernière passe), bloom, qualité adaptative, mode éco, contexte WebGL perdu, boucle ; retourne le contexte `sc` |
 | `scene/textures.js` | toutes les textures dessinées au canvas (faces, cartes flottantes, plaque centrale, ornements…), cache par catégorie |
 | `scene/plateau3d.js`, `scene/lumieres.js`, `scene/camera.js`, `scene/pion.js` | le plateau, les lumières (dont la lumière de contour qui suit le pion), la caméra (cadrage, cinéma, punch), le pion (marche en cinématique inverse) |
+| `scene/relooking.js` | le personnage d'origine façon figurine : chapeau de paille modélisé (posé sur l'os de la tête, casquette masquée), visage redessiné au canvas (grands yeux, sourire, cicatrice, clignement en trait), gilet / ceinture / short retravaillés par couleur. Propre à ce modèle. |
 | `scene/squelette.js` | reconnaissance des os (Kenney, Mixamo, VRM…), mesures des jambes, visée d'un os dans le monde : un autre modèle 3D marche sans recalibrage à la main (profil `auto`) ; le modèle d'origine garde son profil `kenney` réglé sur la télé |
 | `scene/effets/*.js` | étincelles, impacts + secousse, pluie d'or, orage : chacun `start` / `stop` / `update` |
 | `ui/celebration.js` | aperçu du lot et célébrations, **un seul compteur de génération** (`gen`) pour tout ce qui est différé |
