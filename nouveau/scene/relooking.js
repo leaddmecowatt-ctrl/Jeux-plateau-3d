@@ -44,18 +44,18 @@ function drawFace(ctx){
     ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
   }
   // sourcils : arcs fins et hauts
-  ctx.strokeStyle = '#1e1410'; ctx.lineWidth = 9; ctx.lineCap = 'round';
+  ctx.strokeStyle = '#1e1410'; ctx.lineWidth = 13; ctx.lineCap = 'round';
   for(const e of EYES){
-    const cx = x + e.cx*w, top = y + (e.cy - EYE_RY)*h - h*0.11, d = e.cx < 0.5 ? 1 : -1;
-    ctx.beginPath(); ctx.moveTo(cx - d*w*0.09, top + h*0.015);
-    ctx.quadraticCurveTo(cx, top - h*0.02, cx + d*w*0.09, top + h*0.01); ctx.stroke();
+    const cx = x + e.cx*w, top = y + (e.cy - EYE_RY)*h - h*0.07, d = e.cx < 0.5 ? 1 : -1;
+    ctx.beginPath(); ctx.moveTo(cx - d*w*0.08, top - h*0.02);
+    ctx.lineTo(cx + d*w*0.07, top + h*0.03); ctx.stroke();
   }
   EYES.forEach(e => drawEye(ctx, e, false));
   // nez : un petit trait
   ctx.strokeStyle = '#b9764f'; ctx.lineWidth = 8;
   ctx.beginPath(); ctx.moveTo(x+w*0.49, y+h*0.55); ctx.quadraticCurveTo(x+w*0.47, y+h*0.60, x+w*0.51, y+h*0.61); ctx.stroke();
   // large sourire à dents
-  const mx0 = x+w*0.24, mx1 = x+w*0.76, ytop = y+h*0.70, ybot = y+h*0.84;
+  const mx0 = x+w*0.20, mx1 = x+w*0.80, ytop = y+h*0.69, ybot = y+h*0.87;
   ctx.beginPath();
   ctx.moveTo(mx0, ytop);
   ctx.quadraticCurveTo(x+w*0.5, ytop + h*0.035, mx1, ytop);
@@ -64,10 +64,11 @@ function drawFace(ctx){
   ctx.fillStyle = '#ffffff'; ctx.fill();
   ctx.save(); ctx.clip();
   // intérieur de la bouche sous les dents
-  ctx.fillStyle = '#7a1f22'; ctx.fillRect(mx0, ytop + (ybot-ytop)*0.62, mx1-mx0, ybot-ytop);
+  ctx.fillStyle = '#e07a8c'; ctx.fillRect(mx0, ytop + (ybot-ytop)*0.55, mx1-mx0, ybot-ytop);
+  ellipse(ctx, x+w*0.5, ybot + h*0.02, w*0.16, h*0.06); ctx.fillStyle = '#c94e66'; ctx.fill();
   // séparations des dents
   ctx.strokeStyle = 'rgba(40,20,20,.55)'; ctx.lineWidth = 5;
-  for(let k=1;k<9;k++){ const tx = mx0 + (mx1-mx0)*k/9; ctx.beginPath(); ctx.moveTo(tx, ytop-10); ctx.lineTo(tx, ytop + (ybot-ytop)*0.62); ctx.stroke(); }
+  for(let k=1;k<9;k++){ const tx = mx0 + (mx1-mx0)*k/9; ctx.beginPath(); ctx.moveTo(tx, ytop-10); ctx.lineTo(tx, ytop + (ybot-ytop)*0.55); ctx.stroke(); }
   ctx.restore();
   ctx.strokeStyle = '#161010'; ctx.lineWidth = 14; ctx.lineJoin = 'round'; ctx.stroke();
   // cicatrice sous l'œil gauche : un trait et deux points de suture
@@ -236,8 +237,16 @@ export function construireChapeau(capMesh, bandMesh, headBone, root){
   chapeau.position.copy(headBone.worldToLocal(centre.clone()));
   const q = headBone.getWorldQuaternion(new THREE.Quaternion()).invert();
   chapeau.quaternion.copy(q);   // le chapeau reste droit dans le monde à la pose de liaison
-  // léger décalage vers l'arrière et inclinaison, comme porté
-  headBone.add(chapeau);
+  // porté en arrière, comme sur la référence : bord relevé devant, calotte derrière
+  const arriere = new THREE.Group();
+  arriere.quaternion.copy(q);
+  arriere.position.copy(chapeau.position);
+  chapeau.position.set(0, W*0.03, -W*0.07);
+  chapeau.quaternion.setFromAxisAngle(new THREE.Vector3(1,0,0), -0.24);
+  chapeau.scale.setScalar(1);
+  arriere.scale.setScalar(1/s);
+  arriere.add(chapeau);
+  headBone.add(arriere);
   capMesh.visible = false;
   if(bandMesh) bandMesh.visible = false;
   return chapeau;
