@@ -81,6 +81,7 @@ function frameStep(dt, t){
   orage.update(t, dt);
   plateau.update(t, dt, pion.root.position, pion.topOffset, orage.waveOffset);
   pion.update(t, dt, plateau.surfOffset, fxPion, levelOf);
+  lumieres.suivrePion(pion.root.position, sc.camera.position);
   impacts.update(t, dt);
 }
 sc.choisirQualiteInitiale();

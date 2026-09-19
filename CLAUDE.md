@@ -38,9 +38,10 @@ problème. La frontière : `regles/` **décide** (pur, testé en Node), le reste
 | `regles/deroule.js` | une partie : lancers, double, lot forcé, `decisionArrivee` (jackpot / prison / auto / attente) |
 | `etat/partie.js` | **l'objet d'état unique** `etat` : partie, comptabilité, file, pity, annulation ; seul endroit qui lit et écrit la mémoire |
 | `etat/stockage.js` | `localStorage` (clés inchangées) et `BroadcastChannel` |
-| `scene/rendu.js` | renderer, bloom, qualité adaptative, mode éco, contexte WebGL perdu, boucle ; retourne le contexte `sc` |
+| `scene/rendu.js` | renderer, SMAA (anti-crénelage, avant le bloom qui reste la dernière passe), bloom, qualité adaptative, mode éco, contexte WebGL perdu, boucle ; retourne le contexte `sc` |
 | `scene/textures.js` | toutes les textures dessinées au canvas (faces, cartes flottantes, plaque centrale, ornements…), cache par catégorie |
-| `scene/plateau3d.js`, `scene/lumieres.js`, `scene/camera.js`, `scene/pion.js` | le plateau, les lumières, la caméra (cadrage, cinéma, punch), le pion (marche en cinématique inverse) |
+| `scene/plateau3d.js`, `scene/lumieres.js`, `scene/camera.js`, `scene/pion.js` | le plateau, les lumières (dont la lumière de contour qui suit le pion), la caméra (cadrage, cinéma, punch), le pion (marche en cinématique inverse) |
+| `scene/squelette.js` | reconnaissance des os (Kenney, Mixamo, VRM…), mesures des jambes, visée d'un os dans le monde : un autre modèle 3D marche sans recalibrage à la main (profil `auto`) ; le modèle d'origine garde son profil `kenney` réglé sur la télé |
 | `scene/effets/*.js` | étincelles, impacts + secousse, pluie d'or, orage : chacun `start` / `stop` / `update` |
 | `ui/celebration.js` | aperçu du lot et célébrations, **un seul compteur de génération** (`gen`) pour tout ce qui est différé |
 | `ui/tirage.js`, `ui/mystere.js` | les deux overlays animés |
@@ -48,6 +49,13 @@ problème. La frontière : `regles/` **décide** (pur, testé en Node), le reste
 | `fond/onde.js` | le fond : un canvas + shader |
 | `style/base.css`, `style/overlays.css`, `style/tele.css` | charte ; overlays (`position:absolute` dans `#app`) ; les deux dispositions télé — la verticale **une seule fois**, en `--uw` / `--uh` (1 % de l'interface, échangés quand `html.rotated`) |
 | `jeu.js` | le chef d'orchestre : `drawAndMove`, `move`, `resolveChanceChest`, `claimCurrentLot`, `restart`, annulation |
+
+Changer de personnage : déposer le GLB (textures incrustées, squelette humanoïde
+Mixamo ou équivalent, ≤ 5 Mo) dans `assets/character/` et changer l'URL par défaut
+dans `pion.load()` ; pour l'essayer sans reconstruire, servir le bundle en http et
+ouvrir `?modele=<fichier.glb>`. Rendu du pion : matériaux standard avec
+l'environnement de reflets, rugosité par matière, ombre de contact ; un modèle livré
+avec ses matériaux PBR les garde.
 
 Dispositions télé : `ui/orientation.js` pose `html.tv-large` (écran large) ou
 `html.vertical` (télé en portrait **ou** image pivotée) ; `tele.css` ne connaît

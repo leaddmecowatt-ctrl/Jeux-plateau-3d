@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { EffectComposer } from '../../vendor/three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from '../../vendor/three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from '../../vendor/three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { SMAAPass } from '../../vendor/three/examples/jsm/postprocessing/SMAAPass.js';
 import { makeStudioBackdrop, setMaxAniso } from './textures.js';
 import { CLES, ecrire, lireEntier } from '../etat/stockage.js';
 
@@ -60,11 +61,19 @@ export function creerRendu({ canvas, wrap, reduceMotion }){
 
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
+  /* Anti-crénelage SMAA : la scène est rendue dans une texture (composer),
+     le MSAA du canvas ne lisse donc rien. SMAA lisse les bords en une passe
+     plein écran, AVANT le bloom : le bloom reste la dernière passe, celle qui
+     écrit à l'écran avec le tone mapping et la conversion sRGB — le même
+     rendu qu'avant, à la virgule près, lissage en plus. Coupé dès le cran 3
+     de qualité et en éco. */
+  const smaaPass = new SMAAPass(1, 1);
+  composer.addPass(smaaPass);
   const bloomPass = new UnrealBloomPass(new THREE.Vector2(1,1), 0.55, 0.4, 0.82);
   composer.addPass(bloomPass);
 
   const sc = {
-    renderer, scene, camera, composer, bloomPass, canvas, wrap, reduceMotion,
+    renderer, scene, camera, composer, bloomPass, smaaPass, canvas, wrap, reduceMotion,
     clock: new THREE.Clock(),
     eco: false,
     DPR_MAX,
@@ -82,6 +91,7 @@ export function creerRendu({ canvas, wrap, reduceMotion }){
     if(sc.eco === on) return;
     sc.eco = on;
     bloomPass.enabled = !on;
+    smaaPass.enabled = !on && sc.quality.level < 3;
     renderer.shadowMap.enabled = !on;
     document.documentElement.classList.toggle('eco', on);
     sc.ecoHooks.forEach(fn=>fn(on));
@@ -100,6 +110,7 @@ export function creerRendu({ canvas, wrap, reduceMotion }){
     if(renderer.getPixelRatio() !== dpr) renderer.setPixelRatio(dpr);
     sc.setEcoMode(level >= 5);
     if(!sc.eco) setShadowSoft(level < 2);
+    smaaPass.enabled = level < 3;
     sc.resize();
   };
   function bloomScaleForLevel(level){ return level>=3 ? 0.25 : 0.5; }

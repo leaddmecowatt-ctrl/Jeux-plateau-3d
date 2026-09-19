@@ -38,8 +38,19 @@ export function ajouterLumieres(sc){
     scene.add(pl);
   });
 
+  /* Lumière de contour du pion : un point chaud placé derrière lui par rapport
+     à la caméra, mis à jour chaque image (suivrePion). Courte portée : elle ne
+     touche que le personnage. */
+  const rimPion = new THREE.PointLight(0xffe2b0, 1.6, 2.6, 2);
+  scene.add(rimPion);
+  const _dir = new THREE.Vector3();
+  function suivrePion(pionPos, cameraPos){
+    _dir.subVectors(pionPos, cameraPos); _dir.y = 0; _dir.normalize();
+    rimPion.position.set(pionPos.x + _dir.x*0.9, pionPos.y + 1.15, pionPos.z + _dir.z*0.9);
+  }
+
   const base = { key: key.intensity, hemi: hemi.intensity, fill: fill.intensity, rim: rim.intensity, spot: spot.intensity, expo: renderer.toneMappingExposure };
-  return { key, hemi, fill, rim, spot, base,
+  return { key, hemi, fill, rim, spot, rimPion, suivrePion, base,
     /* remet toutes les intensités à leur valeur d'origine (fin d'orage) */
     reset(){
       key.intensity = base.key; hemi.intensity = base.hemi; fill.intensity = base.fill;

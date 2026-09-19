@@ -6,8 +6,12 @@
 import * as THREE from 'three';
 import { GLTFLoader } from '../../vendor/three/examples/jsm/loaders/GLTFLoader.js';
 import { N_TILES } from '../regles/plateau.js';
+import { reconnaitreSquelette, mesurerJambes, viserAvec, orienterMonde } from './squelette.js';
 
-const PLAYER_TARGET_HEIGHT = 0.82;
+/* Hauteur du pion sur le plateau : celle réglée pour le modèle d'origine,
+   un peu plus pour un autre modèle (présence à l'écran). */
+const HAUTEUR = { kenney: 0.82, auto: 0.90 };
+const PLAYER_TARGET_HEIGHT = HAUTEUR.kenney;
 const RIG_BONES = [
   'Hips','Spine','Chest','UpperChest','Neck','Head',
   'LeftShoulder','RightShoulder','LeftArm','RightArm',
@@ -38,7 +42,7 @@ const RIG = { ankle:-1.0, hipsZ:0.022, clear:-0.002, toeIn:0.12, symL:0.135, sym
    l'avance de la phase (sinon le pied patine). 3 pas par case. */
 const GAIT = {
   thigh: 0.1509, shin: 0.1746, hipY: 0.3668, footY: 0.0492,
-  reach: (0.1509 + 0.1746) * 0.995,
+  get reach(){ return (this.thigh + this.shin) * 0.995; },
   crouch: sp => (0.033 + 0.003*sp),
   rise: 0.026,
   footL: 0.085, footA: 0.663,
@@ -132,6 +136,19 @@ export function creerPion(sc){
   const { scene, clock, reduceMotion } = sc;
   const root = new THREE.Group();
   scene.add(root);
+  /* Ombre de contact : un disque doux sous les pieds, qui suit le pion. Les
+     ombres portées seules laissent le personnage « posé » sur la case sans
+     l'y ancrer. */
+  {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const g = c.getContext('2d');
+    const grad = g.createRadialGradient(64,64,4,64,64,64);
+    grad.addColorStop(0,'rgba(0,0,0,.55)'); grad.addColorStop(0.55,'rgba(0,0,0,.25)'); grad.addColorStop(1,'rgba(0,0,0,0)');
+    g.fillStyle = grad; g.fillRect(0,0,128,128);
+    const disc = new THREE.Mesh(new THREE.PlaneGeometry(0.62,0.62), new THREE.MeshBasicMaterial({ map:new THREE.CanvasTexture(c), transparent:true, depthWrite:false }));
+    disc.rotation.x = -Math.PI/2; disc.position.y = 0.012; disc.renderOrder = 1;
+    root.add(disc);
+  }
   const pion = {
     root, model: null, bones: null,
     mixer: { update(){} }, setWalking(){}, updateBody(){}, resetBind: null,
@@ -208,14 +225,61 @@ export function creerPion(sc){
   }
 
   /* ---------- la couche procédurale du corps ---------- */
-  function buildBodyLayer(bones, blink){
+  function buildBodyLayer(bones, blink, profil){
+    const auto = profil.mode !== 'kenney';
     const bind = {};
     for(const n of RIG_BONES){ const b = bones[n]; if(b) bind[n] = { q: b.quaternion.clone(), py: b.position.y }; }
     const restQ = {};
     REST_POSE.LeftArm.x = RIG.restLX; REST_POSE.RightArm.x = RIG.restRX;
+    /* Mode auto : la pose de repos des bras et les corrections propres au rig
+       Kenney ne s'appliquent pas ; les membres sont orientés dans le monde
+       (voir viserMembres), donc sans hypothèse sur leurs axes. */
+    const MEMBRES = new Set(['LeftArm','RightArm','LeftForeArm','RightForeArm','LeftHand','RightHand','LeftUpLeg','RightUpLeg','LeftLeg','RightLeg','LeftFoot','RightFoot']);
     for(const n of RIG_BONES){
-      const r = REST_POSE[n];
+      const r = (auto && MEMBRES.has(n)) ? null : REST_POSE[n];
       restQ[n] = r ? new THREE.Quaternion().setFromEuler(new THREE.Euler(r.x||0, r.y||0, r.z||0, 'XYZ')) : null;
+    }
+    /* orientation de liaison des pieds dans le repère du pion (mode auto) */
+    const footBindQ = {};
+    if(auto){
+      root.updateWorldMatrix(true, true);
+      const rq = root.getWorldQuaternion(new THREE.Quaternion()).invert();
+      for(const n of ['LeftFoot','RightFoot']) if(bones[n]) footBindQ[n] = rq.clone().multiply(bones[n].getWorldQuaternion(new THREE.Quaternion()));
+    }
+    const _rootQ = new THREE.Quaternion(), _tq = new THREE.Quaternion(), _pitchQ = new THREE.Quaternion(), _X = new THREE.Vector3(1,0,0);
+    const _joint = new THREE.Vector3(), _target = new THREE.Vector3(), _dir = new THREE.Vector3();
+    const jointLocal = b => root.worldToLocal(b.getWorldPosition(_joint));
+    /* Bras visé dans le monde : `a` = balancement vers l'avant (rad), `b` =
+       flexion du coude, `out` = écartement latéral. */
+    function viserBras(side, a, b, out){
+      const arm = bones[side+'Arm'], fore = bones[side+'ForeArm'], hand = bones[side+'Hand'];
+      if(!arm || !fore) return;
+      root.updateWorldMatrix(true, false);
+      const sx = Math.sign(jointLocal(arm).x) || (side==='Left' ? 1 : -1);
+      _dir.set(sx*out, -Math.cos(a), Math.sin(a) + 0.03).normalize();
+      _target.copy(jointLocal(arm)).add(_dir);
+      viserAvec(arm, fore, root.localToWorld(_target));
+      if(!hand) return;
+      _dir.set(sx*out*0.6, -Math.cos(a+b), Math.sin(a+b)).normalize();
+      _target.copy(jointLocal(fore)).add(_dir);
+      viserAvec(fore, hand, root.localToWorld(_target));
+    }
+    /* Jambe visée dans le monde à partir de la pose calculée (dz, dy : pied
+       par rapport à la hanche ; hipA : angle de la cuisse depuis la verticale). */
+    function viserJambe(side, pose){
+      const up = bones[side+'UpLeg'], leg = bones[side+'Leg'], foot = bones[side+'Foot'];
+      if(!up || !leg || !foot) return;
+      root.updateWorldMatrix(true, false);
+      const h = jointLocal(up).clone();
+      _target.set(h.x, h.y - Math.cos(pose.hip)*GAIT.thigh, h.z + Math.sin(pose.hip)*GAIT.thigh);
+      viserAvec(up, leg, root.localToWorld(_target.clone()));
+      _target.set(h.x, h.y - pose.dy, h.z + pose.dz);
+      viserAvec(leg, foot, root.localToWorld(_target.clone()));
+      // semelle à plat (orientation de liaison), inclinée du tangage du pas
+      root.getWorldQuaternion(_rootQ);
+      _pitchQ.setFromAxisAngle(_X, pose.pitch);
+      _tq.copy(_rootQ).multiply(_pitchQ).multiply(footBindQ[side+'Foot']);
+      orienterMonde(foot, _tq);
     }
     const _qA = new THREE.Quaternion(), _qB = new THREE.Quaternion(), _eA = new THREE.Euler(0,0,0,'XYZ');
     const d = {};
@@ -238,14 +302,16 @@ export function creerPion(sc){
       const dt = Math.max(0, Math.min(0.05, t - lastT));
       lastT = t;
       resetDeltas();
-      add('LeftFoot','z', RIG.toeIn); add('RightFoot','z', -RIG.toeIn);
+      if(!auto){ add('LeftFoot','z', RIG.toeIn); add('RightFoot','z', -RIG.toeIn); }
       const walking = ctx.walking, gait = ctx.gait || 0, stepPh = ctx.stepPhase || 0;
+      let autoLegs = null;
+      const autoArms = { L:{ a:0.02, b:0.22, out:0.12 }, R:{ a:0.02, b:0.22, out:0.12 } };
       // 1. respiration
       breathPhase += dt * (0.26 + gait*0.22);
       const breath = Math.sin(breathPhase*Math.PI*2) * 0.55 + Math.sin(breathPhase*Math.PI*2*2.03 + 1.1) * 0.18;
       add('Chest','x', breath*0.019); add('UpperChest','x', -breath*0.009); add('Spine','x', breath*0.006);
       add('LeftShoulder','z', breath*0.012); add('RightShoulder','z', -breath*0.010);
-      add('LeftArm','x', RIG.symL); add('RightArm','x', RIG.symR);
+      if(!auto){ add('LeftArm','x', RIG.symL); add('RightArm','x', RIG.symR); }
       // 2. report du poids
       if(!walking){
         weightNext -= dt;
@@ -355,10 +421,12 @@ export function creerPion(sc){
             ankZ = GAIT.footL*(Math.cos(GAIT.footA) - Math.cos(GAIT.footA + pitch));
           }
           dz += ankZ; up += ankY;
-          const r = solve(dz, gh - (up + GAIT.clearance + GAIT.tilt*dz) + GAIT.curv*(dz-GAIT.curvC)*(dz-GAIT.curvC));
-          return { hip: r.hip, knee: r.knee, shin: r.hip - r.knee, pitch };
+          const dy = auto ? gh - up : gh - (up + GAIT.clearance + GAIT.tilt*dz) + GAIT.curv*(dz-GAIT.curvC)*(dz-GAIT.curvC);
+          const r = solve(dz, dy);
+          return { hip: r.hip, knee: r.knee, shin: r.hip - r.knee, pitch, dz, dy };
         };
         const L = legPose(0), R = legPose(0.5);
+        autoLegs = { L, R };
         add('LeftUpLeg','x',  LEG_DIR*(L.hip - LEG_HIP0)); add('RightUpLeg','x', LEG_DIR*(R.hip - LEG_HIP0));
         add('LeftLeg','x',    KNEE_DIR*(L.knee - LEG_KNEE0)); add('RightLeg','x',   KNEE_DIR*(R.knee - LEG_KNEE0));
         const ank = a => -KNEE_DIR*(a - LEG_SHIN0)*RIG.ankle;
@@ -372,6 +440,8 @@ export function creerPion(sc){
         const swingL = armFwdL > 0 ? armFwdL*armA : armFwdL*armA*BACK;
         const swingR = armFwdR > 0 ? armFwdR*armA : armFwdR*armA*BACK;
         armFwd('L', swingL*gait); armFwd('R', swingR*gait);
+        autoArms.L.a += swingL*gait; autoArms.R.a += swingR*gait;
+        autoArms.L.b += (Math.max(0, armFwdL)*0.2 + 0.75)*gait; autoArms.R.b += (Math.max(0, armFwdR)*0.2 + 0.75)*gait;
         const elbow = 0.20 + 0.15*sp;
         elbowFwd('L', (Math.max(0, armFwdL)*elbow + 1.05 + 0.15*sp)*gait);
         elbowFwd('R', (Math.max(0, armFwdR)*elbow + 1.05 + 0.15*sp)*gait);
@@ -381,6 +451,8 @@ export function creerPion(sc){
       if(reactArm > 0.0005 || reactNod > 0.0005){
         const a = reactArm, wv = reactWave;
         armFwd('R', a*(1 + wv)); armFwd('L', a*(1 - wv));
+        autoArms.R.a += a*(1 + wv)*1.3; autoArms.L.a += a*(1 - wv)*1.3; autoArms.R.out += a*0.5; autoArms.L.out += a*0.5;
+        autoArms.R.b += a*0.5; autoArms.L.b += a*0.5;
         add('RightArm','z', a*0.30); add('LeftArm','z', a*0.34);
         elbowFwd('R', a*0.55); elbowFwd('L', a*0.50);
         add('Head','x', -reactNod*1.5); add('Neck','x', -reactNod*0.8); add('Chest','x', -reactNod*0.9); add('Spine','x', -reactNod*0.4);
@@ -401,6 +473,13 @@ export function creerPion(sc){
         b.quaternion.copy(_qA);
         b.position.y = bd.py + dn.py;
       }
+      if(auto){
+        // report du poids : le bras suit un peu le bassin ; regard en l'air : bras qui s'écartent
+        autoArms.L.out += -w*0.03 + glanceUp*0.07; autoArms.R.out += w*0.03 + glanceUp*0.07;
+        viserBras('Left', autoArms.L.a, autoArms.L.b, autoArms.L.out);
+        viserBras('Right', autoArms.R.a, autoArms.R.b, autoArms.R.out);
+        if(autoLegs){ viserJambe('Left', autoLegs.L); viserJambe('Right', autoLegs.R); }
+      }
       blink.update(dt);
     };
   }
@@ -408,7 +487,9 @@ export function creerPion(sc){
   /* ---------- chargement du modèle (jamais bloquant) ---------- */
   let glbBytes = null;
   async function load(){
-    const url = '../assets/character/player.glb';
+    /* ?modele=<url> charge un autre fichier (essai d'un nouveau personnage,
+       en local par http) ; sinon le modèle livré dans le bundle. */
+    const url = new URLSearchParams(location.search).get('modele') || '../assets/character/player.glb';
     const gltf = await new Promise((resolve, reject)=>{
       const b64 = window.__GLB_B64 ? window.__GLB_B64[url] : null;
       if(b64){
@@ -420,33 +501,44 @@ export function creerPion(sc){
       } else new GLTFLoader().load(url, resolve, undefined, reject);
     });
     const model = gltf.scene;
+    const sq = reconnaitreSquelette(model);
+    if(sq.manquants.length) console.error('Personnage : os introuvables, il restera immobile :', sq.manquants.join(', '));
+    pion.profil = { mode: sq.mode };
     const box = new THREE.Box3().setFromObject(model);
     const rawHeight = box.max.y - box.min.y;
-    const scale = rawHeight>0 ? PLAYER_TARGET_HEIGHT/rawHeight : 1;
+    const scale = rawHeight>0 ? (HAUTEUR[sq.mode] || PLAYER_TARGET_HEIGHT)/rawHeight : 1;
     model.scale.setScalar(scale);
     model.position.y = -box.min.y*scale;
-    const toonGradientMap = (()=>{
-      const n = 4, data = new Uint8Array(n);
-      for(let i=0;i<n;i++) data[i] = Math.round(255*((i+0.6)/n));
-      const tex = new THREE.DataTexture(data, n, 1, THREE.RedFormat);
-      tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter; tex.needsUpdate = true;
-      return tex;
-    })();
+    /* Rendu « figurine » : matériau standard avec l'environnement de reflets
+       de la scène (déjà posé sur scene.environment) et une rugosité par
+       matière — la peau mate, les cheveux satinés, la paille rugueuse. */
+    const ROUGHNESS = { skin:0.72, Hair_Dark:0.5, Cap_Red:0.92, HatBand_Red:0.6, Sash_Yellow:0.7, Sandal_Sole:0.85, Sandal_Strap:0.75 };
     let blink = { update(){} }, blinkAssigned = false, skinMat = null;
     model.traverse(o=>{
       if(!o.isMesh) return;
-      o.castShadow = true;
+      o.castShadow = true; o.receiveShadow = true;
       const oldMat = o.material;
-      const newMat = new THREE.MeshToonMaterial({ map: oldMat.map || null, gradientMap: toonGradientMap, color: oldMat.color ? oldMat.color.clone() : new THREE.Color(0xffffff) });
+      /* Un modèle fourni avec ses propres matériaux PBR (normales, rugosité)
+         les garde : on ne fait qu'y brancher l'environnement de reflets. */
+      if(sq.mode !== 'kenney' && oldMat && (oldMat.isMeshStandardMaterial || oldMat.isMeshPhysicalMaterial)){
+        oldMat.envMapIntensity = 0.55;
+        return;
+      }
+      const newMat = new THREE.MeshStandardMaterial({
+        map: oldMat.map || null,
+        color: oldMat.color ? oldMat.color.clone() : new THREE.Color(0xffffff),
+        roughness: ROUGHNESS[oldMat.name] ?? 0.7, metalness: 0, envMapIntensity: 0.55,
+      });
       o.material = newMat;
       if(oldMat.name === 'skin') skinMat = newMat;
-      if(oldMat.map && oldMat.map.image && (oldMat.map.image.width || oldMat.map.image.naturalWidth) && !blinkAssigned){
+      // clignement : zones des yeux connues pour la texture du modèle d'origine seulement
+      if(sq.mode === 'kenney' && oldMat.map && oldMat.map.image && (oldMat.map.image.width || oldMat.map.image.naturalWidth) && !blinkAssigned){
         blink = setupBlink(newMat, oldMat.map); blinkAssigned = true;
       }
     });
     /* Filet de sécurité : texture de peau rechargée depuis le data: URI du
        modèle si GLTFLoader ne l'a pas fournie (personnage tout blanc). */
-    if(!blinkAssigned && skinMat && glbBytes){
+    if(sq.mode === 'kenney' && !blinkAssigned && skinMat && glbBytes){
       try{
         const dv = new DataView(glbBytes.buffer, glbBytes.byteOffset, glbBytes.byteLength);
         const jsonLen = dv.getUint32(12, true);
@@ -463,8 +555,13 @@ export function creerPion(sc){
     root.add(model);
     pion.model = model;
     const mixer = new THREE.AnimationMixer(model);
+    /* clips : par nom exact (modèle d'origine), sinon par ressemblance
+       (« Idle », « Walking », « marche »…), sinon le premier clip pour le repos */
     const clip = name => THREE.AnimationClip.findByName(gltf.animations, name);
-    const actions = { idle: clip('idle') && mixer.clipAction(clip('idle')), walk: clip('walk') && mixer.clipAction(clip('walk')) };
+    const clipLike = re => gltf.animations.find(a => re.test(a.name));
+    const idleClip = clip('idle') || clipLike(/idle|repos|stand|breath/i) || gltf.animations[0] || null;
+    const walkClip = clip('walk') || clipLike(/walk|marche|run|cour/i) || null;
+    const actions = { idle: idleClip && mixer.clipAction(idleClip), walk: walkClip && walkClip !== idleClip && mixer.clipAction(walkClip) };
     Object.values(actions).forEach(a=>{ if(a) a.play(); });
     if(actions.idle) actions.idle.setEffectiveWeight(1);
     if(actions.walk) actions.walk.setEffectiveWeight(0);
@@ -482,10 +579,17 @@ export function creerPion(sc){
       if(isWalking && actions.walk){ actions.walk.paused = true; actions.walk.time = ((phase01 % 1) + 1) % 1 * walkDur; }
     };
     pion.mixer = mixer;
-    const bones = {};
-    for(const n of RIG_BONES) bones[n] = findBone(model, n);
+    const bones = sq.bones;
     pion.bones = bones;
-    pion.updateBody = buildBodyLayer(bones, blink);
+    if(sq.manquants.length) return;
+    if(sq.mode !== 'kenney'){
+      /* mesures des jambes sur le modèle posé : remplacent les constantes
+         relevées sur le modèle d'origine */
+      const m = mesurerJambes(root, bones);
+      Object.assign(GAIT, { thigh: m.thigh, shin: m.shin, hipY: m.hipY, footY: m.footY, footL: m.footL, footA: m.footA });
+      console.info('Personnage : squelette reconnu (profil automatique), jambe ' + (m.thigh+m.shin).toFixed(3) + ', hanche ' + m.hipY.toFixed(3));
+    }
+    pion.updateBody = buildBodyLayer(bones, blink, pion.profil);
   }
 
   /* ---------- moteur de déplacement ---------- */
