@@ -8,7 +8,9 @@ diffusée sur une télé, souvent **pivotée à la verticale**.
 Ce fichier s'adresse à Claude Code. Le guide humain est dans `docs/TRANSMISSION.md`.
 **Décision du 18/09/2026 : le jeu est réécrit à zéro.** Le cahier des charges est
 `docs/CAHIER-DES-CHARGES.md` (tout ce que le nouveau jeu doit reproduire, extrait du code) ;
-`docs/PLAN-ALLEGEMENT.md` liste les pièges mesurés de l'ancien code à ne pas reproduire.
+`docs/PLAN-ALLEGEMENT.md` liste les pièges mesurés de l'ancien code à ne pas reproduire ;
+`docs/COMMENT-LE-JEU-EST-FAIT.md` explique la construction de l'ancien ; `docs/PROMPT-REECRITURE.md`
+est le prompt de la session de réécriture ; `docs/captures/` montre chaque écran.
 Ce fichier décrit l'ancien code, qui fait foi en cas de doute sur un comportement.
 Tout est en français, y compris le code et les messages de commit — garder cette langue.
 

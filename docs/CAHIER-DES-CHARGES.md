@@ -17,6 +17,7 @@ reste dans l'historique git et sur la branche
 | `tools/build.py` (à adapter à la nouvelle arborescence) | la livraison : **un seul fichier HTML** de ~7 Mo, tout incrusté, qui s'ouvre en double-clic hors ligne |
 | les clés `localStorage` (§6) | la comptabilité du direct en cours doit survivre au changement de version |
 | `vendor/three/` | three.js, même version |
+| la police | Cinzel (titres) vient aujourd'hui de Google Fonts : **à embarquer**, la télé n'a pas toujours internet |
 
 ## 1. Ce que c'est
 
@@ -87,6 +88,7 @@ case de ce lot. Le lot affiché est **toujours** celui de la case.
 | **F** | plein écran |
 | **R** | pivote l'image (0 → 90 → 270), mémorisé (`pika_rot`), aussi `?rot=90` |
 | **Z / M / 1–6** | **lot forcé** pour la partie à venir, avant le premier lancer (§7). Rien à l'écran |
+| **I** | fenêtre de diagnostic (mesures internes, pour l'envoyer en photo) |
 
 Règles de case :
 - **Départ** ne donne jamais de lot.
@@ -271,6 +273,12 @@ unie) pour ne jamais avoir un personnage tout blanc.
   règles masquées.
 - La mise en page verticale doit être écrite **une seule fois** (l'ancien
   code la duplique à `vw`/`vh` près).
+- **Safari (Mac, iPhone)** : un canvas WebGL placé *dans* le conteneur
+  pivoté (`transform`) est composé au-dessus de tout le reste, quel que soit
+  le z-index → les fonds et tout canvas autre que le plateau restent **hors**
+  du conteneur pivoté, avec leur propre rotation ; les overlays fixes sont
+  promus en calque (`will-change:transform`, `backface-visibility:hidden`).
+  Vu sur la vraie télé, invisible sous Chromium.
 
 ## 12. Invariants (ne jamais casser)
 
