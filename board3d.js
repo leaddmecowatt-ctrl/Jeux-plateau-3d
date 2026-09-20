@@ -1113,11 +1113,13 @@ function perimeterPosAt(u){ // u in [0,1)
 // (OUTCOME_RECIPE), puis la plaque est redessinée : une seule source
 // de vérité, jamais un chiffre retapé à la main.
 let LOT_ODDS_PCT = null;
-/* Affichage public des chances : désactivé à la demande de l'animateur
-   (les joueurs ne doivent pas voir le pourcentage de chaque lot). Les
-   chances restent calculées (simulation, réglages), juste pas dessinées :
-   ni sur la plaque centrale, ni dans la légende télé. */
-const SHOW_ODDS = false;
+/* Affichage public des chances : ACTIVÉ (20/09/2026). Les chances de
+   chaque lot sont dessinées sur la plaque centrale et dans la légende
+   télé, calculées sur la composition RÉELLE de la pochette de lots en
+   cours (refreshLotOddsFromBatch) — jamais un chiffre théorique. C'est
+   ce qui fait du jeu un « produit surprise à contenu déclaré » plutôt
+   qu'une roue opaque : le public voit ce qu'il achète. */
+const SHOW_ODDS = true;
 function fmtOddsPct(p){
   if(!SHOW_ODDS || p==null) return '';
   const s = p >= 10 ? String(Math.round(p)) : p.toFixed(1).replace('.', ',');
@@ -4514,18 +4516,25 @@ const OUTCOME_RECIPE = [
 // Coût réel de chaque catégorie (PAYOUT_LADDER + prison, qui n'y
 // figure pas puisqu'il ne coûte jamais rien).
 // Prison paie tout de même une carte commune de consolation
-// Chances par partie de chaque lot (recette / taille du cycle), pour
-// la plaque centrale du plateau — le reste (commune) est déduit.
-{
-  const odds = {}; let used = 0;
-  OUTCOME_RECIPE.forEach(r=>{ odds[r.cat] = 100*r.n/OUTCOME_BATCH_SIZE; used += r.n; });
-  odds.commune = 100*(OUTCOME_BATCH_SIZE-used)/OUTCOME_BATCH_SIZE;
+/* Chances par partie de chaque lot, pour la plaque centrale et la
+   légende télé. Calculées sur la POCHETTE RÉELLE (la file de lots telle
+   qu'elle a été construite : recette standard ou recalibrage), pas sur
+   la recette théorique — sinon l'affichage mentirait dès qu'un
+   recalibrage change la composition. Rappelée à chaque nouvelle file. */
+function refreshLotOddsFromBatch(batch){
+  if(!batch || !batch.length) return;
+  const odds = {};
+  PAYOUT_LADDER.forEach(t=>{ odds[t.cat] = 0; });
+  odds.prison = 0;
+  batch.forEach(c=>{ odds[c] = (odds[c]||0) + 100/batch.length; });
   LOT_ODDS_PCT = odds;
   renderTvLegend();
-  const old = centerPlate.material.map;
-  centerPlate.material.map = makeCenterPlateTexture();
-  centerPlate.material.needsUpdate = true;
-  if(old) old.dispose();
+  if(centerPlate){
+    const old = centerPlate.material.map;
+    centerPlate.material.map = makeCenterPlateTexture();
+    centerPlate.material.needsUpdate = true;
+    if(old) old.dispose();
+  }
 }
 const OUTCOME_COST = { prison: 0.68 };
 PAYOUT_LADDER.forEach(t=>{ OUTCOME_COST[t.cat] = t.cost; });
@@ -4687,6 +4696,7 @@ const MYSTERY_BOOSTERS = 30;
 function newOutcomeState(){
   const batch = buildOutcomeBatch(OUTCOME_BATCH_SIZE);
   const mystN = batch.filter(c=>c==='alternative').length;
+  refreshLotOddsFromBatch(batch);
   return { version: OUTCOME_BATCH_VERSION, batch, pos: 0, mystN, mystB: Math.min(MYSTERY_BOOSTERS, mystN) };
 }
 function drawMysterySub(){
@@ -4721,6 +4731,9 @@ if(!recalRec){
   outcomeState = { version: OUTCOME_BATCH_VERSION, batch, pos: 0, mystN, mystB: Math.min(RECAL.mystB, mystN) };
   saveOutcomeState();
 }
+// Les chances affichées suivent la pochette effectivement en place
+// (chargée du navigateur, ou tout juste construite).
+refreshLotOddsFromBatch(outcomeState.batch);
 // Un nouveau lot de résultats est régénéré automatiquement à
 // l'épuisement du précédent (jamais de rupture de stock) et à chaque
 // remise à zéro de la cagnotte (nouveau direct = nouveau lot).
@@ -5233,7 +5246,7 @@ async function move(forcedCount, forcedCard){
   if(!card && (destCat==='chance' || destCat==='chest')){
     card = drawCard(destCat==='chance' ? CHANCE_DECK : CHEST_DECK);
   }
-  broadcastSync({type:'move', count, card});
+  broadcastSync({type:'move', count, card, forced: forcedGame});
 
   statusEl.textContent = 'Le joueur avance vers '+placeLabel(destIdx)+'…';
   updatePlaceBanner(destIdx, true);
@@ -5656,8 +5669,8 @@ async function claimCurrentLot(){
   // Partie-bonus ETB (touche Z) : rien n'est compté.
   if(realCat !== 'prison' && !forced){ totalPaid += OUTCOME_COST[realCat] || 0; saveTotals(); }
   const mystery = realCat === 'alternative' ? (forced ? (Math.random() < 0.5 ? 'booster' : 'carte') : drawMysterySub()) : null;
-  celebrate(realCat, null, {locked:true, mystery});
-  broadcastSync({type:'celebrate', catKey:realCat, mystery});
+  celebrate(realCat, null, {locked:true, mystery, gift: forced});
+  broadcastSync({type:'celebrate', catKey:realCat, mystery, gift: forced});
   lastWinUndo = { amountAdded: totalPaid - paidBefore, rollsUsedBefore, requeued, pending: pendingBefore, mystery, forced };
   if(undoBtn) undoBtn.hidden = false;
   // Un lot gardé épuise le tour : plus aucun lancer sur cette mise.
@@ -5814,13 +5827,13 @@ if(syncChannel && isDisplay){
   syncChannel.onmessage = (e)=>{
     const m = e.data || {};
     if(m.type==='draw'){ topNum.textContent = m.draw.total; playCardDrawAnimation(m.draw); }
-    else if(m.type==='move') move(m.count, m.card);
+    else if(m.type==='move'){ forcedGame = !!m.forced; move(m.count, m.card); }
     // locked:true — le lot remporté reste affiché sur l'écran public
     // exactement comme sur l'écran de l'animateur, jusqu'à RECOMMENCER
     // (qui arrive ici par le message 'restart'). Sans ce verrou, l'écran
     // public effaçait le lot dès la fin des confettis, soit à peine plus
     // de deux secondes sur un petit lot.
-    else if(m.type==='celebrate') celebrate(m.catKey, null, {locked:true, mystery: m.mystery});
+    else if(m.type==='celebrate') celebrate(m.catKey, null, {locked:true, mystery: m.mystery, gift: !!m.gift});
     else if(m.type==='restart') restart();
     else if(m.type==='start') startGame();
   };
@@ -5899,6 +5912,14 @@ function pushResult(catKey){
 }
 let celebCtx = celebCanvas ? celebCanvas.getContext('2d') : null;
 let celebParticles = [], celebRockets = [], celebRAF = null, celebEndAt = 0, celebLocked = false;
+/* Lot forcé (touches Z / M / 1-6) : c'est un cadeau de l'animateur, pas
+   un tirage. Il était affiché comme un coup de chance ordinaire — le
+   joueur y gagnait, mais le public voyait « tomber » un gros lot que le
+   hasard n'avait pas donné, et misait sur des chances qui n'existaient
+   pas. Désormais l'écran le dit : la photo et l'annonce restent, avec
+   la mention ci-dessous à la place du sous-titre habituel. */
+const GIFT_TEXT = '🎁 Cadeau de l\'animateur — partie bonus offerte, hors tirage';
+let celebGift = false;
 // Compteur de génération : la carte Darkrai (jackpot300) affiche son
 // verdict après un délai (tremblement + éclats du plateau). Si entre
 // temps l'animateur relance une partie ou valide un autre lot, ce
@@ -6311,7 +6332,8 @@ function showLotPreview(catKey){
   celeb.classList.remove('shake','big');
   hypeGen++;
   if(celebMain) celebMain.hidden = true;
-  if(celebSub) celebSub.hidden = true;
+  // dès l'aperçu, un lot forcé est annoncé comme cadeau (voir GIFT_TEXT)
+  if(celebSub){ celebSub.textContent = forcedGame ? GIFT_TEXT : ''; celebSub.hidden = !forcedGame; }
   if(celebPhoto){ celebPhoto.src = url; celebPhoto.hidden = false; }
   celeb.classList.add('show');
   previewGen++;
@@ -6413,6 +6435,7 @@ async function playMysteryReveal(sub){
 
 function celebrate(catKey, forcedCard, opts){
   celebLocked = !!(opts && opts.locked);
+  celebGift = !!(opts && opts.gift);
   const myCelebGen = ++celebGen;
   const level = TIER_LEVEL[catKey] ?? 1;
   if(level===0){
@@ -6570,6 +6593,7 @@ function revealCelebration(catKey, forcedCard, level, extra){
     }
   }
   celebEndAt = performance.now() + (skipFx ? 1200 : Math.max(showcase ? 4600 : 1900 + effectiveLevel*500, big ? 3600 + effectiveLevel*900 : 0));
+  if(celebGift && celebSub){ celebSub.textContent = GIFT_TEXT; celebSub.hidden = false; }
   if(!celebRAF) celebFrame();
   setTimeout(()=>{ celeb.classList.remove('shake'); }, rareCardDrawn ? 900 : 700);
 }

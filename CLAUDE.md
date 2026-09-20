@@ -96,8 +96,10 @@ décoration). Le contexte WebGL perdu est rattrapé (`webglcontextlost`).
 
 - Un lot annoncé ne s'efface **jamais tout seul** : seulement B, C ou D.
 - Le lot affiché est **toujours** celui de la case où le pion est posé.
-- Les pourcentages de chance ne s'affichent pas à l'écran.
-- Aucun texte à l'écran quand une touche forcée est pressée (le public ne doit rien voir).
+- Les pourcentages de chance **s'affichent** (plaque centrale, légende télé), calculés sur
+  la pochette réelle (`refreshLotOddsFromBatch`) — jamais un chiffre théorique.
+- Une touche forcée reste muette **à la pression** ; au moment du lot, l'écran annonce
+  « Cadeau de l'animateur » (`GIFT_TEXT`) : un cadeau n'est jamais présenté comme un tirage.
 - Le plafond de reversement est tenu **à chaque partie**, pas seulement en fin de cycle.
 - Toute recette doit tenir sous le plafond, sinon la page ne se charge pas.
 
