@@ -1222,25 +1222,51 @@ function makeCenterPlateTexture(){
   const size = Math.max(window.screen.width||0, window.screen.height||0) >= 1600 ? 1400 : 900;
   const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
   const ctx = cvs.getContext('2d');
-  /* Panneau sombre translucide sous toute la légende. Avant, le sol
-     restait transparent jusqu'au centre et la lisibilité ne tenait qu'aux
-     ombres portées de chaque élément : dès que la photo de ciel passait en
-     zone claire (nuages, montagnes éclairées), le texte s'y noyait — c'était
-     le principal « on voit mal » du rendu. Le panneau donne au texte un
-     support constant tout en laissant la photo respirer autour du plateau. */
-  {
-    const m = size*0.035;
-    const g = ctx.createLinearGradient(0, m, 0, size-m);
-    g.addColorStop(0,   'rgba(10,13,24,.94)');
-    g.addColorStop(0.5, 'rgba(6,8,16,.89)');
-    g.addColorStop(1,   'rgba(10,13,24,.94)');
+  /* PAS de panneau plein : le sol du plateau reste transparent jusqu'au
+     centre et la photo de fond doit se voir au travers — c'est l'effet
+     « verre 3D » qui fait tout le cachet de la plaque. Un essai de panneau
+     opaque (commit 4cc69a6) a bien réglé la lisibilité mais en tuant
+     l'effet : on le retire.
+
+     La lisibilité est donc reconstruite autrement, comme dans un HUD de
+     jeu haut de gamme : jamais un rectangle plein, mais un écran sombre
+     LOCAL sous chaque élément, plus un halo épais autour des glyphes.
+     Entre deux lignes, et tout autour, la photo reste pleinement visible. */
+
+  /* Halo sombre multi-passes : une seule ombre portée ne suffit pas sur un
+     fond de nuages clairs. On repasse le même tracé plusieurs fois pour
+     accumuler l'opacité du halo sans épaissir le glyphe lui-même. */
+  function haloText(txt, x, y, passes, blur){
     ctx.save();
-    roundRectPath(ctx, m, m, size-m*2, size-m*2, size*0.055);
-    ctx.fillStyle = g; ctx.fill();
-    ctx.lineWidth = size*0.006; ctx.strokeStyle = 'rgba(214,170,74,.55)';
-    ctx.stroke();
+    ctx.shadowColor = 'rgba(0,0,0,.92)';
+    ctx.shadowBlur = blur;
+    // Remplissage NOIR OPAQUE, et pas un noir quasi transparent : l'ombre
+    // portée du canvas hérite de l'alpha de la source, donc un fill à .001
+    // produit un halo à .001 — c'est-à-dire rien du tout (premier essai).
+    // Le glyphe noir pose le halo ; il est ensuite intégralement recouvert
+    // par le vrai texte, dessiné au même endroit juste après.
+    ctx.fillStyle = '#000';
+    for(let i=0;i<passes;i++) ctx.fillText(txt, x, y);
     ctx.restore();
   }
+  /* Écran local doux, sans bord net : une ellipse en dégradé radial qui
+     s'éteint complètement avant ses limites. Sert de support aux éléments
+     qui n'ont pas de pastille à eux (titre, sous-titre, badges, pied). */
+  function softScrim(cx, cy, rx, ry, alpha){
+    ctx.save();
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, 1);
+    g.addColorStop(0,    'rgba(4,6,12,'+alpha+')');
+    g.addColorStop(0.55, 'rgba(4,6,12,'+(alpha*0.78)+')');
+    g.addColorStop(1,    'rgba(4,6,12,0)');
+    ctx.translate(cx, cy); ctx.scale(rx, ry); ctx.translate(-cx, -cy);
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, 1, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+  // support du bandeau de tête (Pokeball + titre + sous-titre + badges)
+  softScrim(size/2, size*0.195, size*0.40, size*0.155, 0.62);
+  // support du pied de page
+  softScrim(size/2, size*0.945, size*0.20, size*0.040, 0.60);
 
   // mini Pokeball + PIKAPOLY compact en haut de la carte
   const pbY = size*0.115, pbR = size*0.04;
@@ -1255,6 +1281,10 @@ function makeCenterPlateTexture(){
   // plus grand qu'avant.
   ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.font='900 '+(size*0.060)+'px Arial,Helvetica,sans-serif';
+  // halo SOMBRE d'abord (détachement du fond), halo doré ensuite (chaleur) :
+  // l'ancien ne posait que le doré, qui ne détache de rien sur un ciel clair
+  ctx.fillStyle = GOLD_BRIGHT;
+  haloText('PIKAPOLY', size/2, size*0.185, 6, size*0.020);
   ctx.shadowColor='rgba(255,210,110,.7)'; ctx.shadowBlur=size*0.01;
   ctx.fillStyle = GOLD_BRIGHT;
   ctx.fillText('PIKAPOLY', size/2, size*0.185);
@@ -1262,7 +1292,9 @@ function makeCenterPlateTexture(){
 
   // en-tête de la légende — ombre sombre pour rester lisible sur
   // n'importe quel fond de photo, sans panneau derrière
-  ctx.font='700 '+(size*0.028)+'px Arial,Helvetica,sans-serif';
+  ctx.font='800 '+(size*0.031)+'px Arial,Helvetica,sans-serif';
+  ctx.fillStyle = GOLD_BRIGHT;
+  haloText('★ TOUS LES LOTS À GAGNER ★', size/2, size*0.235, 6, size*0.017);
   ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = size*0.012;
   ctx.fillStyle = GOLD_BRIGHT;
   ctx.fillText('★ TOUS LES LOTS À GAGNER ★', size/2, size*0.235);
@@ -1271,6 +1303,11 @@ function makeCenterPlateTexture(){
   // Chance / Caisse : deux petits badges compacts côte à côte (pas
   // des lots, pas de ligne dédiée) — icône dans un rond + nom court.
   const badgeY = size*0.29, badgeR = size*0.024, badgeGap = size*0.22;
+  // Les deux badges tombent en bordure de l'écran de tête, là où il s'est
+  // déjà éteint : ils ont besoin de leur propre support, sinon leur libellé
+  // doré se perd dans les nuages clairs (vérifié en capture).
+  softScrim(size/2 - badgeGap/2 + badgeR, badgeY, size*0.115, size*0.042, 0.66);
+  softScrim(size/2 + badgeGap/2 + badgeR, badgeY, size*0.115, size*0.042, 0.66);
   CENTER_LEGEND_BADGES.forEach((b,i)=>{
     const bx = size/2 + (i===0 ? -1 : 1)*badgeGap/2;
     const color = SWATCH_COLORS[b.swatch];
@@ -1290,11 +1327,11 @@ function makeCenterPlateTexture(){
     ctx.lineWidth = size*0.0045; ctx.strokeStyle = color;
     ctx.beginPath(); ctx.arc(bx,badgeY,badgeR,0,Math.PI*2); ctx.stroke();
     ctx.textAlign='left'; ctx.textBaseline='middle';
-    ctx.shadowColor = 'rgba(0,0,0,.9)'; ctx.shadowBlur = size*0.008;
+    ctx.font='900 '+(size*0.027)+'px Arial,Helvetica,sans-serif';
     ctx.fillStyle = GOLD_BRIGHT;
-    ctx.font='800 '+(size*0.024)+'px Arial,Helvetica,sans-serif';
+    haloText(b.title, bx+badgeR*1.5, badgeY+size*0.001, 5, size*0.014);
+    ctx.fillStyle = GOLD_BRIGHT;
     ctx.fillText(b.title, bx+badgeR*1.5, badgeY+size*0.001);
-    ctx.shadowBlur = 0;
   });
 
   // une ligne par vrai lot, du plus gros au plus petit : bandeau
@@ -1311,6 +1348,19 @@ function makeCenterPlateTexture(){
     // couleur de la catégorie (avec une ombre sombre pour se détacher
     // de la photo derrière) + une barre d'accent fine sur le bord
     // gauche — le sol reste transparent jusqu'à la photo.
+    // Écran sombre LOCAL, limité à la ligne : dégradé vertical qui
+    // s'éclaircit aux bords haut/bas, de sorte que la pastille se fonde
+    // dans la photo au lieu d'y poser un rectangle. Entre deux lignes, le
+    // fond reste totalement transparent — l'effet verre est préservé.
+    ctx.save();
+    roundRectPath(ctx, rowX, y, rowW, rh, rh*0.22);
+    const rg = ctx.createLinearGradient(0, y, 0, y+rh);
+    rg.addColorStop(0,    'rgba(4,6,12,.42)');
+    rg.addColorStop(0.18, 'rgba(4,6,12,.76)');
+    rg.addColorStop(0.82, 'rgba(4,6,12,.76)');
+    rg.addColorStop(1,    'rgba(4,6,12,.42)');
+    ctx.fillStyle = rg; ctx.fill();
+    ctx.restore();
     ctx.save();
     roundRectPath(ctx, rowX, y, rowW, rh, rh*0.22);
     ctx.shadowColor = 'rgba(0,0,0,.8)'; ctx.shadowBlur = size*0.014;
@@ -1386,18 +1436,22 @@ function makeCenterPlateTexture(){
     // Sur le panneau sombre, le noir gras liseré d'or d'avant disparaissait :
     // on inverse (crème plein, liseré noir) pour garder le même relief de
     // plaque gravée mais du bon côté du contraste.
+    ctx.fillStyle = '#fff3d4';
+    haloText(CATS[r.catKey].label, textX, y+rh*0.52, 3, size*0.011);
     ctx.lineWidth = size*0.0052;
     ctx.strokeStyle = 'rgba(0,0,0,.9)';
     ctx.strokeText(CATS[r.catKey].label, textX, y+rh*0.52);
-    ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = size*0.008;
     ctx.fillStyle = '#fff3d4';
     ctx.fillText(CATS[r.catKey].label, textX, y+rh*0.52);
-    ctx.shadowBlur = 0;
     ctx.textBaseline='alphabetic';
   });
 
   ctx.textAlign='center';
   ctx.font='italic 700 '+(size*0.03)+'px Georgia, serif';
+  // c'était l'élément le plus fragile : aucune ombre, aucun liseré, il
+  // disparaissait entièrement dès que le ciel derrière passait au clair
+  ctx.fillStyle = GOLD_BRIGHT;
+  haloText('Bonne chance !', size/2, size*0.945, 3, size*0.012);
   ctx.fillStyle = GOLD_BRIGHT;
   ctx.fillText('Bonne chance !', size/2, size*0.945);
 
