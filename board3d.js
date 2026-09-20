@@ -4,6 +4,7 @@ import { GLTFLoader } from './vendor/three/examples/jsm/loaders/GLTFLoader.js';
 import { EffectComposer } from './vendor/three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from './vendor/three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from './vendor/three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from './vendor/three/examples/jsm/postprocessing/ShaderPass.js';
 
 /* =========================================================================
    PIKAPOLY — plateau 40 cases en vraie 3D (WebGL / three.js)
@@ -750,7 +751,12 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
    plateau "terne" à côté de la photo vive qui l'entoure maintenant.
    Exposure remontée pour que le plateau garde du punch. */
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.45;
+/* 1.45 cramait en blanc pur les cases claires (vu en capture : la case
+   Depart et sa voisine perdaient tout detail) et voilait l'image entiere.
+   Verifie en capture : a 1.12 (premier essai) tout le plateau virait au
+   brun et les couleurs de categorie s'eteignaient. 1.28 garde le detail
+   dans les hautes lumieres sans eteindre les aplats colores. */
+renderer.toneMappingExposure = 1.28;
 
 const scene = new THREE.Scene();
 
@@ -831,8 +837,61 @@ scene.add(camera);
    photo/couleurs normales. */
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(1,1), 0.55, 0.4, 0.82);
+/* Seuil remonte 0.82 -> 0.90 et force baissee 0.55 -> 0.45 : a 0.82 les
+   photos de lot et les aplats colores des cases passaient le seuil et
+   bavaient, ce qui voilait tout le plateau. Seuls l'or emissif et les
+   effets additifs de celebration doivent depasser. */
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(1,1), 0.45, 0.4, 0.90);
 composer.addPass(bloomPass);
+
+/* Anticrenelage. Le rendu se fait dans une cible hors ecran (antialias:false
+   sur le WebGLRenderer, obligatoire avec l'EffectComposer), donc le MSAA du
+   navigateur ne s'applique pas : toutes les aretes du plateau sortaient en
+   escalier, tres visible sur le liser noir des cases. FXAA en passe finale
+   les lisse pour un cout quasi nul, sans fichier a vendorer. */
+const FXAAShader = {
+  uniforms: { tDiffuse: { value: null }, resolution: { value: new THREE.Vector2(1/1024, 1/1024) } },
+  vertexShader: `
+    varying vec2 vUv;
+    void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform vec2 resolution;
+    varying vec2 vUv;
+    #define SPAN_MAX 8.0
+    #define REDUCE_MUL (1.0/8.0)
+    #define REDUCE_MIN (1.0/128.0)
+    void main(){
+      vec2 inv = resolution;
+      vec3 luma = vec3(0.299, 0.587, 0.114);
+      vec3 rgbNW = texture2D(tDiffuse, vUv + vec2(-1.0,-1.0)*inv).rgb;
+      vec3 rgbNE = texture2D(tDiffuse, vUv + vec2( 1.0,-1.0)*inv).rgb;
+      vec3 rgbSW = texture2D(tDiffuse, vUv + vec2(-1.0, 1.0)*inv).rgb;
+      vec3 rgbSE = texture2D(tDiffuse, vUv + vec2( 1.0, 1.0)*inv).rgb;
+      vec4 texColor = texture2D(tDiffuse, vUv);
+      vec3 rgbM = texColor.rgb;
+      float lumaNW = dot(rgbNW, luma), lumaNE = dot(rgbNE, luma);
+      float lumaSW = dot(rgbSW, luma), lumaSE = dot(rgbSE, luma);
+      float lumaM  = dot(rgbM,  luma);
+      float lumaMin = min(lumaM, min(min(lumaNW,lumaNE), min(lumaSW,lumaSE)));
+      float lumaMax = max(lumaM, max(max(lumaNW,lumaNE), max(lumaSW,lumaSE)));
+      vec2 dir = vec2(-((lumaNW + lumaNE) - (lumaSW + lumaSE)),
+                       ((lumaNW + lumaSW) - (lumaNE + lumaSE)));
+      float dirReduce = max((lumaNW + lumaNE + lumaSW + lumaSE) * (0.25 * REDUCE_MUL), REDUCE_MIN);
+      float rcpDirMin = 1.0 / (min(abs(dir.x), abs(dir.y)) + dirReduce);
+      dir = min(vec2(SPAN_MAX), max(vec2(-SPAN_MAX), dir * rcpDirMin)) * inv;
+      vec3 rgbA = 0.5 * (texture2D(tDiffuse, vUv + dir*(1.0/3.0 - 0.5)).rgb +
+                         texture2D(tDiffuse, vUv + dir*(2.0/3.0 - 0.5)).rgb);
+      vec3 rgbB = rgbA*0.5 + 0.25 * (texture2D(tDiffuse, vUv + dir*(-0.5)).rgb +
+                                     texture2D(tDiffuse, vUv + dir*( 0.5)).rgb);
+      float lumaB = dot(rgbB, luma);
+      gl_FragColor = vec4((lumaB < lumaMin || lumaB > lumaMax) ? rgbA : rgbB, texColor.a);
+    }
+  `
+};
+const fxaaPass = new ShaderPass(FXAAShader);
+composer.addPass(fxaaPass);
 
 /* Garde-fou anti-rognage des coins : au lieu d'un recul de caméra
    fixe (qui rapetissait tout le plateau en permanence, y compris de
@@ -1163,11 +1222,25 @@ function makeCenterPlateTexture(){
   const size = Math.max(window.screen.width||0, window.screen.height||0) >= 1600 ? 1400 : 900;
   const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
   const ctx = cvs.getContext('2d');
-  // Pas de fond opaque : comme sur la version d'origine, le sol du
-  // plateau reste transparent jusqu'au centre, la photo derrière doit
-  // se voir directement. La lisibilité vient des ombres portées
-  // sombres derrière chaque élément (texte, médaillons, bandeaux),
-  // pas d'un panneau plein.
+  /* Panneau sombre translucide sous toute la légende. Avant, le sol
+     restait transparent jusqu'au centre et la lisibilité ne tenait qu'aux
+     ombres portées de chaque élément : dès que la photo de ciel passait en
+     zone claire (nuages, montagnes éclairées), le texte s'y noyait — c'était
+     le principal « on voit mal » du rendu. Le panneau donne au texte un
+     support constant tout en laissant la photo respirer autour du plateau. */
+  {
+    const m = size*0.035;
+    const g = ctx.createLinearGradient(0, m, 0, size-m);
+    g.addColorStop(0,   'rgba(10,13,24,.94)');
+    g.addColorStop(0.5, 'rgba(6,8,16,.89)');
+    g.addColorStop(1,   'rgba(10,13,24,.94)');
+    ctx.save();
+    roundRectPath(ctx, m, m, size-m*2, size-m*2, size*0.055);
+    ctx.fillStyle = g; ctx.fill();
+    ctx.lineWidth = size*0.006; ctx.strokeStyle = 'rgba(214,170,74,.55)';
+    ctx.stroke();
+    ctx.restore();
+  }
 
   // mini Pokeball + PIKAPOLY compact en haut de la carte
   const pbY = size*0.115, pbR = size*0.04;
@@ -1310,11 +1383,14 @@ function makeCenterPlateTexture(){
       fontSize -= 1;
       ctx.font='900 '+fontSize+'px Arial,Helvetica,sans-serif';
     }
+    // Sur le panneau sombre, le noir gras liseré d'or d'avant disparaissait :
+    // on inverse (crème plein, liseré noir) pour garder le même relief de
+    // plaque gravée mais du bon côté du contraste.
     ctx.lineWidth = size*0.0052;
-    ctx.strokeStyle = GOLD_BRIGHT;
+    ctx.strokeStyle = 'rgba(0,0,0,.9)';
     ctx.strokeText(CATS[r.catKey].label, textX, y+rh*0.52);
     ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = size*0.008;
-    ctx.fillStyle = '#0a0a0a';
+    ctx.fillStyle = '#fff3d4';
     ctx.fillText(CATS[r.catKey].label, textX, y+rh*0.52);
     ctx.shadowBlur = 0;
     ctx.textBaseline='alphabetic';
@@ -1451,13 +1527,134 @@ const MOTION = {
    "compartiment encastré" (collerette dorée qui dépasse légèrement,
    liseré noir en retrait, rivets aux coins) — un seul jeu d'objets
    réutilisé partout, pour rester léger malgré le surcroît de détail. */
+/* ---------- Matiere : cartes de surface procedurales ----------
+   Le projet n'avait AUCUNE carte PBR (ni normal, ni roughness, ni ao) :
+   chaque surface portait une rugosite uniforme sur toute son etendue,
+   donc mathematiquement parfaite — donc fausse. C'est la premiere raison
+   pour laquelle le plateau se lisait comme des aplats de couleur plutot
+   que comme des objets. Meme un rendu stylise a besoin de variation de
+   matiere ; on la fabrique ici en code, sans aucun fichier a charger.
+
+   Le bruit est obtenu en empilant plusieurs canvas aleatoires de basse
+   resolution reetires en grand (le lissage bilineaire du canvas fait
+   l'interpolation gratuitement), ce qui donne un bruit fractal correct
+   pour bien moins cher qu'un Perlin ecrit a la main. */
+function makeSurfaceMaps(size, bump, rough){
+  // --- hauteur : bruit fractal ---
+  const hc = document.createElement('canvas'); hc.width = hc.height = size;
+  const hx = hc.getContext('2d');
+  hx.fillStyle = '#808080'; hx.fillRect(0,0,size,size);
+  [[6,0.50],[14,0.28],[34,0.16],[80,0.09]].forEach(([n,a])=>{
+    const c = document.createElement('canvas'); c.width = c.height = n;
+    const x = c.getContext('2d');
+    const img = x.createImageData(n,n);
+    for(let i=0;i<n*n;i++){
+      const v = (Math.random()*255)|0;
+      img.data[i*4] = img.data[i*4+1] = img.data[i*4+2] = v;
+      img.data[i*4+3] = 255;
+    }
+    x.putImageData(img,0,0);
+    hx.globalAlpha = a;
+    hx.drawImage(c, 0, 0, size, size);       // lissage bilineaire = interpolation
+  });
+  hx.globalAlpha = 1;
+  const H = hx.getImageData(0,0,size,size).data;
+  const at = (x,y)=> H[(((y+size)%size)*size + ((x+size)%size))*4] / 255;
+
+  // --- normal map : Sobel sur la hauteur ---
+  const nc = document.createElement('canvas'); nc.width = nc.height = size;
+  const nx = nc.getContext('2d');
+  const nimg = nx.createImageData(size,size);
+  for(let y=0;y<size;y++) for(let x=0;x<size;x++){
+    const dx = (at(x+1,y) - at(x-1,y)) * bump;
+    const dy = (at(x,y+1) - at(x,y-1)) * bump;
+    // normale = normalize(-dx, -dy, 1) ramenee dans [0,1]
+    const len = Math.hypot(dx, dy, 1);
+    const i = (y*size+x)*4;
+    nimg.data[i]   = ((-dx/len)*0.5 + 0.5)*255;
+    nimg.data[i+1] = ((-dy/len)*0.5 + 0.5)*255;
+    nimg.data[i+2] = (( 1 /len)*0.5 + 0.5)*255;
+    nimg.data[i+3] = 255;
+  }
+  nx.putImageData(nimg,0,0);
+
+  // --- roughness map : le canal vert MULTIPLIE material.roughness ---
+  const rc = document.createElement('canvas'); rc.width = rc.height = size;
+  const rx = rc.getContext('2d');
+  const rimg = rx.createImageData(size,size);
+  for(let i=0;i<size*size;i++){
+    const v = 255 * (1 - rough + rough * (H[i*4]/255));
+    rimg.data[i*4] = rimg.data[i*4+1] = rimg.data[i*4+2] = v;
+    rimg.data[i*4+3] = 255;
+  }
+  rx.putImageData(rimg,0,0);
+
+  const mk = (cvs, repeat)=>{
+    const t = new THREE.CanvasTexture(cvs);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(repeat, repeat);
+    t.anisotropy = getMaxAniso();
+    return t;
+  };
+  return { normalMap: mk(nc,1), roughnessMap: mk(rc,1) };
+}
+/* Or : micro-rayures marquees (bump fort, variation de rugosite forte) —
+   c'est ce qui fait qu'un metal accroche la lumiere differemment selon
+   l'endroit au lieu de rester un aplat jaune. */
+const GOLD_MAPS  = makeSurfaceMaps(256, 3.2, 0.55);
+/* Corps des cases : grain fin et discret, juste de quoi casser la
+   perfection de l'aplat colore. */
+const TILE_MAPS  = makeSurfaceMaps(256, 1.4, 0.35);
+
+/* Boite biseautee. Tout le plateau etait bati sur des BoxGeometry aux
+   aretes a 90 degres parfaits : c'est le marqueur le plus reconnaissable
+   du 3D amateur, parce qu'un objet reel — meme dessine — accroche un
+   filet de lumiere sur chaque arete. Sans ce filet, l'oeil lit une forme
+   geometrique et non un objet. On extrude donc un carre a coins arrondis
+   avec un vrai biseau.
+
+   Pas de computeVertexNormals apres coup : les normales par facette que
+   produit ExtrudeGeometry sont exactement ce qu'on veut ici (un biseau
+   net qui accroche), les lisser rendrait l'arete molle. */
+function bevelledBox(w, h, d, bevel){
+  const hw = Math.max(0.001, w/2 - bevel), hd = Math.max(0.001, d/2 - bevel);
+  const r = Math.min(hw, hd) * 0.14;
+  const sh = new THREE.Shape();
+  sh.moveTo(-hw + r, -hd);
+  sh.lineTo( hw - r, -hd); sh.quadraticCurveTo( hw, -hd,  hw, -hd + r);
+  sh.lineTo( hw,  hd - r); sh.quadraticCurveTo( hw,  hd,  hw - r,  hd);
+  sh.lineTo(-hw + r,  hd); sh.quadraticCurveTo(-hw,  hd, -hw,  hd - r);
+  sh.lineTo(-hw, -hd + r); sh.quadraticCurveTo(-hw, -hd, -hw + r, -hd);
+  const geo = new THREE.ExtrudeGeometry(sh, {
+    depth: Math.max(0.001, h - bevel*2), bevelEnabled: true,
+    bevelSize: bevel, bevelThickness: bevel, bevelSegments: 2,
+    curveSegments: 3, steps: 1,
+  });
+  geo.rotateX(-Math.PI/2);
+  geo.center();                 // le code positionne les meshes par leur centre
+  return geo;
+}
+
 const tileGoldMat = new THREE.MeshStandardMaterial({
   color:new THREE.Color(GOLD), roughness:.2, metalness:.9,
-  emissive:new THREE.Color(GOLD), emissiveIntensity:.12
+  emissive:new THREE.Color(GOLD), emissiveIntensity:.12,
+  normalMap: GOLD_MAPS.normalMap, roughnessMap: GOLD_MAPS.roughnessMap,
 });
-const tileBezelMat = new THREE.MeshStandardMaterial({color:0x0a0a0a, roughness:.5, metalness:.25});
-const tileCollarGeo = new THREE.BoxGeometry(TILE+0.09,0.07,TILE+0.09);
-const tileBezelGeo = new THREE.BoxGeometry(TILE*0.97,0.035,TILE*0.97);
+tileGoldMat.normalScale.set(0.55, 0.55);
+const tileBezelMat = new THREE.MeshStandardMaterial({
+  color:0x0a0a0a, roughness:.5, metalness:.25,
+  normalMap: TILE_MAPS.normalMap, roughnessMap: TILE_MAPS.roughnessMap,
+});
+const tileCollarGeo = bevelledBox(TILE+0.09,0.07,TILE+0.09, 0.012);
+const tileBezelGeo  = bevelledBox(TILE*0.97,0.035,TILE*0.97, 0.008);
+/* Geometries partagees par les 40 cases : elles etaient recreees a
+   l'identique dans la boucle (40 BoxGeometry pour rien). */
+const tileBaseGeo = bevelledBox(TILE+0.05, 0.08, TILE+0.05, 0.014);
+const tileBodyGeo = bevelledBox(TILE, 0.14, TILE, 0.018);
+const baseTileMat = new THREE.MeshStandardMaterial({
+  color:0x050505, roughness:.6, metalness:.3,
+  normalMap: TILE_MAPS.normalMap, roughnessMap: TILE_MAPS.roughnessMap,
+});
 const tileRivetGeo = new THREE.CylinderGeometry(0.035,0.035,0.02,8);
 const RIVET_OFFSETS = [[-1,-1],[1,-1],[-1,1],[1,1]];
 
@@ -1499,10 +1696,7 @@ for(let i=0;i<N_TILES;i++){
   group.rotation.y = outwardYaw(r,c);
   boardGroup.add(group);
 
-  const baseTile = new THREE.Mesh(
-    new THREE.BoxGeometry(TILE+0.05,0.08,TILE+0.05),
-    new THREE.MeshStandardMaterial({color:0x050505, roughness:.6, metalness:.3})
-  );
+  const baseTile = new THREE.Mesh(tileBaseGeo, baseTileMat);
   baseTile.position.y = 0.04;
   baseTile.receiveShadow = true;
   group.add(baseTile);
@@ -1526,8 +1720,18 @@ for(let i=0;i<N_TILES;i++){
   const accentColor = SWATCH_COLORS[catDef.swatch];
   const sideMat = new THREE.MeshStandardMaterial({
     color:new THREE.Color(accentColor),roughness:.7,metalness:.12,
-    emissive:new THREE.Color(accentColor),emissiveIntensity:.32
+    // emissiveIntensity retombe de .32 a .20 : a .32 les 40 corps de case
+    // emettaient en permanence, donc plus rien ne ressortait — un reflet ne
+    // se remarque que par contraste avec ce qui ne brille pas. La case
+    // active, elle, monte toujours via son halo. (.10 au premier essai
+    // eteignait completement les couleurs : trop.)
+    emissive:new THREE.Color(accentColor),emissiveIntensity:.20,
+    normalMap: TILE_MAPS.normalMap, roughnessMap: TILE_MAPS.roughnessMap,
   });
+  // Relief tres discret sur le corps : a pleine echelle, le bruit inclinait
+  // assez les normales pour assombrir les flancs et virer les couleurs de
+  // categorie au brun (vu en capture). On veut du grain, pas du martelage.
+  sideMat.normalScale.set(0.35, 0.35);
   // Corps de la case légèrement épaissi (0.14 au lieu de 0.08 à
   // l'origine) : un vrai relief avec des flancs colorés visibles,
   // façon jeton de casino, sans pour autant faire une case si haute
@@ -1536,7 +1740,7 @@ for(let i=0;i<N_TILES;i++){
   // masque celle qui la suit — testé à 0.30, beaucoup trop).
   // Posé directement sur la collerette (qui culmine à 0.135).
   const BODY_H = 0.14, BODY_BOTTOM = 0.135;
-  const bodyTile = new THREE.Mesh(new THREE.BoxGeometry(TILE,BODY_H,TILE), sideMat);
+  const bodyTile = new THREE.Mesh(tileBodyGeo, sideMat);
   bodyTile.position.y = BODY_BOTTOM + BODY_H/2;
   bodyTile.castShadow = true;
   bodyTile.receiveShadow = true;
@@ -4294,6 +4498,12 @@ function resize(){
   if(w===0||h===0) return;
   renderer.setSize(w,h,false);
   composer.setSize(w,h);
+  // FXAA travaille en pixels : sa resolution doit suivre la taille reelle
+  // de la cible de rendu (taille CSS x pixel ratio), sinon il lisse a cote.
+  {
+    const pr = renderer.getPixelRatio();
+    fxaaPass.material.uniforms.resolution.value.set(1/(w*pr), 1/(h*pr));
+  }
   const bs = bloomScaleForLevel(QUALITY.level);
   if(bs < 1) bloomPass.setSize(Math.round(w*bs), Math.round(h*bs));
   camera.aspect = w/h;
