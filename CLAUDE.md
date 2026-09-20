@@ -51,7 +51,9 @@ les animations, confettis et timings **ne se vérifient pas** — seul un vrai a
 
 **Commandes clavier** (`addEventListener('keydown'`) : A démarrer · B tirer les cartes ·
 D garder le lot · C recommencer · F plein écran · R pivoter l'image ·
-Z / M / 1–6 = **lot forcé** avant le premier lancer.
+Z / 1–6 = **lot forcé** avant le premier lancer · M affiche la **bulle de règles**
+(M ou Échap pour fermer). M était un doublon exact de la touche 3 — même
+`booster50` — elle a donc été retirée de `FORCE_KEYS` sans rien perdre.
 
 **Lots** : `PAYOUT_LADDER` (catégories et valeur marché de chaque lot), `OUTCOME_COST`,
 `TIER_LEVEL` (intensité de la célébration), `LOT_IMAGE_URLS`, `CATEGORY_MESSAGES`.

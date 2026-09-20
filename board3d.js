@@ -3627,7 +3627,11 @@ let pendingOutcome = null;
    ETB en plus, offerte par l'animateur). Z une seconde fois avant le
    lancer annule. forcedGame = la partie en cours est cette partie-bonus. */
 let forcedCat = null;      // catégorie forcée pour la partie à venir, ou null
-const FORCE_KEYS = { z:{cat:'jackpot300', name:'ETB'}, m:{cat:'booster50', name:'Tripack'} };
+/* M a ete retiree de cette table pour servir a l'affichage des regles.
+   Aucune fonction n'est perdue : M valait {cat:'booster50'} (Tripack), ce
+   que FORCE_DIGITS[2] — la touche 3 — fait a l'identique juste en dessous.
+   M etait donc un doublon pur. Le Tripack force reste accessible par 3. */
+const FORCE_KEYS = { z:{cat:'jackpot300', name:'ETB'} };
 // touches chiffres : par position physique (e.code), donc sans Maj sur un clavier AZERTY
 const FORCE_DIGITS = [
   {cat:'jackpot300',  name:'ETB'},
@@ -3798,6 +3802,235 @@ function startWalk(fromIdx, count, stepDuration){
   // la caméra recule du gros plan précédent et repart en suivi
   if(steps>0) cineBegin('travel');
   return walk;
+}
+
+/* ---------- Flammes et gerbes d'étoiles à l'arrivée sur une case ----------
+   Pourquoi ce système existe séparément de tout le reste :
+
+   1. L'arrivée du pion était le moment le plus pauvre du jeu. celebrate()
+      n'y est PAS appelé — seul showLotPreview() pose une photo figée, et
+      tout le spectacle (fusées, éclairs, confettis, rayons) est différé à
+      la validation par l'animateur. Entre les deux, il ne se passait qu'un
+      anneau d'une seconde et quelques étincelles.
+   2. On ne peut PAS alimenter celebParticles / celebEndAt depuis l'arrivée :
+      quand la boucle celebFrame() s'épuise, elle retire les classes de
+      l'annonce si celebLocked est faux — or showLotPreview() le remet à
+      faux. L'aperçu du lot s'effacerait donc tout seul quelques secondes
+      après l'arrivée, ce qui casse l'invariant n°1.
+   3. On ne peut pas non plus passer par spawnSparkles : son pool ne tient
+      que 48 sprites et il est partagé avec la marche et l'orage. Des
+      flammes continues le videraient en une demi-seconde.
+
+   D'où un système autonome, sur le modèle de goldRain : deux THREE.Points
+   à particules recyclées, un seul appel de dessin chacun, aucune
+   allocation par image, et aucun contact avec le DOM de célébration. */
+
+function makeEmberTexture(){
+  const n = 64, c = document.createElement('canvas'); c.width = c.height = n;
+  const x = c.getContext('2d');
+  const g = x.createRadialGradient(n/2, n/2, 0, n/2, n/2, n/2);
+  g.addColorStop(0,    'rgba(255,255,245,1)');
+  g.addColorStop(0.22, 'rgba(255,224,150,0.95)');
+  g.addColorStop(0.48, 'rgba(255,140,40,0.55)');
+  g.addColorStop(0.78, 'rgba(190,50,10,0.18)');
+  g.addColorStop(1,    'rgba(120,20,0,0)');
+  x.fillStyle = g; x.fillRect(0,0,n,n);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+function makeStarTexture(){
+  const n = 64, c = document.createElement('canvas'); c.width = c.height = n;
+  const x = c.getContext('2d');
+  // halo doux
+  const g = x.createRadialGradient(n/2, n/2, 0, n/2, n/2, n/2);
+  g.addColorStop(0, 'rgba(255,255,255,0.75)');
+  g.addColorStop(0.3, 'rgba(255,235,170,0.22)');
+  g.addColorStop(1, 'rgba(255,200,90,0)');
+  x.fillStyle = g; x.fillRect(0,0,n,n);
+  // quatre branches
+  x.translate(n/2, n/2);
+  x.fillStyle = '#fffdf2';
+  for(let k=0;k<2;k++){
+    x.beginPath();
+    x.moveTo(0, -n*0.48); x.quadraticCurveTo(n*0.06, -n*0.06, n*0.44, 0);
+    x.quadraticCurveTo(n*0.06, n*0.06, 0, n*0.48);
+    x.quadraticCurveTo(-n*0.06, n*0.06, -n*0.44, 0);
+    x.quadraticCurveTo(-n*0.06, -n*0.06, 0, -n*0.48);
+    x.fill();
+    x.rotate(Math.PI/4); x.scale(0.55, 0.55);   // seconde croix, plus petite
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+
+/* Matériau commun : taille, couleur et opacité PAR PARTICULE, ce que
+   THREE.PointsMaterial ne sait pas faire (une seule taille pour tout le
+   nuage). Une dizaine de lignes de shader évitent d'avoir à créer un
+   sprite par particule — donc un seul appel de dessin au lieu de cent. */
+function makeFxPointsMaterial(map){
+  return new THREE.ShaderMaterial({
+    uniforms: { map: { value: map }, uProj: { value: 1000 } },
+    vertexShader: `
+      attribute float aSize;
+      attribute float aAlpha;
+      attribute vec3  aColor;
+      uniform float uProj;
+      varying float vAlpha;
+      varying vec3  vColor;
+      void main(){
+        vAlpha = aAlpha; vColor = aColor;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        // aSize est une taille en UNITES DU MONDE (1.0 = une case entiere).
+        // uProj = hauteur du rendu / (2*tan(fov/2)) : c'est le seul facteur
+        // correct pour convertir une taille monde en pixels. Un premier jet
+        // utilisait une constante arbitraire de 320, ce qui donnait des
+        // particules de ~570 px : l'ecran virait au blanc pur en fusion
+        // additive des la premiere gerbe.
+        gl_PointSize = clamp(aSize * uProj / max(0.001, -mv.z), 1.0, 160.0);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform sampler2D map;
+      varying float vAlpha;
+      varying vec3  vColor;
+      void main(){
+        vec4 t = texture2D(map, gl_PointCoord);
+        if(t.a < 0.01) discard;
+        gl_FragColor = vec4(vColor, 1.0) * t * vAlpha;
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  });
+}
+
+const FX_FLAME_MAX = 170, FX_STAR_MAX = 130;
+function makeFxSystem(count, map){
+  const geo = new THREE.BufferGeometry();
+  const pos   = new Float32Array(count*3);
+  const col   = new Float32Array(count*3);
+  const size  = new Float32Array(count);
+  const alpha = new Float32Array(count);
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('aColor',   new THREE.BufferAttribute(col, 3));
+  geo.setAttribute('aSize',    new THREE.BufferAttribute(size, 1));
+  geo.setAttribute('aAlpha',   new THREE.BufferAttribute(alpha, 1));
+  // évite que three ne culle le nuage quand toutes les particules sont
+  // repliées à l'origine entre deux gerbes
+  geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0,1,0), 40);
+  const pts = new THREE.Points(geo, makeFxPointsMaterial(map));
+  pts.frustumCulled = false;
+  pts.visible = false;
+  scene.add(pts);
+  const state = Array.from({length:count}, ()=>({ vx:0, vy:0, vz:0, life:0, max:1, spin:0, base:1 }));
+  return { pts, geo, pos, col, size, alpha, state, count, live:0 };
+}
+const fxFlames = makeFxSystem(FX_FLAME_MAX, makeEmberTexture());
+const fxStars  = makeFxSystem(FX_STAR_MAX,  makeStarTexture());
+
+/* Budget dégressif : le mode éco coupe tout, et la qualité dégradée
+   réduit le nombre de particules au lieu de faire ramer l'appareil. */
+function fxBudget(n){
+  if(reduceMotion || ecoMode) return 0;
+  const lv = (typeof QUALITY === 'object' && QUALITY) ? (QUALITY.level|0) : 0;
+  if(lv >= 5) return 0;
+  if(lv >= 3) return Math.round(n*0.45);
+  if(lv >= 1) return Math.round(n*0.75);
+  return n;
+}
+
+function fxEmit(sys, i, x, y, z, p){
+  sys.pos[i*3] = x; sys.pos[i*3+1] = y; sys.pos[i*3+2] = z;
+  sys.col[i*3] = p.r; sys.col[i*3+1] = p.g; sys.col[i*3+2] = p.b;
+  sys.size[i] = p.size; sys.alpha[i] = 1;
+  const st = sys.state[i];
+  st.vx = p.vx; st.vy = p.vy; st.vz = p.vz;
+  st.life = 0; st.max = p.max; st.base = p.size; st.spin = p.spin || 0;
+}
+
+/* Gerbe d'arrivée, graduée par le palier du lot (TIER_LEVEL 1 à 5).
+   Même le palier 1 reçoit quelque chose : c'est la majorité des parties,
+   et c'était jusqu'ici le moment le plus terne du jeu. */
+function spawnArrivalFx(x, y, z, level){
+  const lvl = Math.max(1, Math.min(5, level|0));
+  const nF = fxBudget(Math.round(26 + lvl*26));
+  const nS = fxBudget(Math.round(16 + lvl*20));
+  if(!nF && !nS) return;
+
+  for(let k=0;k<nF;k++){
+    const i = (fxFlames.live + k) % fxFlames.count;
+    const a = Math.random()*Math.PI*2;
+    // gerbe plus large : le feu doit deborder de la case, pas tenir dessus
+    const r = Math.random()*0.52;
+    const up = 2.1 + Math.random()*2.0 + lvl*0.34;
+    // du blanc-jaune au coeur vers l'orange profond en périphérie
+    const heat = 1 - Math.random()*0.55;
+    fxEmit(fxFlames, i, x + Math.cos(a)*r, y + 0.06, z + Math.sin(a)*r, {
+      vx: Math.cos(a)*(0.45 + Math.random()*0.85),
+      vy: up,
+      vz: Math.sin(a)*(0.45 + Math.random()*0.85),
+      r: 1.0, g: 0.42 + heat*0.42, b: 0.10 + heat*0.26,
+      size: 0.135 + Math.random()*0.165 + lvl*0.030,
+      max: 0.75 + Math.random()*0.70,
+    });
+  }
+  fxFlames.live = (fxFlames.live + nF) % fxFlames.count;
+  if(nF) fxFlames.pts.visible = true;
+
+  for(let k=0;k<nS;k++){
+    const i = (fxStars.live + k) % fxStars.count;
+    const a = Math.random()*Math.PI*2;
+    // dôme : plutôt vers le haut, jamais sous le plateau
+    const el = 0.35 + Math.random()*1.0;
+    const spd = 2.6 + Math.random()*3.2 + lvl*0.48;
+    fxEmit(fxStars, i, x, y + 0.18, z, {
+      vx: Math.cos(a)*Math.cos(el)*spd,
+      vy: Math.sin(el)*spd*1.15,
+      vz: Math.sin(a)*Math.cos(el)*spd,
+      r: 1.0, g: 0.92 + Math.random()*0.08, b: 0.62 + Math.random()*0.32,
+      size: 0.115 + Math.random()*0.130 + lvl*0.030,
+      max: 0.9 + Math.random()*0.8 + lvl*0.12,
+      spin: 4 + Math.random()*7,
+    });
+  }
+  fxStars.live = (fxStars.live + nS) % fxStars.count;
+  if(nS) fxStars.pts.visible = true;
+}
+
+function updateFxSystem(sys, dt, gravity, drag, shrink){
+  let any = false;
+  for(let i=0;i<sys.count;i++){
+    const st = sys.state[i];
+    if(st.life >= st.max){ if(sys.alpha[i] !== 0) sys.alpha[i] = 0; continue; }
+    st.life += dt;
+    const u = Math.min(1, st.life/st.max);
+    st.vy += gravity*dt;
+    const d = Math.max(0, 1 - drag*dt);
+    st.vx *= d; st.vz *= d;
+    sys.pos[i*3]   += st.vx*dt;
+    sys.pos[i*3+1] += st.vy*dt;
+    sys.pos[i*3+2] += st.vz*dt;
+    // fondu : montée très courte, extinction longue
+    sys.alpha[i] = Math.min(1, u/0.12) * (1-u) * (1-u);
+    sys.size[i]  = st.base * (1 - shrink*u) * (st.spin ? (1 + 0.28*Math.sin(st.life*st.spin)) : 1);
+    any = true;
+  }
+  sys.geo.attributes.position.needsUpdate = true;
+  sys.geo.attributes.aAlpha.needsUpdate = true;
+  sys.geo.attributes.aSize.needsUpdate = true;
+  sys.geo.attributes.aColor.needsUpdate = true;
+  if(!any) sys.pts.visible = false;
+}
+function updateArrivalFx(dt){
+  // les flammes montent (gravité positive) et s'éteignent en rétrécissant ;
+  // les étoiles retombent et scintillent
+  if(fxFlames.pts.visible) updateFxSystem(fxFlames, dt,  1.15, 1.9, 0.62);
+  if(fxStars.pts.visible)  updateFxSystem(fxStars,  dt, -3.10, 0.5, 0.35);
+}
+/* Coupure nette : appelée au redémarrage d'une partie pour qu'aucune
+   braise ne survive à un C. */
+function clearArrivalFx(){
+  [fxFlames, fxStars].forEach(sys=>{
+    for(let i=0;i<sys.count;i++){ sys.state[i].life = sys.state[i].max; sys.alpha[i] = 0; }
+    sys.geo.attributes.aAlpha.needsUpdate = true;
+    sys.pts.visible = false;
+  });
 }
 
 /* ---------- Éclats dorés à chaque case franchie ----------
@@ -4006,6 +4239,7 @@ function frameStep(dt, t){
     updateCornerSafety(dt);
   }
   updateSparkles(dt);
+  updateArrivalFx(dt);
   updateGoldRain(t, dt);
   updateStorm(t, dt);
   updateAmbientSparkles(dt);
@@ -4289,6 +4523,8 @@ function frameStep(dt, t){
         spawnSparkles(landedTile.world.x, landedTile.tileTopY+0.4, landedTile.world.z,
                       12 + lvl*11, 1.3 + lvl*0.38, 2.9 + lvl*0.55, 0.5, 0.9);
         winShock(landedTile, lvl);
+        // flammes + gerbe d'étoiles, graduées par le palier du lot
+        spawnArrivalFx(landedTile.world.x, landedTile.tileTopY, landedTile.world.z, lvl);
         cameraPunch(0.65 + lvl*0.28);
         // la réaction arrive APRÈS la stabilisation : il regarde, il
         // comprend, puis il réagit
@@ -4557,6 +4793,14 @@ function resize(){
   {
     const pr = renderer.getPixelRatio();
     fxaaPass.material.uniforms.resolution.value.set(1/(w*pr), 1/(h*pr));
+  }
+  // facteur de projection des particules d'arrivee : depend de la hauteur
+  // reelle du rendu et du champ de vision, donc a recalculer ici
+  {
+    const pr2 = renderer.getPixelRatio();
+    const proj = (h * pr2) / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
+    fxFlames.pts.material.uniforms.uProj.value = proj;
+    fxStars.pts.material.uniforms.uProj.value  = proj;
   }
   const bs = bloomScaleForLevel(QUALITY.level);
   if(bs < 1) bloomPass.setSize(Math.round(w*bs), Math.round(h*bs));
@@ -5646,6 +5890,8 @@ async function resolveChanceChest(myGen, forcedCard){
 
 function restart(){
   generation++;
+  // aucune braise ni étoile de l'arrivée précédente ne doit survivre au C
+  clearArrivalFx();
   moving = false;
   finished = false;
   rollsUsed = 0;
@@ -6043,10 +6289,37 @@ function toggleFullscreen(){
     else document.exitFullscreen();
   }catch(e){}
 }
+/* ---------- Bulle de regles plein ecran (touche M) ----------
+   Le panneau "Regles" de la colonne laterale est en display:none dans les
+   modes compacts, et se reduit a une bande minuscule sur la tele pivotee :
+   illisible a plusieurs metres. D'ou cette bulle centree, qui se superpose
+   a tout (z-index 70, au-dessus des trois overlays existants). */
+const rulesOverlay = document.getElementById('rulesOverlay');
+function sizeRulesBubble(){
+  if(!rulesOverlay) return;
+  /* Base de police calculee sur la hauteur du cadre du plateau, et non en
+     vh : wrap est A L'INTERIEUR de #app, donc sa hauteur est mesuree dans
+     le repere transforme et reste juste quand l'image est pivotee. */
+  const h = (wrap && wrap.clientHeight) || 600;
+  rulesOverlay.style.fontSize = Math.max(12, Math.min(32, h*0.029)) + 'px';
+}
+function toggleRules(force){
+  if(!rulesOverlay) return;
+  const on = force !== undefined ? force : !rulesOverlay.classList.contains('show');
+  if(on) sizeRulesBubble();
+  rulesOverlay.classList.toggle('show', on);
+  rulesOverlay.setAttribute('aria-hidden', on ? 'false' : 'true');
+}
+window.addEventListener('resize', sizeRulesBubble);
+
 window.addEventListener('keydown', (e)=>{
   const tag = (document.activeElement && document.activeElement.tagName) || '';
   if(tag==='INPUT' || tag==='TEXTAREA') return;
   const k = e.key.toLowerCase();
+  if(k==='m'){ toggleRules(); e.preventDefault(); return; }
+  if(e.key === 'Escape' && rulesOverlay && rulesOverlay.classList.contains('show')){
+    toggleRules(false); return;
+  }
   if(k==='a'){ if(startBtn && !startBtn.hidden) startBtn.click(); }
   else if(k==='b'){
     const busy = moving || (cardDrawOverlay && cardDrawOverlay.classList.contains('show'));

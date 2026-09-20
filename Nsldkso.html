@@ -446,6 +446,47 @@ html.display-mode .display-badge{ display:block; }
 }
 .card-draw-overlay.show{opacity:1;visibility:visible}
 
+/* ---------- Bulle de règles plein écran (touche M) ----------
+   Tout est dimensionné en % (du parent) et en em, JAMAIS en vh/vw : sur la
+   télé pivotée, html.rotated pose un transform sur #app, et les unités de
+   viewport restent alignées sur l'écran PHYSIQUE — un vw y devient une
+   hauteur. Le % est relatif au parent, donc il suit le repère tourné.
+   La taille de police de base est posée en pixels par le JS, calculée sur
+   la hauteur du cadre du plateau (mesurée, elle, dans le bon repère). */
+.rules-overlay{
+  position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;
+  background:rgba(4,3,1,.88);opacity:0;visibility:hidden;transition:opacity .22s ease;
+  padding:4%;font-size:18px;
+}
+.rules-overlay.show{opacity:1;visibility:visible}
+.rules-bubble{
+  position:relative;width:min(88%,980px);max-height:90%;overflow:auto;
+  background:linear-gradient(180deg, rgba(28,21,9,.975), rgba(11,8,4,.985));
+  border:0.16em solid #d8ac48;border-radius:1.3em;
+  box-shadow:0 0 0 0.06em rgba(0,0,0,.7), 0 1.1em 3em rgba(0,0,0,.78), 0 0 4em rgba(216,172,72,.30);
+  padding:1.5em 1.7em 1.3em;text-align:center;
+}
+.rules-bubble h2{
+  margin:0 0 .7em;font-size:2.15em;letter-spacing:.05em;color:#ffd86b;
+  text-shadow:0 0 .5em rgba(255,200,90,.45), 0 .08em .12em rgba(0,0,0,.85);
+}
+.rules-bubble ul{margin:0;padding:0;list-style:none;text-align:left}
+.rules-bubble li{
+  position:relative;margin:0 0 .65em;padding:.62em .8em .62em 2.5em;
+  font-size:1.32em;line-height:1.35;color:#fff4dd;
+  background:rgba(255,222,140,.055);border:0.06em solid rgba(216,172,72,.34);border-radius:.6em;
+}
+.rules-bubble li::before{
+  content:attr(data-n);position:absolute;left:.72em;top:50%;transform:translateY(-50%);
+  width:1.35em;height:1.35em;line-height:1.35em;text-align:center;
+  background:#d8ac48;color:#1a1204;border-radius:50%;font-weight:900;font-size:.85em;
+}
+.rules-bubble .rules-keys{
+  margin-top:1em;padding-top:.85em;border-top:0.06em solid rgba(216,172,72,.3);
+  font-size:1.02em;color:#e6c98a;
+}
+.rules-bubble .rules-close{margin-top:.5em;font-size:.95em;color:#b39560}
+
 /* ---------- Lot mystère : deux cartes noires, une ombre qui choisit ---------- */
 .mystery-overlay{
   position:fixed;inset:0;z-index:56;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
@@ -1386,6 +1427,20 @@ if(new URLSearchParams(location.search).get('view')==='display'){
     <div class="card-draw-title">Tirage en cours…</div>
     <div class="card-grid" id="cardGrid"></div>
     <div class="card-draw-total" id="cardDrawTotal"></div>
+  </div>
+
+  <div class="rules-overlay" id="rulesOverlay" aria-hidden="true">
+    <div class="rules-bubble">
+      <h2>RÈGLES DU JEU</h2>
+      <ul>
+        <li data-n="1">3 lancers par partie, +1 lancer par double</li>
+        <li data-n="2">Après chaque lancer : je garde le lot ou je relance</li>
+        <li data-n="3">Prison : fin de partie, carte de consolation</li>
+        <li data-n="4">Chance et Caisse déplacent le pion</li>
+      </ul>
+      <div class="rules-keys">F : plein écran · R : pivoter l'image</div>
+      <div class="rules-close">M ou Échap pour fermer</div>
+    </div>
   </div>
 
   <div class="mystery-overlay" id="mysteryOverlay" aria-hidden="true">

@@ -36,7 +36,9 @@ Toujours donner ce fichier (ou le publier en lien), jamais les sources : les sou
 fonctionnent pas ouvertes directement.
 
 **Commandes** : A démarrer · B tirer · D garder le lot · C recommencer ·
-F plein écran · R pivoter. **Z / M / 1 à 6** avant le premier lancer = forcer un lot.
+F plein écran · R pivoter · **M** affiche les règles en grand au milieu de l'écran
+(M ou Échap pour refermer). **Z / 1 à 6** avant le premier lancer = forcer un lot —
+le Tripack, qui était sur M, reste sur la touche **3**.
 
 **Écran public** : bouton « ouvrir l'écran public » (ou `?view=display` dans l'adresse)
 ouvre une deuxième fenêtre sans les commandes, synchronisée avec la première.
