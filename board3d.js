@@ -852,9 +852,16 @@ scene.add(camera);
    materiel de WebGL2. Les aretes sont lissees par le GPU au moment du
    rendu, sans jamais toucher a l'interieur des surfaces — donc les textures
    restent parfaitement nettes. */
+/* Le nombre d'echantillons est fixe a la creation (on ne peut pas le
+   changer sans recreer la cible), donc on le decide sur le profil de
+   l'appareil et non sur la cadence mesuree : 4x sur un ecran de
+   diffusion, 0 sur telephone ou petit ecran ou le MSAA couterait plus
+   cher que ce qu'il apporte. */
+const _msaaFaible = (Math.min(window.innerWidth, window.innerHeight) <= 520)
+                 || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
 const msaaTarget = new THREE.WebGLRenderTarget(1, 1, {
   type: THREE.HalfFloatType,
-  samples: 4,
+  samples: _msaaFaible ? 0 : 4,
 });
 const composer = new EffectComposer(renderer, msaaTarget);
 composer.addPass(new RenderPass(scene, camera));
@@ -4733,7 +4740,12 @@ function frameStep(dt, t){
      2. rendu à 1x
      3. bloom en quart de résolution
    Le jeu, les règles, les animations et les lots ne changent pas. */
-const QUALITY = { level:0, samples:0, slow:0, last:0, armedAt:0 };
+/* `base` = cran de depart choisi pour cet appareil : la remontee
+   automatique ne va JAMAIS au-dessus (un telephone qui demarre au cran 3
+   n'a aucune raison de tenter le cran 0). `floor` monte d'un cran chaque
+   fois qu'on redescend depuis un cran deja repris : sans ca, un appareil
+   juste a la limite oscillerait indefiniment entre deux crans. */
+const QUALITY = { level:0, base:0, floor:0, triedUp:null, samples:0, slow:0, fast:0, last:0, armedAt:0 };
 const QUALITY_LEVELS = 5;
 /* Cran 5, « mode éco » — pour les téléphones et les petites configs, où
    la cadence restait mauvaise même tout en bas de l'échelle précédente.
@@ -4777,29 +4789,82 @@ function setShadowSoft(soft){
 }
 function applyQuality(level){
   QUALITY.level = level;
-  const dpr = level>=5 ? 0.6 : level>=4 ? 0.85 : level>=2 ? 1 : level>=1 ? Math.min(DPR_MAX, 1.25) : DPR_MAX;
+  /* 0.6 au cran le plus bas rendait a 60 % de resolution : l'image
+     devenait franchement mauvaise, ce qui est pire que quelques images
+     perdues sur un ecran de diffusion. 0.78 reste un vrai gain de charge
+     (-39 % de pixels) sans que ca se voie a ce point. */
+  const dpr = level>=5 ? 0.78 : level>=4 ? 0.9 : level>=2 ? 1 : level>=1 ? Math.min(DPR_MAX, 1.25) : DPR_MAX;
   if(renderer.getPixelRatio() !== dpr) renderer.setPixelRatio(dpr);
   setEcoMode(level >= 5);
   if(!ecoMode) setShadowSoft(level < 2);
   resize();
 }
 function bloomScaleForLevel(level){ return level>=3 ? 0.25 : 0.5; }
+/* ---------- Échelle de qualité automatique, DANS LES DEUX SENS ----------
+
+   Ce qui n'allait pas, et que l'animateur a décrit par « au bout de
+   quelques secondes ça part en vrille » :
+
+   1. L'échelle ne descendait JAMAIS. Une fois un cran perdu, il était
+      perdu pour la session entière — un simple à-coup passager (montée
+      d'une texture, première célébration, ramasse-miettes du navigateur)
+      dégradait l'image définitivement.
+   2. Elle était beaucoup trop nerveuse. Tout ce qui passait sous 45 i/s
+      comptait comme lent, et il suffisait de 50 % de 24 images, avec
+      0,8 s entre deux crans : en cinq secondes on pouvait tomber du cran
+      0 au cran 5, qui rend à 60 % de résolution.
+
+   Désormais : on ne compte comme lent que ce qui passe sous 30 i/s (un
+   vrai problème, pas une image ratée), il faut 70 % de 48 mesures pour
+   descendre d'un cran, et surtout la qualité REMONTE quand l'appareil
+   tient la cadence. Un plancher évite l'oscillation. */
+const Q_LENT      = 1/30;   // en dessous de 30 i/s : vraiment lent
+const Q_FLUIDE    = 1/50;   // au-dessus de 50 i/s : vraiment confortable
+const Q_N_BAS     = 48;     // mesures avant d'envisager de descendre
+const Q_N_HAUT    = 150;    // mesures avant d'envisager de remonter (~2,5 s)
+const Q_RATIO_BAS = 0.70;   // part d'images lentes qui justifie de descendre
+const Q_RATIO_HAUT= 0.90;   // part d'images fluides qui justifie de remonter
 function qualityTick(realDt, now){
-  if(QUALITY.locked || QUALITY.level >= QUALITY_LEVELS) return;
-  if(!QUALITY.armedAt){ QUALITY.armedAt = now + 1.2; return; } // 1,2 s de grâce (chargement)
+  if(QUALITY.locked) return;
+  if(!QUALITY.armedAt){ QUALITY.armedAt = now + 2.5; return; } // grâce au chargement
   if(now < QUALITY.armedAt) return;
+
   QUALITY.samples++;
-  if(realDt > 1/45) QUALITY.slow++;
-  // Réaction volontairement rapide : à l'échelle précédente (60 mesures,
-  // 2 s d'attente entre deux crans) il fallait une dizaine de secondes
-  // pour atteindre le bas de l'échelle. Sur un téléphone, ces dix
-  // secondes sont exactement le moment où l'animateur lance sa partie.
-  if(QUALITY.samples >= 24){                       // ~0,6 s à 40 i/s
-    if(QUALITY.slow > QUALITY.samples*0.5 && now - QUALITY.last > 0.8){
+  if(realDt > Q_LENT) QUALITY.slow++;
+  else if(realDt < Q_FLUIDE) QUALITY.fast = (QUALITY.fast||0) + 1;
+
+  // --- descendre d'un cran : il faut une lenteur franche et soutenue ---
+  if(QUALITY.samples >= Q_N_BAS && QUALITY.level < QUALITY_LEVELS){
+    if(QUALITY.slow >= QUALITY.samples*Q_RATIO_BAS && now - QUALITY.last > 1.6){
       QUALITY.last = now;
+      /* Anti-oscillation : si la lenteur survient a un cran que l'on
+         venait justement de reprendre, c'est que ce cran n'est pas
+         tenable sur cet appareil — il devient le plancher et on ne
+         retentera plus de monter au-dessus. Une lenteur a un cran qu'on
+         n'a PAS repris ne bloque rien : c'est peut-etre juste un passage
+         charge (celebration, orage), et la remontee reste permise. */
+      if(QUALITY.triedUp !== null && QUALITY.level <= QUALITY.triedUp){
+        QUALITY.floor = QUALITY.level + 1;
+        QUALITY.triedUp = null;
+      }
       applyQuality(QUALITY.level + 1);
+      QUALITY.samples = 0; QUALITY.slow = 0; QUALITY.fast = 0;
+      return;
     }
-    QUALITY.samples = 0; QUALITY.slow = 0;
+  }
+
+  // --- remonter d'un cran : long, prudent, et jamais au-dessus du départ ---
+  if(QUALITY.samples >= Q_N_HAUT){
+    const cible = Math.max(QUALITY.base, QUALITY.floor);
+    if(QUALITY.level > cible
+       && (QUALITY.fast||0) >= QUALITY.samples*Q_RATIO_HAUT
+       && QUALITY.slow === 0
+       && now - QUALITY.last > 4){
+      QUALITY.last = now;
+      QUALITY.triedUp = QUALITY.level - 1;   // cran tente, a confirmer
+      applyQuality(QUALITY.level - 1);
+    }
+    QUALITY.samples = 0; QUALITY.slow = 0; QUALITY.fast = 0;
   }
 }
 
@@ -4826,6 +4891,9 @@ function qualityTick(realDt, now){
     QUALITY.locked = true;
   }
   else if(petitEcran || mobile) applyQuality(3);
+  // Cran de depart : la remontee automatique ne depassera jamais ce niveau.
+  QUALITY.base = QUALITY.level;
+  QUALITY.floor = QUALITY.level;
 }
 let _lastFrameAt = 0, _lastRenderAt = 0;
 function animate(){
