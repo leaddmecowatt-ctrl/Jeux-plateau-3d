@@ -1,0 +1,116 @@
+{
+  "AVG_MISE": 9,
+  "CA_CYCLE": 4500,
+  "MARGIN_TARGET": 0.26,
+  "CEILING_RATIO": 0.74,
+  "PAYOUT_LADDER": [
+    {
+      "cat": "jackpot300",
+      "cost": 190
+    },
+    {
+      "cat": "etb",
+      "cost": 85
+    },
+    {
+      "cat": "booster50",
+      "cost": 58
+    },
+    {
+      "cat": "gradee",
+      "cost": 30
+    },
+    {
+      "cat": "booster8",
+      "cost": 17
+    },
+    {
+      "cat": "alternative",
+      "cost": 7.2
+    },
+    {
+      "cat": "commune",
+      "cost": 0.68
+    }
+  ],
+  "OUTCOME_COST": {
+    "prison": 0.68,
+    "jackpot300": 190,
+    "etb": 85,
+    "booster50": 58,
+    "gradee": 30,
+    "booster8": 17,
+    "alternative": 7.2,
+    "commune": 0.68
+  },
+  "OUTCOME_RECIPE": [
+    {
+      "cat": "jackpot300",
+      "n": 5
+    },
+    {
+      "cat": "etb",
+      "n": 2
+    },
+    {
+      "cat": "booster50",
+      "n": 3
+    },
+    {
+      "cat": "gradee",
+      "n": 3
+    },
+    {
+      "cat": "booster8",
+      "n": 51
+    },
+    {
+      "cat": "alternative",
+      "n": 116
+    },
+    {
+      "cat": "prison",
+      "n": 20
+    }
+  ],
+  "OUTCOME_BATCH_SIZE": 500,
+  "MYSTERY_BOOSTER_SHARE": 0.7,
+  "RECAL": {
+    "id": "2026-09-18b",
+    "miseBase": 0,
+    "paidBase": 0,
+    "miseEnd": 3300,
+    "ratio": 0.59,
+    "games": 367,
+    "recipe": [
+      {
+        "cat": "jackpot300",
+        "n": 4
+      },
+      {
+        "cat": "etb",
+        "n": 3
+      },
+      {
+        "cat": "booster50",
+        "n": 2
+      },
+      {
+        "cat": "gradee",
+        "n": 0
+      },
+      {
+        "cat": "booster8",
+        "n": 20
+      },
+      {
+        "cat": "alternative",
+        "n": 25
+      },
+      {
+        "cat": "prison",
+        "n": 15
+      }
+    ]
+  }
+}

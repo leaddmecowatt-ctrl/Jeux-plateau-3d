@@ -10,7 +10,9 @@ Ce fichier s'adresse à Claude Code. Le guide humain est dans `docs/TRANSMISSION
 `docs/CAHIER-DES-CHARGES.md` (tout ce que le nouveau jeu doit reproduire, extrait du code) ;
 `docs/PLAN-ALLEGEMENT.md` liste les pièges mesurés de l'ancien code à ne pas reproduire ;
 `docs/COMMENT-LE-JEU-EST-FAIT.md` explique la construction de l'ancien ; `docs/PROMPT-REECRITURE.md`
-est le prompt de la session de réécriture ; `docs/captures/` montre chaque écran.
+est le prompt de la session de réécriture ; `docs/captures/` montre chaque écran ;
+`docs/BUGS-ET-LECONS.md` liste les 62 problèmes rencontrés ; `docs/donnees/` porte les données
+exactes ; `docs/RECETTE-DE-TEST.md` est la liste à cocher sur la télé ; `tools/verif/` les scripts.
 Ce fichier décrit l'ancien code, qui fait foi en cas de doute sur un comportement.
 Tout est en français, y compris le code et les messages de commit — garder cette langue.
 

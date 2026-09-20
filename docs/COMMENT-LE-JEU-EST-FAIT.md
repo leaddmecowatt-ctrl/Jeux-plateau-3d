@@ -163,7 +163,48 @@ Georgia. À embarquer dans la réécriture.
 7. **Les lots forcés hors comptabilité** : première cause de dérive de la
    marge en direct.
 
-## 11. Ce que j'améliorerais
+## 11. Le matériel réel
+
+- **Un Mac** (MacBook, Safari le plus souvent) pilote le jeu au clavier ; le
+  navigateur n'est pas toujours en plein écran (barre d'onglets visible sur
+  les photos) : conseiller F.
+- **La télé** : un moniteur Acer **physiquement pivoté** en portrait, branché
+  au Mac qui lui envoie une image paysage 1920×1080 ; c'est la touche **R**
+  du jeu qui pivote le contenu, pas le système. Donc : fenêtre 1920×1080,
+  `#app` = 1080 de large × 1920 de haut, tourné de 90°.
+- Regardé à ~3 m par les spectateurs (lisibilité : textes grands, contrastes).
+- L'écran public (`?view=display`) tourne sur la même machine, dans une
+  seconde fenêtre : **deux scènes 3D sur une seule carte graphique**.
+- Les chiffres mesurés sur cette télé : 44 → 76 images en 4 s en figeant
+  l'ancien fond (le fond en bandes coûtait 42 % de chaque image).
+
+## 12. Ce qui n'est PAS à reprendre
+
+- Les 36 bandes CSS du fond, le canvas 2D redessiné par image, le filtre SVG
+  (les 4 approches sont racontées dans le commentaire de `#bgWave`).
+- Les quatre verrous de la célébration (`celebLocked`, `celebGen`, `hypeGen`,
+  `stopCelebLoop`) : un seul compteur de génération.
+- La mise en page verticale écrite deux fois (`@media 3/4` et `html.rotated`).
+- Les 68 variables globales d'état.
+- Les `showKeyHint` de texte à l'écran : utiles pour l'animateur, mais jamais
+  sur l'écran public, jamais pour un lot forcé.
+- `RECAL` tel quel : le recalibrage doit devenir une donnée éditable (écran
+  animateur), pas un bloc de code à modifier à la main avant un direct.
+- Google Fonts.
+
+## 13. Où sont les données exactes
+
+`docs/donnees/` : `plateau.json` (les 36 cases, lieu, catégorie, couleur),
+`lots.json` (catégories, libellés, valeurs, couleurs, coûts, niveaux, messages,
+mouvements), `argent.json` (marge, barème, recette, recalibrage — exporté
+directement de `regles/argent.js`), `cartes-et-des.json` (Chance, Caisse,
+carte rare, poids des dés, détours), `touches.json`, `constantes.txt` (les
+57 constantes de réglage de l'ancien code avec leur commentaire : tailles,
+vitesses, durées, seuils de qualité). `docs/BUGS-ET-LECONS.md` : les 62
+commits, chacun un problème et sa solution. `docs/RECETTE-DE-TEST.md` : la
+liste à cocher sur la télé. `tools/verif/` : les scripts de vérification.
+
+## 14. Ce que j'améliorerais
 
 **Visuel**
 - Interface télé pensée d'abord pour la verticale (aujourd'hui c'est le

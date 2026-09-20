@@ -1,0 +1,333 @@
+{
+  "nbCases": 36,
+  "casesParCote": 9,
+  "indexDepart": 0,
+  "cases": [
+    {
+      "index": 0,
+      "case": 1,
+      "categorie": "depart",
+      "visite": false,
+      "lieu": "Bourg Palette",
+      "couleur": "#2f6fdc",
+      "coin": true,
+      "note": "BOARD_DATA[0] vaut 'booster8' dans l'ancien code, mais la case 0 est rendue « Point de départ » et ne donne JAMAIS de lot (landable exclut l'index 0). À déclarer explicitement 'depart' dans la réécriture."
+    },
+    {
+      "index": 1,
+      "case": 2,
+      "categorie": "alternative",
+      "visite": false,
+      "lieu": "Route 1",
+      "couleur": "#e0323f",
+      "coin": false
+    },
+    {
+      "index": 2,
+      "case": 3,
+      "categorie": "chest",
+      "visite": false,
+      "lieu": "Jadielle",
+      "couleur": "#33b46a",
+      "coin": false
+    },
+    {
+      "index": 3,
+      "case": 4,
+      "categorie": "commune",
+      "visite": false,
+      "lieu": "Centre Pokémon",
+      "couleur": "#a9793a",
+      "coin": false
+    },
+    {
+      "index": 4,
+      "case": 5,
+      "categorie": "commune",
+      "visite": false,
+      "lieu": "Forêt de Jade",
+      "couleur": "#a9793a",
+      "coin": false
+    },
+    {
+      "index": 5,
+      "case": 6,
+      "categorie": "commune",
+      "visite": false,
+      "lieu": "Mont Sélénite",
+      "couleur": "#a9793a",
+      "coin": false
+    },
+    {
+      "index": 6,
+      "case": 7,
+      "categorie": "chance",
+      "visite": false,
+      "lieu": "Azuria",
+      "couleur": "#9a5fe0",
+      "coin": false
+    },
+    {
+      "index": 7,
+      "case": 8,
+      "categorie": "commune",
+      "visite": false,
+      "lieu": "Cascade d'Azuria",
+      "couleur": "#a9793a",
+      "coin": false
+    },
+    {
+      "index": 8,
+      "case": 9,
+      "categorie": "commune",
+      "visite": true,
+      "lieu": "Carmin-sur-Mer",
+      "couleur": "#a9793a",
+      "coin": false
+    },
+    {
+      "index": 9,
+      "case": 10,
+      "categorie": "gradee",
+      "visite": false,
+      "lieu": "Route 24",
+      "couleur": "#2fb8b0",
+      "coin": true
+    },
+    {
+      "index": 10,
+      "case": 11,
+      "categorie": "booster8",
+      "visite": false,
+      "lieu": "Lavanville",
+      "couleur": "#2f6fdc",
+      "coin": false
+    },
+    {
+      "index": 11,
+      "case": 12,
+      "categorie": "alternative",
+      "visite": false,
+      "lieu": "Tour Pokémon",
+      "couleur": "#e0323f",
+      "coin": false
+    },
+    {
+      "index": 12,
+      "case": 13,
+      "categorie": "gradee",
+      "visite": false,
+      "lieu": "Zone Safari",
+      "couleur": "#2fb8b0",
+      "coin": false
+    },
+    {
+      "index": 13,
+      "case": 14,
+      "categorie": "commune",
+      "visite": false,
+      "lieu": "Céladopole",
+      "couleur": "#a9793a",
+      "coin": false
+    },
+    {
+      "index": 14,
+      "case": 15,
+      "categorie": "commune",
+      "visite": false,
+      "lieu": "Casino de Céladopole",
+      "couleur": "#a9793a",
+      "coin": false
+    },
+    {
+      "index": 15,
+      "case": 16,
+      "categorie": "chest",
+      "visite": false,
+      "lieu": "Fuchsia",
+      "couleur": "#33b46a",
+      "coin": false
+    },
+    {
+      "index": 16,
+      "case": 17,
+      "categorie": "commune",
+      "visite": false,
+      "lieu": "Île Écume",
+      "couleur": "#a9793a",
+      "coin": false
+    },
+    {
+      "index": 17,
+      "case": 18,
+      "categorie": "commune",
+      "visite": false,
+      "lieu": "Parmanie",
+      "couleur": "#a9793a",
+      "coin": false
+    },
+    {
+      "index": 18,
+      "case": 19,
+      "categorie": "commune",
+      "visite": false,
+      "lieu": "Île Cramoisie",
+      "couleur": "#a9793a",
+      "coin": true
+    },
+    {
+      "index": 19,
+      "case": 20,
+      "categorie": "chance",
+      "visite": false,
+      "lieu": "Route 21",
+      "couleur": "#9a5fe0",
+      "coin": false
+    },
+    {
+      "index": 20,
+      "case": 21,
+      "categorie": "commune",
+      "visite": false,
+      "lieu": "Doublonville",
+      "couleur": "#a9793a",
+      "coin": false
+    },
+    {
+      "index": 21,
+      "case": 22,
+      "categorie": "commune",
+      "visite": false,
+      "lieu": "Centrale Électrique",
+      "couleur": "#a9793a",
+      "coin": false
+    },
+    {
+      "index": 22,
+      "case": 23,
+      "categorie": "commune",
+      "visite": false,
+      "lieu": "Ligue Pokémon",
+      "couleur": "#a9793a",
+      "coin": false
+    },
+    {
+      "index": 23,
+      "case": 24,
+      "categorie": "gradee",
+      "visite": false,
+      "lieu": "Grotte Taupiqueur",
+      "couleur": "#2fb8b0",
+      "coin": false
+    },
+    {
+      "index": 24,
+      "case": 25,
+      "categorie": "commune",
+      "visite": false,
+      "lieu": "Route 11",
+      "couleur": "#a9793a",
+      "coin": false
+    },
+    {
+      "index": 25,
+      "case": 26,
+      "categorie": "booster50",
+      "visite": false,
+      "lieu": "Chenaptôme",
+      "couleur": "#d6549c",
+      "coin": false
+    },
+    {
+      "index": 26,
+      "case": 27,
+      "categorie": "prison",
+      "visite": false,
+      "lieu": "Verdaphage",
+      "couleur": "#d62b2b",
+      "coin": false
+    },
+    {
+      "index": 27,
+      "case": 28,
+      "categorie": "commune",
+      "visite": false,
+      "lieu": "Bourg Geon",
+      "couleur": "#a9793a",
+      "coin": true
+    },
+    {
+      "index": 28,
+      "case": 29,
+      "categorie": "commune",
+      "visite": false,
+      "lieu": "Écorcia",
+      "couleur": "#a9793a",
+      "coin": false
+    },
+    {
+      "index": 29,
+      "case": 30,
+      "categorie": "commune",
+      "visite": false,
+      "lieu": "Rosalia",
+      "couleur": "#a9793a",
+      "coin": false
+    },
+    {
+      "index": 30,
+      "case": 31,
+      "categorie": "booster8",
+      "visite": false,
+      "lieu": "Blackthorn",
+      "couleur": "#2f6fdc",
+      "coin": false
+    },
+    {
+      "index": 31,
+      "case": 32,
+      "categorie": "booster8",
+      "visite": false,
+      "lieu": "Route 46",
+      "couleur": "#2f6fdc",
+      "coin": false
+    },
+    {
+      "index": 32,
+      "case": 33,
+      "categorie": "chance",
+      "visite": false,
+      "lieu": "Grotte Sombre",
+      "couleur": "#9a5fe0",
+      "coin": false
+    },
+    {
+      "index": 33,
+      "case": 34,
+      "categorie": "commune",
+      "visite": false,
+      "lieu": "Antre Draco",
+      "couleur": "#a9793a",
+      "coin": false
+    },
+    {
+      "index": 34,
+      "case": 35,
+      "categorie": "etb",
+      "visite": false,
+      "lieu": "Salle du Conseil des 4",
+      "couleur": "#e8863c",
+      "coin": false
+    },
+    {
+      "index": 35,
+      "case": 36,
+      "categorie": "jackpot300",
+      "visite": false,
+      "lieu": "Ligue Pokémon — Salle du Champion",
+      "couleur": "#ffd700",
+      "coin": false
+    }
+  ],
+  "note": "Index 0 = Départ (coin). 9 cases par côté, coins compris : les index 0, 9, 18, 27 sont les coins. Le pion part de l'index 0 et tourne dans l'ordre croissant."
+}

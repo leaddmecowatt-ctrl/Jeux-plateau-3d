@@ -1,0 +1,154 @@
+{
+  "categories": [
+    {
+      "cle": "commune",
+      "libelle": "Pioche du Prof. Chen",
+      "valeurAffichee": "~0,68€",
+      "rendu": "flat",
+      "couleur": "#a9793a",
+      "coutCompte": 0.68,
+      "niveauCelebration": 1,
+      "message": "🃏 PIOCHE DU PROF. CHEN GAGNÉE ! 🃏",
+      "mouvement": null
+    },
+    {
+      "cle": "booster8",
+      "libelle": "Booster du Marchand 30 ans",
+      "valeurAffichee": "~17€",
+      "rendu": "float",
+      "couleur": "#2f6fdc",
+      "coutCompte": 17,
+      "niveauCelebration": 1,
+      "message": "🎁 BOOSTER DU MARCHAND GAGNÉ ! 🎁",
+      "mouvement": {
+        "bob": 0.1,
+        "swing": 0.3
+      }
+    },
+    {
+      "cle": "alternative",
+      "libelle": "Lot Mystère",
+      "valeurAffichee": "~7,20€",
+      "rendu": "flat",
+      "couleur": "#e0323f",
+      "coutCompte": 7.2,
+      "niveauCelebration": 1,
+      "message": "🎁 LOT MYSTÈRE GAGNÉ ! 🎁",
+      "mouvement": null
+    },
+    {
+      "cle": "gradee",
+      "libelle": "Duopack 30 ans",
+      "valeurAffichee": "~30€",
+      "rendu": "float",
+      "couleur": "#2fb8b0",
+      "coutCompte": 30,
+      "niveauCelebration": 2,
+      "message": "⭐ DUOPACK 30 ANS GAGNÉ ! ⭐",
+      "mouvement": {
+        "bob": 0.11,
+        "swing": 0.35
+      }
+    },
+    {
+      "cle": "booster50",
+      "libelle": "Tripack 30 ans",
+      "valeurAffichee": "~58€",
+      "rendu": "float",
+      "couleur": "#d6549c",
+      "coutCompte": 58,
+      "niveauCelebration": 3,
+      "message": "🎁 TRIPACK 30 ANS GAGNÉ ! 🎁",
+      "mouvement": {
+        "bob": 0.13,
+        "swing": 0.3
+      }
+    },
+    {
+      "cle": "etb",
+      "libelle": "Coffret 30 ans",
+      "valeurAffichee": "~85€",
+      "rendu": "float",
+      "couleur": "#e8863c",
+      "coutCompte": 85,
+      "niveauCelebration": 4,
+      "message": "🎁 COFFRET 30 ANS GAGNÉ ! 🎁",
+      "mouvement": {
+        "bob": 0.15,
+        "swing": 0.28
+      }
+    },
+    {
+      "cle": "jackpot300",
+      "libelle": "ETB 30 ans",
+      "valeurAffichee": "~190€",
+      "rendu": "float",
+      "couleur": "#ffd700",
+      "coutCompte": 190,
+      "niveauCelebration": 5,
+      "message": "👑 ETB 30 ANS GAGNÉ ! 👑",
+      "mouvement": {
+        "bob": 0.17,
+        "swing": 0.25
+      }
+    },
+    {
+      "cle": "chance",
+      "libelle": "Chance",
+      "valeurAffichee": "tirage",
+      "rendu": "glyph",
+      "couleur": "#9a5fe0",
+      "coutCompte": null,
+      "niveauCelebration": 1,
+      "message": null,
+      "mouvement": {
+        "bob": 0.12,
+        "spin": 0
+      }
+    },
+    {
+      "cle": "chest",
+      "libelle": "Caisse Communautaire",
+      "valeurAffichee": "tirage",
+      "rendu": "glyph",
+      "couleur": "#33b46a",
+      "coutCompte": null,
+      "niveauCelebration": 1,
+      "message": null,
+      "mouvement": {
+        "bob": 0.09,
+        "spin": 0
+      }
+    },
+    {
+      "cle": "prison",
+      "libelle": "Prison",
+      "valeurAffichee": "0€",
+      "rendu": "glyph",
+      "couleur": "#d62b2b",
+      "coutCompte": 0.68,
+      "niveauCelebration": 0,
+      "message": null,
+      "mouvement": {
+        "bob": 0.07,
+        "pulse": true
+      }
+    }
+  ],
+  "sousTitresGrosLots": {
+    "3": "🔥 GROS LOT ! 🔥",
+    "4": "🔥🔥 ÉNORME ! 🔥🔥",
+    "5": "👑 LE GROS LOT DU LIVE ! 👑"
+  },
+  "imagesParCle": {
+    "commune": "lots/commune.jpg",
+    "booster8": "lots/booster8.jpg",
+    "alternative": "lots/alternative.jpg",
+    "gradee": "lots/gradee.jpg",
+    "booster50": "lots/booster50.jpg",
+    "etb": "lots/etb150.jpg",
+    "jackpot300": "lots/jackpot300.jpg",
+    "mystBooster": "lots/mystere_booster.jpg",
+    "mystCarte": "lots/mystere_carte.jpg"
+  }
+}

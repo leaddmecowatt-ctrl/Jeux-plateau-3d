@@ -1,0 +1,57 @@
+N_SIDE = 10 | 
+N_TILES = 4*(N_SIDE-1) | 
+LAST = N_TILES-1 | 
+SIDE = N_SIDE-1 | cases par côté, un coin compris
+CELL = 1 | 
+GRID_C = (N_SIDE+1)/2 | centre de la grille
+RARE_GRADEE_CARD = { text: '★ CARTE GRADÉE OFFERTE (20-80€) — TRÈS RARE ★', weight: 1, rare: true, effect:{type:'prize', cat:'gradee'} } | 
+PITY_KEY = 'pika_pity_counter' | 
+PITY_THRESHOLD = 32 | 
+LOT_IMAGES = {} | 
+GOLD = '#e9c34a' | 
+GOLD_BRIGHT = '#ffe27a' | 
+DPR_MAX = Math.min(window.devicePixelRatio||1, 1.5) | 
+QSTICK_KEY = 'pika_q_forced' | 
+BASE_FOV = 40 | 
+BOARD_CORNER_R = (N_SIDE*CELL)/2 + 0.15 | 
+CAM_DIR_DEFAULT = new THREE.Vector3(0, 13.2, 11).normalize() | vue d'origine (cible en y=0,3)
+CAM_DIR_SQUARE = new THREE.Vector3(0, 14.9, 9).normalize() | plongée un peu plus marquée
+CAM_DIR_TALL = new THREE.Vector3(0, 16.4, 6.6).normalize() | 
+CAM_BASE_MIN = controls.minDistance, CAM_BASE_MAX = controls.maxDistance | 
+CAM_BASE_DIST = camera.position.distanceTo(controls.target) | distance de la vue d'origine (cadre carré)
+LOT_ODDS_PCT = null | 
+SHOW_ODDS = false | 
+TILE = 0.95 | 
+RIVET_OFFSETS = [[-1,-1],[1,-1],[-1,1],[1,1]] | 
+BODY_H = 0.14, BODY_BOTTOM = 0.135 | 
+TILES_BY_CAT = {} | 
+SHAKE_MS = 1300, SHATTER_MS = 2400, SHATTER_FADE_MS = 700 | 
+SHARD_ROWS = 18, SHARD_COUNT = SHARD_ROWS*SHARD_ROWS | 
+STORM_MS = 4300 | 
+STORM_STRIKES = [0.45, 0.95, 1.35, 1.68, 1.95, 2.18] | secondes après le départ
+LIGHT_BASE = { key: key.intensity, hemi: hemiLight.intensity, fill: fill.intensity, rim: rim.intensity, spot: centerSpot.intensity, expo: renderer.toneMappingExposure } | 
+RAIN_COUNT = 150 | 
+START_NODE = tiles[0] | 
+PLAYER_TARGET_HEIGHT = 0.82 | hauteur visée sur le plateau (mêmes proportions que l'ancien pion)
+IDLE_LIFE_PERIOD = 6.4 | 
+FORCE_KEYS = { z:{cat:'jackpot300', name:'ETB'}, m:{cat:'booster50', name:'Tripack'} } | 
+CARD_FACE_LIFT = 0.02 + 0.008 | 
+WALK_V_MIN = 1.50, WALK_V_MAX = 2.05 | 
+SPARKLE_POOL_SIZE = 48 | 
+QUALITY = { level:0, samples:0, slow:0, last:0, armedAt:0 } | 
+QUALITY_LEVELS = 5 | 
+TOTAL_MISE_KEY = 'pika_total_mise' | 
+TOTAL_PAID_KEY = 'pika_total_paid' | 
+RECAL_KEY = 'pika_recal' | 
+OUTCOME_BATCH_KEY = 'pika_outcome_batch' | 
+OUTCOME_BATCH_VERSION = 'v9-lot-mystere' | 
+HOP_DURATION = 0.50 | 
+CLAIM_KEY_GRACE_MS = 20000 | 
+CHANCE_READ_MS = 2800 | 
+CHANCE_READ_RARE_MS = 3600 | 
+NEUTRAL_FORBIDDEN = new Set(['chance','chest','prison']) | 
+CARD_DELTAS = [1,2,3,4,5,6,-1,-2,-3] | 
+INTERMEDIATE_MAX_COST = 17 | booster (17 €) au maximum en cours de route
+CARD_ROUTE_P = 0.08 | 
+DICE_W = {2:1,3:2,4:3,5:4,6:5,7:6,8:5,9:4,10:3,11:2,12:1} | 
+ROT_KEY = 'pika_rot' | 

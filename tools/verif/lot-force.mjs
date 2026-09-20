@@ -1,0 +1,20 @@
+import { chromium } from 'playwright';
+const [,, bundle, touche, nb, attente, shot] = process.argv;
+const b = await chromium.launch({ args:['--use-gl=swiftshader','--enable-unsafe-swiftshader','--no-sandbox'] });
+const p = await b.newPage({ viewport:{ width:1080, height:1920 } });
+const errs = [];
+p.on('pageerror', e => errs.push('PAGEERROR: '+e.message));
+p.on('console', m => { if(m.type()==='error' && !/ERR_CERT/.test(m.text())) errs.push('CONSOLE: '+m.text()); });
+await p.goto('file://'+bundle); await p.waitForTimeout(8000);
+await p.keyboard.press(touche); await p.waitForTimeout(300);
+await p.keyboard.press('a'); await p.waitForTimeout(800);
+const etapes = [];
+for(let i=0;i<+nb;i++){ await p.keyboard.press('b'); await p.waitForTimeout(+attente);
+  etapes.push(await p.evaluate(() => (document.getElementById('status')||{}).textContent)); }
+await p.keyboard.press('d'); await p.waitForTimeout(3000);
+if(shot) await p.screenshot({ path: shot });
+await p.waitForTimeout(9000);
+const annonce = await p.evaluate(() => (document.getElementById('celebMain')||{}).textContent);
+console.log(`${bundle.split('/').pop()} · touche ${touche} · ${nb} B × ${attente} ms · annonce : ${annonce} · erreurs : ${errs.length ? errs.join(' | ') : 'aucune'}`);
+console.log('   étapes :', etapes.map(s => (s||'').replace(/\s+/g,' ').slice(0,60)).join(' → '));
+await b.close();

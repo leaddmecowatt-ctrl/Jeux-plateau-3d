@@ -16,11 +16,16 @@
 >    reproduire (plateau, 36 cases, déroulé, touches, dés pipés vers le lot
 >    décidé d'avance, argent, lots forcés, célébrations, pion, rendu, écran
 >    public, télé pivotée, invariants) ;
-> 3. `captures/` — à quoi ressemble chaque écran aujourd'hui ;
-> 4. `regles/argent.js` et `tests/argent.test.mjs` — la règle d'argent,
+> 3. `BUGS-ET-LECONS.md` — les 62 problèmes rencontrés en vrai et leur
+>    solution : la liste de ce que tu dois éviter dès le départ ;
+> 4. `donnees/` — les données **exactes** (36 cases et lieux, lots, argent,
+>    cartes et dés, touches, 57 constantes de réglage) : à charger telles
+>    quelles, pas à retaper ;
+> 5. `captures/` — à quoi ressemble chaque écran aujourd'hui ;
+> 6. `regles/argent.js` et `tests/argent.test.mjs` — la règle d'argent,
 >    pure et testée : **à reprendre telle quelle**, c'est la seule pièce
 >    déjà propre ;
-> 5. `board3d.js` et `Nsldkso.html` (à la racine du dossier) — l'ancien code,
+> 7. `board3d.js` et `Nsldkso.html` (à la racine du dossier) — l'ancien code,
 >    qui fait foi en cas de doute sur un comportement (jamais à recopier).
 >    `python3 tools/build.py --out dist/pikajackpot.html` le reconstruit.
 >
@@ -58,7 +63,11 @@
 > chaque étape : tests, bundle, capture, commit en français qui dit
 > pourquoi. Le cloud n'a pas de GPU : la fluidité, les timings et Safari se
 > vérifient sur mon Mac et ma télé — quand quelque chose cloche là-bas, je
-> t'envoie une photo de la fenêtre de la touche I.
+> t'envoie une photo de la fenêtre de la touche I. `RECETTE-DE-TEST.md` est
+> la liste que je coche sur la télé avant chaque direct : chaque étape que
+> tu livres doit la passer. `tools/verif/` contient les scripts Playwright
+> (captures figées, diff au pixel, télé pivotée, comptabilité, fuite mémoire,
+> profil) : utilise-les, ne les réinvente pas.
 >
 > **Ce que « mieux » veut dire pour moi** : lis §11 de
 > `COMMENT-LE-JEU-EST-FAIT.md`, puis propose. Je tranche ce qui touche au

@@ -1,0 +1,28 @@
+import { chromium } from 'playwright';
+const [,, bundle, tag] = process.argv;
+const S = process.env.SORTIE || './';
+const b = await chromium.launch({ args:['--use-gl=swiftshader','--enable-unsafe-swiftshader','--no-sandbox'] });
+const p = await b.newPage({ viewport:{ width:1440, height:900 } });
+const errs = [];
+p.on('pageerror', e => errs.push('PAGEERROR: '+e.message));
+p.on('console', m => { if(m.type()==='error' && !/ERR_CERT/.test(m.text())) errs.push('CONSOLE: '+m.text()); });
+await p.goto('file://'+bundle+'?rot=90'); await p.waitForTimeout(9000);
+const etat = (nom) => p.evaluate((nom) => {
+  const c = document.getElementById('celebration'), r = c.getBoundingClientRect(), cs = getComputedStyle(c);
+  const photo = document.getElementById('celebPhoto');
+  return { nom, classes: c.className, boite: `${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}x${Math.round(r.height)}`, opacity: cs.opacity, visibility: cs.visibility, display: cs.display, zIndex: cs.zIndex, photoHidden: photo && photo.hidden, photoSrc: photo && photo.src ? photo.src.slice(0,30) : null, celebBoxH: getComputedStyle(document.documentElement).getPropertyValue('--celeb-box-h').trim(), tvResults: (document.getElementById('tvResults')||{}).innerHTML?.length };
+}, nom);
+await p.keyboard.press('a'); await p.waitForTimeout(1000);
+await p.keyboard.press('b'); await p.waitForTimeout(3500);
+const pendantMarche = await etat('pendant le déplacement');
+await p.waitForTimeout(4500);
+const apresArrivee = await etat('après l\'arrivée (aperçu du lot)');
+await p.screenshot({ path: S+'rot_apercu_'+tag+'.png' });
+await p.waitForTimeout(3000);
+const plusTard = await etat('3 s plus tard');
+await p.keyboard.press('d'); await p.waitForTimeout(3000);
+const apresD = await etat('après D (lot remporté)');
+await p.screenshot({ path: S+'rot_lot_'+tag+'.png' });
+console.log(`=== ${tag} ===`); [pendantMarche, apresArrivee, plusTard, apresD].forEach(e => console.log(JSON.stringify(e)));
+console.log('erreurs :', errs.length ? errs.join(' | ') : 'aucune');
+await b.close();
