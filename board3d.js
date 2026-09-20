@@ -3557,7 +3557,17 @@ async function loadPlayerModel(player){
     }catch(e){ console.warn('Texture du personnage : repli impossible', e); }
   }
 
-  player.root.add(model);
+  /* Pivot de salto. model.position.y place les pieds sur y=0, donc une
+     rotation du root ferait tourner le personnage AUTOUR DE SES PIEDS —
+     une roue, pas un salto. On intercale un groupe place a mi-hauteur, et
+     on redescend le modele d'autant a l'interieur : la rotation se fait
+     alors autour du bassin, comme un vrai salto. */
+  const flipPivot = new THREE.Group();
+  flipPivot.position.y = PLAYER_TARGET_HEIGHT * 0.5;
+  model.position.y -= PLAYER_TARGET_HEIGHT * 0.5;
+  flipPivot.add(model);
+  player.root.add(flipPivot);
+  player.flip = flipPivot;
   player.model = model;
 
   const mixer = new THREE.AnimationMixer(model);
@@ -3574,9 +3584,29 @@ async function loadPlayerModel(player){
   // et laissait les bras revenir à l'horizontale.
   const idleClip = clip('idle');
 
+  const jumpClip = clip('jump');
   const actions = {
     idle: idleClip && mixer.clipAction(idleClip),
     walk: clip('walk') && mixer.clipAction(clip('walk')),
+  };
+  /* Le modele embarque un clip « jump » qui n'etait jamais charge. Il est
+     joue une seule fois, en surcouche additive legere des deux autres :
+     on ne le fait pas prendre la main sur idle/walk, parce que la couche
+     procedurale (updateBody) pilote deja bras et jambes — on veut sa
+     detente, pas qu'il ecrase tout le reste. */
+  const jumpAction = jumpClip ? mixer.clipAction(jumpClip) : null;
+  if(jumpAction){
+    jumpAction.setLoop(THREE.LoopOnce, 1);
+    jumpAction.clampWhenFinished = true;
+    jumpAction.setEffectiveWeight(0);
+    jumpAction.play();
+  }
+  player.playJump = ()=>{
+    if(!jumpAction) return;
+    jumpAction.reset();
+    jumpAction.setEffectiveWeight(0.85);
+    jumpAction.timeScale = 1;
+    jumpAction.play();
   };
   Object.values(actions).forEach(a=>{ if(a) a.play(); });
   if(actions.idle) actions.idle.setEffectiveWeight(1);
@@ -4188,6 +4218,100 @@ function updateFxSystem(sys, dt, gravity, drag, shrink){
   sys.geo.attributes.aColor.needsUpdate = true;
   if(!any) sys.pts.visible = false;
 }
+/* ---------- Saut de victoire : detente, salto, colonne de feu ----------
+   Declenche a l'arrivee sur un lot a partir du palier 3. La hauteur, la
+   duree et le nombre de saltos montent avec l'enjeu : une pirouette sur un
+   Tripack, deux saltos et un envol dans une colonne de feu sur le jackpot. */
+let victoire = null, _colAcc = 0;
+function startVictoryJump(level){
+  if(reduceMotion || !player || !player.root) return;
+  const lvl = Math.max(1, Math.min(5, level|0));
+  victoire = {
+    t0: clock.getElapsedTime(),
+    dur: 1.05 + lvl*0.30,
+    haut: 0.75 + lvl*0.62,
+    tours: lvl >= 5 ? 2 : 1,
+    lvl,
+    x: player.root.position.x, y: player.root.position.y, z: player.root.position.z,
+  };
+  _colAcc = 0;
+  if(player.playJump) player.playJump();
+  cameraPunch(0.9 + lvl*0.22);
+}
+function spawnFireColumn(x, y0, z, hauteur, lvl, dt){
+  if(reduceMotion || ecoMode) return;
+  const lv = (typeof QUALITY === 'object' && QUALITY) ? (QUALITY.level|0) : 0;
+  if(lv >= 4) return;
+  _colAcc += dt * (lv >= 2 ? 70 : 130);
+  let n = Math.floor(_colAcc);
+  if(n <= 0) return;
+  _colAcc -= n;
+  if(n > 14) n = 14;
+  const H = Math.max(0.30, hauteur + 0.45);
+  let nf = 0, nk = 0, ns = 0;
+  for(let k=0;k<n;k++){
+    const a = Math.random()*Math.PI*2;
+    // rayon plus large a la base qu'au sommet : une colonne, pas un tube
+    const hy = Math.random()*H;
+    const serre = 1 - 0.55*(hy/H);
+    const r = (0.14 + Math.random()*0.26) * serre;
+    const px = x + Math.cos(a)*r, pz = z + Math.sin(a)*r;
+
+    if(k % 3 === 0){
+      const i = (fxSmoke.live + nk) % fxSmoke.count; nk++;
+      const gris = 0.14 + Math.random()*0.11;
+      fxEmit(fxSmoke, i, px, y0 + hy, pz, {
+        vx: Math.cos(a)*0.30, vy: 0.90 + Math.random()*0.80, vz: Math.sin(a)*0.30,
+        r: gris*1.30, g: gris*1.02, b: gris*0.80,
+        size: 0.17 + Math.random()*0.15, max: 1.0 + Math.random()*0.8,
+      });
+      fxSmoke.pts.visible = true;
+    } else if(Math.random() < 0.22){
+      const i = (fxStars.live + ns) % fxStars.count; ns++;
+      fxEmit(fxStars, i, px, y0 + hy, pz, {
+        vx: Math.cos(a)*0.55, vy: 1.4 + Math.random()*1.4, vz: Math.sin(a)*0.55,
+        r: 1.0, g: 0.95, b: 0.75 + Math.random()*0.22,
+        size: 0.12 + Math.random()*0.10, max: 0.7 + Math.random()*0.5,
+        spin: 7 + Math.random()*7,
+      });
+      fxStars.pts.visible = true;
+    } else {
+      const i = (fxFlames.live + nf) % fxFlames.count; nf++;
+      const heat = 1 - Math.random()*0.45;
+      fxEmit(fxFlames, i, px, y0 + hy, pz, {
+        vx: Math.cos(a)*0.30, vy: 1.7 + Math.random()*1.7 + lvl*0.18, vz: Math.sin(a)*0.30,
+        r: 1.0, g: 0.42 + heat*0.42, b: 0.09 + heat*0.22,
+        size: 0.13 + Math.random()*0.13 + lvl*0.014, max: 0.55 + Math.random()*0.45,
+      });
+      fxFlames.pts.visible = true;
+    }
+  }
+  fxFlames.live = (fxFlames.live + nf) % fxFlames.count;
+  fxStars.live  = (fxStars.live  + ns) % fxStars.count;
+  fxSmoke.live  = (fxSmoke.live  + nk) % fxSmoke.count;
+}
+/* Appele en TOUTE FIN de frameStep : la boucle de marche ecrit la position
+   du pion a chaque image, donc toute elevation posee avant serait ecrasee. */
+function updateVictory(t, dt){
+  if(!victoire) return;
+  const u = (t - victoire.t0) / victoire.dur;
+  if(u >= 1){
+    player.root.position.y = victoire.y;
+    if(player.flip) player.flip.rotation.x = 0;
+    victoire = null;
+    return;
+  }
+  // montee franche, suspension au sommet, retombee amortie
+  const arc = Math.sin(Math.PI * Math.pow(Math.max(0, u), 0.76));
+  player.root.position.y = victoire.y + arc * victoire.haut;
+  if(player.flip){
+    const e = u*u*(3 - 2*u);               // lissage en S : depart et arrivee nets
+    player.flip.rotation.x = -victoire.tours * Math.PI * 2 * e;
+  }
+  spawnFireColumn(victoire.x, victoire.y, victoire.z,
+                  player.root.position.y - victoire.y, victoire.lvl, dt);
+}
+
 function updateArrivalFx(dt){
   // les flammes montent (gravité positive) et s'éteignent en rétrécissant ;
   // les étoiles retombent et scintillent ; la fumée monte lentement et
@@ -4701,6 +4825,10 @@ function frameStep(dt, t){
         winShock(landedTile, lvl);
         // flammes + gerbe d'étoiles, graduées par le palier du lot
         spawnArrivalFx(landedTile.world.x, landedTile.tileTopY, landedTile.world.z, lvl);
+        /* À partir du palier 3 (Tripack et au-dessus), il ne se contente
+           plus d'arriver : il saute, fait un salto et s'envole dans une
+           colonne de feu. Deux saltos sur le jackpot. */
+        if(lvl >= 3) startVictoryJump(lvl);
         cameraPunch(0.65 + lvl*0.28);
         // la réaction arrive APRÈS la stabilisation : il regarde, il
         // comprend, puis il réagit
@@ -4833,6 +4961,11 @@ function frameStep(dt, t){
     shakeUntil = 0; shatterUntil = 0; shatterActive = false;
   }
 
+  /* Saut de victoire : EN DERNIER, juste avant le rendu. La boucle de
+     marche écrit player.root.position à chaque image ; toute élévation
+     posée plus haut dans frameStep serait donc écrasée avant l'affichage. */
+  updateVictory(t, dt);
+
   composer.render();
 }
 
@@ -4940,6 +5073,13 @@ function applyQuality(level){
 }
 /* Dernier etat applique, pour ne rien refaire quand rien ne change. */
 let _qDpr = null, _qEco = null, _qBloom = null;
+/* Declares ICI et non juste avant resize() : sur petit ecran et sur
+   telephone, le bloc de reglage initial appelle applyQuality(3) — donc
+   resize() — AVANT la ligne ou ces variables etaient declarees, et un let
+   dans sa zone morte temporelle leve une exception qui interrompt toute
+   l'initialisation du module. Le defaut ne se voyait pas sur un grand
+   ecran, ou aucune des deux branches du bloc initial ne se declenche. */
+let _rzW = 0, _rzH = 0, _rzPr = 0;
 /* Resolution du bloom : divisee des le cran 1. C'est le premier levier
    parce que c'est le seul qui ne se voie pratiquement pas — un halo est
    flou par nature. */
@@ -5062,7 +5202,6 @@ function animate(){
 animate();
 
 /* ---------- Redimensionnement ---------- */
-let _rzW = 0, _rzH = 0, _rzPr = 0;
 function resize(){
   const w = wrap.clientWidth, h = wrap.clientHeight;
   if(w===0||h===0) return;
