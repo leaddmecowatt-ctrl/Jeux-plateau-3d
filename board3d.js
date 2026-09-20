@@ -2123,7 +2123,7 @@ function toonGradient(){
    sculptés ; la marche utilise la vraie animation du modèle (pilotée
    par un AnimationMixer), plus une transition douce vers l'animation
    "idle" à l'arrêt. */
-const PLAYER_TARGET_HEIGHT = 0.82; // hauteur visée sur le plateau (mêmes proportions que l'ancien pion)
+const PLAYER_TARGET_HEIGHT = 0.82; // hauteur visee sur le plateau (memes proportions que l'ancien pion). Ne pas monter : en vue plateau (plongee 51 deg) c'est le bord du chapeau de paille qui grandit, pas la silhouette, et il masque encore plus le corps. Le personnage se regarde en gros plan (CINE.closeup, cale a 7 deg exprES).
 
 /* Crée immédiatement un pion "vide" (groupe + mixer/setWalking neutres)
    pour que le plateau puisse démarrer sa boucle de rendu tout de suite :
@@ -3238,6 +3238,12 @@ async function loadPlayerModel(player){
       map: oldMat.map || null,
       gradientMap: toonGradientMap,
       color: oldMat.color ? oldMat.color.clone() : new THREE.Color(0xffffff),
+      // Les 7 materiaux du GLB sont doubleSided : sans le reprendre ici,
+      // le toon repassait en FrontSide et toutes les surfaces fines
+      // (bord du chapeau de paille, echarpe, lanieres des sandales)
+      // devenaient traversables du regard — le chapeau apparaissait
+      // comme un disque translucide pose a cote du personnage.
+      side: oldMat.side !== undefined ? oldMat.side : THREE.FrontSide,
     });
     o.material = newMat;
     if(oldMat.name === 'skin') skinMat = newMat;
