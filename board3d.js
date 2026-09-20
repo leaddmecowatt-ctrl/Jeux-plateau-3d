@@ -858,11 +858,22 @@ const msaaTarget = new THREE.WebGLRenderTarget(1, 1, {
 });
 const composer = new EffectComposer(renderer, msaaTarget);
 composer.addPass(new RenderPass(scene, camera));
-/* Seuil de bloom ramene de 0.90 a 0.83 et force de 0.45 a 0.52 : a 0.90
-   l'or emissif des cases ne passait plus le seuil du tout, et le plateau
-   perdait tout son eclat dore — c'etait le "le dore ne s'affiche plus"
-   rapporte en direct. 0.83 le laisse repasser sans faire baver les photos. */
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(1,1), 0.52, 0.4, 0.83);
+/* Seuil de bloom : 0.80, et surtout PAS plus haut.
+
+   Mesure faite sur la chaine reelle (ACES + toneMappingExposure, puis
+   LuminosityHighPassShader qui analyse des valeurs LINEAIRES dans la cible
+   HalfFloat du composer) : le pixel le plus clair physiquement possible,
+   du blanc pur, ne sort qu'a 0.8356 a l'exposition 1.42. Le seuil de 0.90
+   pose au commit 4cc69a6 etait donc AU-DESSUS DU PLAFOND DU RENDU : plus
+   rien d'opaque ne bloomait, sur toute la scene. C'est ca, le "le dore ne
+   s'affiche plus" — l'or n'a jamais franchi le seuil lui-meme (luminance
+   0.20), c'est le halo des zones claires qui l'enveloppait et le faisait
+   lire comme brillant.
+
+   Un premier correctif a 0.83 ne laissait que 0.0056 de marge, soit 56 %
+   du bloom d'origine. A 0.80 la marge vaut 3,5 largeurs de transition et
+   le halo retrouve exactement son intensite d'avant. */
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(1,1), 0.55, 0.4, 0.80);
 composer.addPass(bloomPass);
 
 /* Garde-fou anti-rognage des coins : au lieu d'un recul de caméra
@@ -1662,8 +1673,18 @@ function bevelledBox(w, h, d, bevel){
 }
 
 const tileGoldMat = new THREE.MeshStandardMaterial({
-  color:new THREE.Color(GOLD), roughness:.2, metalness:.9,
-  emissive:new THREE.Color(GOLD), emissiveIntensity:.12,
+  /* roughness .28 et non .2 : la roughnessMap MULTIPLIE cette valeur, et
+     la carte procedurale a une moyenne de 0.72 — la rugosite effective
+     tombait donc a 0.145 au lieu de 0.2. Sur un metal place dans un
+     environnement sombre, moins de rugosite veut dire plus SOMBRE (le
+     terme de multidiffusion chute de 27 %). 0.28 x 0.72 = 0.20 : on
+     retrouve la rugosite moyenne d'origine, avec la variation en plus.
+     emissiveIntensity .22 et non .12 : l'or porte ainsi son eclat
+     lui-meme (+58 % de luminance) au lieu de l'emprunter entierement au
+     halo de bloom des zones claires voisines. Ne pas monter au-dela de
+     .30, il se desature vers le jaune pale. */
+  color:new THREE.Color(GOLD), roughness:.28, metalness:.9,
+  emissive:new THREE.Color(GOLD), emissiveIntensity:.22,
   /* Pas de normalMap sur l'or. Sur un materiau tres metallique, perturber
      les normales renvoie une grande partie des rayons hors de la camera :
      le metal s'assombrit globalement au lieu de gagner du relief. Seule la
@@ -1675,7 +1696,13 @@ const tileBezelMat = new THREE.MeshStandardMaterial({
   color:0x0a0a0a, roughness:.5, metalness:.25,
   normalMap: TILE_MAPS.normalMap, roughnessMap: TILE_MAPS.roughnessMap,
 });
-const tileCollarGeo = bevelledBox(TILE+0.09,0.07,TILE+0.09, 0.012);
+/* TILE+0.115 et non TILE+0.09 : le biseau rentre les faces superieure et
+   inferieure de bevelSize, alors que le corps colore de la case garde sa
+   taille. L'anneau dore PLAT visible passait donc de 0.045 a 0.033 unite,
+   soit -27 % de surface doree — a peine plus de 2 pixels a l'ecran en
+   1080p. On elargit la collerette pour retrouver l'anneau d'origine tout
+   en gardant le filet de lumiere du biseau. */
+const tileCollarGeo = bevelledBox(TILE+0.115,0.07,TILE+0.115, 0.012);
 const tileBezelGeo  = bevelledBox(TILE*0.97,0.035,TILE*0.97, 0.008);
 /* Geometries partagees par les 40 cases : elles etaient recreees a
    l'identique dans la boucle (40 BoxGeometry pour rien). */
@@ -3969,6 +3996,62 @@ function spawnArrivalFx(x, y, z, level){
   if(nS) fxStars.pts.visible = true;
 }
 
+/* ---------- Traînée de braises et d'étoiles derrière le pion ----------
+   Émission continue sous les pieds pendant la marche, sur les mêmes deux
+   systèmes que la gerbe d'arrivée : rien de neuf à allouer, et le pool se
+   recycle tout seul (les particules de traînée vivent moins d'une demi-
+   seconde, elles ont disparu bien avant la gerbe d'arrivée).
+
+   Le débit est proportionnel à l'amplitude de la foulée : le pion laisse
+   une vraie traînée quand il court, presque rien quand il s'arrête. Un
+   accumulateur convertit le débit (particules par seconde) en nombre
+   entier par image, pour que la traînée soit identique à 30 et à 120 i/s. */
+let _trailAcc = 0;
+function spawnTrailFx(x, y, z, dt, intensity){
+  if(reduceMotion || ecoMode){ _trailAcc = 0; return; }
+  const lv = (typeof QUALITY === 'object' && QUALITY) ? (QUALITY.level|0) : 0;
+  if(lv >= 4){ _trailAcc = 0; return; }        // appareil déjà à la peine
+  const k = Math.max(0, Math.min(1, intensity));
+  if(k < 0.05){ _trailAcc = 0; return; }
+  const rate = (lv >= 2 ? 42 : 78) * k;
+  _trailAcc += dt * rate;
+  let n = Math.floor(_trailAcc);
+  if(n <= 0) return;
+  _trailAcc -= n;
+  if(n > 8) n = 8;                              // garde-fou anti-rafale
+
+  for(let c=0;c<n;c++){
+    const a = Math.random()*Math.PI*2;
+    const r = Math.random()*0.16;
+    // une étoile de temps en temps au milieu des braises, pour scintiller
+    const star = Math.random() < 0.22;
+    const sys = star ? fxStars : fxFlames;
+    const i = (sys.live + c) % sys.count;
+    if(star){
+      fxEmit(sys, i, x + Math.cos(a)*r, y + 0.10 + Math.random()*0.22, z + Math.sin(a)*r, {
+        vx: Math.cos(a)*0.32, vy: 0.55 + Math.random()*0.55, vz: Math.sin(a)*0.32,
+        r: 1.0, g: 0.93, b: 0.70 + Math.random()*0.25,
+        size: 0.090 + Math.random()*0.075,
+        max: 0.55 + Math.random()*0.40,
+        spin: 6 + Math.random()*6,
+      });
+    } else {
+      const heat = 1 - Math.random()*0.5;
+      fxEmit(sys, i, x + Math.cos(a)*r, y + 0.05, z + Math.sin(a)*r, {
+        vx: Math.cos(a)*0.22, vy: 0.75 + Math.random()*0.75, vz: Math.sin(a)*0.22,
+        r: 1.0, g: 0.40 + heat*0.40, b: 0.08 + heat*0.20,
+        size: 0.090 + Math.random()*0.090,
+        max: 0.46 + Math.random()*0.36,
+      });
+    }
+    sys.pts.visible = true;
+  }
+  // avance les curseurs des deux systèmes : on ne sait pas combien de
+  // chaque type ont été émis, on décale donc les deux du même nombre
+  fxFlames.live = (fxFlames.live + n) % fxFlames.count;
+  fxStars.live  = (fxStars.live  + n) % fxStars.count;
+}
+
 function updateFxSystem(sys, dt, gravity, drag, shrink){
   let any = false;
   for(let i=0;i<sys.count;i++){
@@ -4420,6 +4503,9 @@ function frameStep(dt, t){
     // hauteur nominale : entre deux cases on interpole les deux surfaces
     const surf = tileSurfOffset(aTile) + (tileSurfOffset(bTile) - tileSurfOffset(aTile))*localP;
     player.root.position.set(x, aTile.tileTopY + surf + bob + settleDip, z);
+    // traînée de braises et d'étoiles sous les pieds, d'autant plus fournie
+    // que la foulée est ample — rien quand il est presque à l'arrêt
+    spawnTrailFx(x, aTile.tileTopY + surf, z, dt, gaitAmp * 1.15);
 
     /* ---- virage étagé ----
        Le corps ne pivote pas d'un bloc : la tête a déjà tourné (système de
@@ -5575,6 +5661,26 @@ function computeCardDraw(total, wantDouble){
 }
 async function playCardDrawAnimation(draw){
   if(!cardDrawOverlay || !cardGrid) return;
+
+  /* ---------- Mise en scene graduee par l'enjeu reel ----------
+     Le lot est DEJA decide quand on arrive ici : drawAndMove choisit
+     pendingOutcome avant le tout premier appel. La cinematique peut donc
+     monter en tension quand un gros lot est en jeu, au lieu d'etre
+     rigoureusement identique pour une commune et pour un ETB a 300 EUR.
+     C'etait le vrai reproche : la sequence durait 2900 ms fixes, sans
+     jamais rien dire de ce qui se jouait. */
+  const tier = Math.max(1, Math.min(5, TIER_LEVEL[pendingOutcome] ?? 1));
+  const gros = tier >= 3;
+  const titreEl = document.getElementById('cardDrawTitle');
+  const flashEl = document.getElementById('drawFlash');
+  const setTitre = t => { if(titreEl) titreEl.textContent = t; };
+  const flash = () => {
+    if(!flashEl || reduceMotion) return;
+    flashEl.classList.remove('on');
+    void flashEl.offsetWidth;          // force le redemarrage de l'animation
+    flashEl.classList.add('on');
+  };
+
   cardGrid.innerHTML = '';
   const cardEls = [];
   for(let i=0;i<12;i++){
@@ -5599,12 +5705,21 @@ async function playCardDrawAnimation(draw){
       '<span class="card-sparks">' +
         '<i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>' +
       '</span>';
+    /* distribution en cascade : chaque carte tombe avec son propre
+       retard, au lieu des 12 qui apparaissaient d'un bloc suivies de
+       400 ms de vide — c'etait le premier temps mort de la sequence */
+    c.style.setProperty('--d', (i*26) + 'ms');
+    c.style.setProperty('--rz', ((i%2?1:-1) * (4 + (i%3)*3)) + 'deg');
+    if(!reduceMotion) c.classList.add('dealing');
     cardGrid.appendChild(c);
     cardEls.push(c);
   }
   cardDrawOverlay.classList.add('show');
-  if(cardDrawTotal) cardDrawTotal.textContent = '';
-  await wait(400);
+  if(cardDrawTotal){ cardDrawTotal.textContent = ''; cardDrawTotal.classList.remove('stamp'); }
+  setTitre(gros ? 'Les cartes tombent…' : 'Tirage en cours…');
+  if(gros) cardDrawOverlay.classList.add('tension');
+  // on attend que la cascade se pose, pas un delai arbitraire
+  await wait(reduceMotion ? 120 : 12*26 + 180);
 
   const {a,b} = draw.pairs[0];
   const s1 = draw.slotOrder[0], s2 = draw.slotOrder[1];
@@ -5624,10 +5739,18 @@ async function playCardDrawAnimation(draw){
   // Suspense : les 2 cartes qui vont être retournées se mettent à
   // luire avant la révélation, avec un son qui monte en tension —
   // aucune incidence sur le tirage, déjà déterminé au-dessus.
+  setTitre('Deux cartes…');
+  await wait(reduceMotion ? 80 : 240);
+
+  /* Suspense gradue : 700 ms sur une commune, jusqu'a 1580 ms sur le
+     jackpot. C'est le seul endroit ou l'on peut faire durer sans ennuyer,
+     parce que la duree est proportionnelle a ce qui est en jeu. */
+  const susp = reduceMotion ? 220 : (480 + tier*220);
   cardEls[s1].classList.add('suspense');
   cardEls[s2].classList.add('suspense');
-  playRiser(680);
-  await wait(680);
+  setTitre(tier >= 5 ? 'TOUT SE JOUE MAINTENANT' : gros ? 'Ca se joue…' : 'Suspense…');
+  playRiser(susp);
+  await wait(susp);
   cardEls[s1].classList.remove('suspense');
   cardEls[s2].classList.remove('suspense');
 
@@ -5635,15 +5758,51 @@ async function playCardDrawAnimation(draw){
   // temps ont l'air d'un mécanisme, pas d'un tirage. La première part,
   // la seconde suit une fraction de seconde après.
   cardEls[s1].classList.add('flipped');
-  await wait(220);
+  await wait(reduceMotion ? 60 : 240);
   cardEls[s2].classList.add('flipped');
-  await wait(700);
+  /* revealImpact tombait 700 ms APRES le second retournement, donc
+     completement desynchronise de ce qu'on regardait. Il est cale sur la
+     fin du retournement, avec le flash, pour ne faire qu'un seul coup. */
+  await wait(reduceMotion ? 60 : 300);
+  cardDrawOverlay.classList.remove('tension');
   revealImpact();
+  flash();
+
+  /* Le total montait d'un coup, sans animation. Il se compte maintenant,
+     puis se tamponne. */
   if(cardDrawTotal){
-    cardDrawTotal.textContent = 'Total : '+draw.total + (draw.isDouble ? '  —  DOUBLE ! ⚡ Relancez pour la paire bonus' : '');
+    const suffixe = draw.isDouble ? '  —  DOUBLE ! ⚡ Relancez pour la paire bonus' : '';
+    if(reduceMotion){
+      cardDrawTotal.textContent = 'Total : ' + draw.total + suffixe;
+    } else {
+      const t0 = performance.now(), duree = 420, depart = Math.max(2, draw.total - 5);
+      await new Promise(res=>{
+        const pas = ()=>{
+          const u = Math.min(1, (performance.now()-t0)/duree);
+          const v = Math.round(depart + (draw.total-depart)*(1-Math.pow(1-u,3)));
+          cardDrawTotal.textContent = 'Total : ' + v;
+          if(u < 1) requestAnimationFrame(pas);
+          else {
+            cardDrawTotal.textContent = 'Total : ' + draw.total + suffixe;
+            cardDrawTotal.classList.remove('stamp');
+            void cardDrawTotal.offsetWidth;
+            cardDrawTotal.classList.add('stamp');
+            res();
+          }
+        };
+        requestAnimationFrame(pas);
+      });
+    }
   }
-  await wait(draw.isDouble ? 1600 : 900);
+  setTitre(draw.isDouble ? 'DOUBLE !' : 'Le pion avance');
+
+  /* Fin : 330 a 1030 ms d'image figee avant, ramenees au strict
+     necessaire pour lire le total. Le double garde sa pause longue,
+     l'animateur doit avoir le temps d'annoncer la relance. */
+  await wait(reduceMotion ? 200 : (draw.isDouble ? 1500 : 560));
   cardDrawOverlay.classList.remove('show');
+  // laisse le fondu de sortie se jouer avant que le pion ne parte
+  if(!reduceMotion) await wait(320);
 }
 
 function placeLabel(idx){

@@ -442,9 +442,50 @@ html.display-mode .display-badge{ display:block; }
 /* ---------- Overlay de tirage de cartes (remplace les dés) ---------- */
 .card-draw-overlay{
   position:fixed;inset:0;z-index:55;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
-  background:rgba(6,4,1,.86);opacity:0;visibility:hidden;transition:opacity .25s ease;padding:20px;
+  background:rgba(6,4,1,.86);opacity:0;visibility:hidden;padding:20px;
+  /* visibility DOIT etre transitionnee avec un delai egal a la duree du
+     fondu : sans ca elle bascule a hidden instantanement a la fermeture,
+     l'overlay disparait d'un bloc et la transition d'opacite se joue sur
+     un element deja invisible — il n'y avait donc aucun fondu de sortie. */
+  transition:opacity .32s ease, visibility 0s linear .32s;
 }
-.card-draw-overlay.show{opacity:1;visibility:visible}
+.card-draw-overlay.show{opacity:1;visibility:visible;transition:opacity .22s ease, visibility 0s}
+
+/* ---------- Cinematique du tirage ---------- */
+/* Distribution en cascade : les 12 cartes etaient inserees dans la meme
+   frame, donc elles apparaissaient toutes d'un bloc, suivies de 400 ms
+   de vide. Elles tombent maintenant une par une. */
+@keyframes cardDeal{
+  from{ transform:translateY(-46%) scale(.82) rotate(var(--rz,0deg)); opacity:0 }
+  60%{ opacity:1 }
+  to{ transform:none; opacity:1 }
+}
+.mini-card.dealing{ animation:cardDeal .32s cubic-bezier(.2,.95,.3,1) backwards; animation-delay:var(--d,0ms) }
+
+/* Tension : reservee aux gros lots. Le plateau 3D est cache derriere le
+   fond a 86 % d'opacite, donc une secousse de camera ne se verrait pas :
+   c'est la grille elle-meme qui tremble. */
+@keyframes drawTension{
+  0%,100%{ transform:translate3d(0,0,0) }
+  25%{ transform:translate3d(-0.5%,0.3%,0) }
+  50%{ transform:translate3d(0.55%,-0.35%,0) }
+  75%{ transform:translate3d(-0.3%,-0.2%,0) }
+}
+.card-draw-overlay.tension .card-grid{ animation:drawTension .42s ease-in-out infinite }
+.card-draw-overlay.tension{ background:rgba(14,3,1,.90) }
+
+/* Le total apparaissait d'un coup, sans la moindre animation. */
+@keyframes totalStamp{
+  0%{ transform:scale(2.3); opacity:0; filter:blur(.14em) }
+  55%{ transform:scale(.93); opacity:1; filter:blur(0) }
+  100%{ transform:scale(1); opacity:1 }
+}
+.card-draw-total.stamp{ animation:totalStamp .44s cubic-bezier(.2,1.55,.35,1) }
+
+/* Flash de revelation, cale sur le retournement de la seconde carte. */
+.draw-flash{ position:absolute;inset:0;pointer-events:none;background:#fff;opacity:0;z-index:2 }
+@keyframes drawFlash{ from{opacity:.62} to{opacity:0} }
+.draw-flash.on{ animation:drawFlash .36s ease-out }
 
 /* ---------- Bulle de règles plein écran (touche M) ----------
    Tout est dimensionné en % (du parent) et en em, JAMAIS en vh/vw : sur la
@@ -1424,7 +1465,8 @@ if(new URLSearchParams(location.search).get('view')==='display'){
   </div>
 
   <div class="card-draw-overlay" id="cardDrawOverlay" aria-hidden="true">
-    <div class="card-draw-title">Tirage en cours…</div>
+    <div class="draw-flash" id="drawFlash"></div>
+    <div class="card-draw-title" id="cardDrawTitle">Tirage en cours…</div>
     <div class="card-grid" id="cardGrid"></div>
     <div class="card-draw-total" id="cardDrawTotal"></div>
   </div>
