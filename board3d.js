@@ -861,7 +861,14 @@ const _msaaFaible = (Math.min(window.innerWidth, window.innerHeight) <= 520)
                  || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
 const msaaTarget = new THREE.WebGLRenderTarget(1, 1, {
   type: THREE.HalfFloatType,
-  samples: _msaaFaible ? 0 : 4,
+  /* 2 et non 4 : mesure faite, en 1920x1080 une cible RGBA16F multi-
+     echantillonnee x4 occupe 116 Mo et demande 5 Go/s de bande passante
+     rien que pour resoudre le tampon a chaque image — 261 Mo et 11 Go/s
+     quand une tele 1080p est pilotee par un portable haute densite. Sur
+     un GPU integre c'est 10 a 45 % de TOUTE la bande passante memoire de
+     la machine. A 2 echantillons la facture est divisee par deux et la
+     difference sur les aretes ne se voit pratiquement pas. */
+  samples: _msaaFaible ? 0 : 2,
 });
 const composer = new EffectComposer(renderer, msaaTarget);
 composer.addPass(new RenderPass(scene, camera));
@@ -1691,7 +1698,11 @@ const tileGoldMat = new THREE.MeshStandardMaterial({
      halo de bloom des zones claires voisines. Ne pas monter au-dela de
      .30, il se desature vers le jaune pale. */
   color:new THREE.Color(GOLD), roughness:.28, metalness:.9,
-  emissive:new THREE.Color(GOLD), emissiveIntensity:.22,
+  /* .30 est le plafond utile mesuré : au-delà l'or se désature vers un
+     jaune pâle et perd sa couleur de métal. À .30 la collerette gagne
+     +94 % de luminance par rapport au .12 d'origine, sans rien devoir au
+     bloom — donc l'or reste doré même quand le mode éco coupe le bloom. */
+  emissive:new THREE.Color(GOLD), emissiveIntensity:.30,
   /* Pas de normalMap sur l'or. Sur un materiau tres metallique, perturber
      les normales renvoie une grande partie des rayons hors de la camera :
      le metal s'assombrit globalement au lieu de gagner du relief. Seule la
@@ -3871,6 +3882,26 @@ function makeStarTexture(){
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 
+function makeSmokeTexture(){
+  const n = 96, c = document.createElement('canvas'); c.width = c.height = n;
+  const x = c.getContext('2d');
+  /* Bouffée de fumée : un noyau doux, puis trois lobes décalés pour casser
+     le cercle parfait — une fumée parfaitement ronde se lit comme une
+     tache, pas comme de la fumée. */
+  const lobe = (cx, cy, r, a)=>{
+    const g = x.createRadialGradient(cx, cy, 0, cx, cy, r);
+    g.addColorStop(0,   'rgba(255,255,255,'+a+')');
+    g.addColorStop(0.45,'rgba(255,255,255,'+(a*0.55)+')');
+    g.addColorStop(1,   'rgba(255,255,255,0)');
+    x.fillStyle = g; x.beginPath(); x.arc(cx, cy, r, 0, Math.PI*2); x.fill();
+  };
+  lobe(n*0.50, n*0.52, n*0.42, 0.85);
+  lobe(n*0.36, n*0.42, n*0.26, 0.55);
+  lobe(n*0.63, n*0.44, n*0.24, 0.50);
+  lobe(n*0.52, n*0.66, n*0.22, 0.45);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+
 /* Matériau commun : taille, couleur et opacité PAR PARTICULE, ce que
    THREE.PointsMaterial ne sait pas faire (une seule taille pour tout le
    nuage). Une dizaine de lignes de shader évitent d'avoir à créer un
@@ -3878,6 +3909,7 @@ function makeStarTexture(){
 function makeFxPointsMaterial(map){
   return new THREE.ShaderMaterial({
     uniforms: { map: { value: map }, uProj: { value: 1000 } },
+
     vertexShader: `
       attribute float aSize;
       attribute float aAlpha;
@@ -3906,11 +3938,31 @@ function makeFxPointsMaterial(map){
         if(t.a < 0.01) discard;
         gl_FragColor = vec4(vColor, 1.0) * t * vAlpha;
       }`,
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    transparent: true, depthWrite: false,
+    /* Fusion additive sur la COULEUR, mais surtout PAS sur l'alpha.
+
+       Le rendu 3D se fait sur un canvas transparent (renderer alpha:true)
+       et la photo de fond est une image CSS posée DERRIERE ce canvas. Une
+       AdditiveBlending standard ajoute aussi dans la couche alpha : la ou
+       les particules passent, le canvas devient opaque, la photo se
+       retrouve masquee, et on voit le vide sombre de la scene — une
+       ellipse NOIRE suivait donc chaque bouffee. Mesure faite : le pixel
+       sortait a (1,1,1).
+
+       On garde donc SrcAlpha/One sur la couleur, et Zero/One sur l'alpha :
+       la destination alpha n'est jamais modifiee, le canvas reste aussi
+       transparent qu'avant et la photo continue de se voir au travers. */
+    blending: THREE.CustomBlending,
+    blendEquation: THREE.AddEquation,
+    blendSrc: THREE.SrcAlphaFactor,
+    blendDst: THREE.OneFactor,
+    blendEquationAlpha: THREE.AddEquation,
+    blendSrcAlpha: THREE.ZeroFactor,
+    blendDstAlpha: THREE.OneFactor,
   });
 }
 
-const FX_FLAME_MAX = 170, FX_STAR_MAX = 130;
+const FX_FLAME_MAX = 170, FX_STAR_MAX = 130, FX_SMOKE_MAX = 110;
 function makeFxSystem(count, map){
   const geo = new THREE.BufferGeometry();
   const pos   = new Float32Array(count*3);
@@ -3933,6 +3985,22 @@ function makeFxSystem(count, map){
 }
 const fxFlames = makeFxSystem(FX_FLAME_MAX, makeEmberTexture());
 const fxStars  = makeFxSystem(FX_STAR_MAX,  makeStarTexture());
+/* Fumée en fusion ADDITIVE, comme les deux autres, et non en mélange
+   normal comme on pourrait le croire.
+
+   Raison : le rendu 3D se fait sur un canvas TRANSPARENT (le renderer est
+   créé avec alpha:true) et la photo de fond est une image CSS posée
+   DERRIÈRE ce canvas — elle n'est pas dans la scène. Une fumée en mélange
+   normal se mélangerait donc au vide de la cible de rendu, pas à la photo :
+   mesuré, elle sortait en noir pur (1,1,1) au lieu de gris.
+
+   Une fumée additive et sombre se lit de toute façon très bien : près d'un
+   feu, un panache EST éclairé par les flammes. On reste donc en additif,
+   avec une couleur volontairement basse pour rester un voile et non une
+   source lumineuse. Dessinée avant les braises (renderOrder), pour que les
+   étincelles passent devant le panache au lieu de s'y noyer. */
+const fxSmoke  = makeFxSystem(FX_SMOKE_MAX, makeSmokeTexture());
+fxSmoke.pts.renderOrder = -1;
 
 /* Budget dégressif : le mode éco coupe tout, et la qualité dégradée
    réduit le nombre de particules au lieu de faire ramer l'appareil. */
@@ -4001,6 +4069,25 @@ function spawnArrivalFx(x, y, z, level){
   }
   fxStars.live = (fxStars.live + nS) % fxStars.count;
   if(nS) fxStars.pts.visible = true;
+
+  /* Panache de fumée sous la gerbe : sans lui, les braises partent d'un
+     point vide. Avec, l'explosion a un pied. */
+  const nK = fxBudget(Math.round(9 + lvl*9));
+  for(let k=0;k<nK;k++){
+    const i = (fxSmoke.live + k) % fxSmoke.count;
+    const a = Math.random()*Math.PI*2;
+    const gris = 0.15 + Math.random()*0.12;
+    fxEmit(fxSmoke, i, x + Math.cos(a)*Math.random()*0.42, y + 0.05, z + Math.sin(a)*Math.random()*0.42, {
+      vx: Math.cos(a)*(0.50 + Math.random()*0.70),
+      vy: 0.70 + Math.random()*0.80,
+      vz: Math.sin(a)*(0.50 + Math.random()*0.70),
+      r: gris*1.30, g: gris*1.02, b: gris*0.80,
+      size: 0.15 + Math.random()*0.13 + lvl*0.016,
+      max: 1.15 + Math.random()*0.85,
+    });
+  }
+  fxSmoke.live = (fxSmoke.live + nK) % fxSmoke.count;
+  if(nK) fxSmoke.pts.visible = true;
 }
 
 /* ---------- Traînée de braises et d'étoiles derrière le pion ----------
@@ -4020,43 +4107,61 @@ function spawnTrailFx(x, y, z, dt, intensity){
   if(lv >= 4){ _trailAcc = 0; return; }        // appareil déjà à la peine
   const k = Math.max(0, Math.min(1, intensity));
   if(k < 0.05){ _trailAcc = 0; return; }
-  const rate = (lv >= 2 ? 42 : 78) * k;
+  const rate = (lv >= 2 ? 58 : 105) * k;
   _trailAcc += dt * rate;
   let n = Math.floor(_trailAcc);
   if(n <= 0) return;
   _trailAcc -= n;
-  if(n > 8) n = 8;                              // garde-fou anti-rafale
+  if(n > 10) n = 10;                            // garde-fou anti-rafale
 
+  let nf = 0, ns = 0, nk = 0;
   for(let c=0;c<n;c++){
     const a = Math.random()*Math.PI*2;
-    const r = Math.random()*0.16;
+    const r = Math.random()*0.20;
+
+    /* Une bouffée de fumée sur deux émissions. C'est elle qui donne le
+       volume : des braises seules font des points qui montent, la fumée
+       leur donne un panache auquel s'accrocher. Elle part un peu plus bas
+       et un peu en retrait, comme si elle etait laissée sur place. */
+    if(c % 2 === 0){
+      const i = (fxSmoke.live + nk) % fxSmoke.count; nk++;
+      const gris = 0.13 + Math.random()*0.10;
+      fxEmit(fxSmoke, i, x + Math.cos(a)*r*1.4, y + 0.06, z + Math.sin(a)*r*1.4, {
+        vx: Math.cos(a)*0.24, vy: 0.42 + Math.random()*0.42, vz: Math.sin(a)*0.24,
+        // voile légèrement chaud : il sort d'un feu, pas d'un pot d'échappement
+        r: gris*1.30, g: gris*1.02, b: gris*0.80,
+        size: 0.11 + Math.random()*0.09,
+        max: 0.95 + Math.random()*0.75,
+      });
+      fxSmoke.pts.visible = true;
+    }
+
     // une étoile de temps en temps au milieu des braises, pour scintiller
-    const star = Math.random() < 0.22;
-    const sys = star ? fxStars : fxFlames;
-    const i = (sys.live + c) % sys.count;
-    if(star){
-      fxEmit(sys, i, x + Math.cos(a)*r, y + 0.10 + Math.random()*0.22, z + Math.sin(a)*r, {
-        vx: Math.cos(a)*0.32, vy: 0.55 + Math.random()*0.55, vz: Math.sin(a)*0.32,
-        r: 1.0, g: 0.93, b: 0.70 + Math.random()*0.25,
-        size: 0.090 + Math.random()*0.075,
-        max: 0.55 + Math.random()*0.40,
+    if(Math.random() < 0.26){
+      const i = (fxStars.live + ns) % fxStars.count; ns++;
+      fxEmit(fxStars, i, x + Math.cos(a)*r, y + 0.12 + Math.random()*0.26, z + Math.sin(a)*r, {
+        vx: Math.cos(a)*0.40, vy: 0.70 + Math.random()*0.70, vz: Math.sin(a)*0.40,
+        r: 1.0, g: 0.94, b: 0.72 + Math.random()*0.24,
+        size: 0.115 + Math.random()*0.090,
+        max: 0.60 + Math.random()*0.45,
         spin: 6 + Math.random()*6,
       });
+      fxStars.pts.visible = true;
     } else {
+      const i = (fxFlames.live + nf) % fxFlames.count; nf++;
       const heat = 1 - Math.random()*0.5;
-      fxEmit(sys, i, x + Math.cos(a)*r, y + 0.05, z + Math.sin(a)*r, {
-        vx: Math.cos(a)*0.22, vy: 0.75 + Math.random()*0.75, vz: Math.sin(a)*0.22,
+      fxEmit(fxFlames, i, x + Math.cos(a)*r, y + 0.05, z + Math.sin(a)*r, {
+        vx: Math.cos(a)*0.26, vy: 0.85 + Math.random()*0.85, vz: Math.sin(a)*0.26,
         r: 1.0, g: 0.40 + heat*0.40, b: 0.08 + heat*0.20,
-        size: 0.090 + Math.random()*0.090,
-        max: 0.46 + Math.random()*0.36,
+        size: 0.115 + Math.random()*0.110,
+        max: 0.50 + Math.random()*0.40,
       });
+      fxFlames.pts.visible = true;
     }
-    sys.pts.visible = true;
   }
-  // avance les curseurs des deux systèmes : on ne sait pas combien de
-  // chaque type ont été émis, on décale donc les deux du même nombre
-  fxFlames.live = (fxFlames.live + n) % fxFlames.count;
-  fxStars.live  = (fxStars.live  + n) % fxStars.count;
+  fxFlames.live = (fxFlames.live + nf) % fxFlames.count;
+  fxStars.live  = (fxStars.live  + ns) % fxStars.count;
+  fxSmoke.live  = (fxSmoke.live  + nk) % fxSmoke.count;
 }
 
 function updateFxSystem(sys, dt, gravity, drag, shrink){
@@ -4085,14 +4190,16 @@ function updateFxSystem(sys, dt, gravity, drag, shrink){
 }
 function updateArrivalFx(dt){
   // les flammes montent (gravité positive) et s'éteignent en rétrécissant ;
-  // les étoiles retombent et scintillent
+  // les étoiles retombent et scintillent ; la fumée monte lentement et
+  // GROSSIT en se diluant — d'où un « rétrécissement » négatif
+  if(fxSmoke.pts.visible)  updateFxSystem(fxSmoke,  dt,  0.42, 2.6, -1.35);
   if(fxFlames.pts.visible) updateFxSystem(fxFlames, dt,  1.15, 1.9, 0.62);
   if(fxStars.pts.visible)  updateFxSystem(fxStars,  dt, -3.10, 0.5, 0.35);
 }
 /* Coupure nette : appelée au redémarrage d'une partie pour qu'aucune
    braise ne survive à un C. */
 function clearArrivalFx(){
-  [fxFlames, fxStars].forEach(sys=>{
+  [fxFlames, fxStars, fxSmoke].forEach(sys=>{
     for(let i=0;i<sys.count;i++){ sys.state[i].life = sys.state[i].max; sys.alpha[i] = 0; }
     sys.geo.attributes.aAlpha.needsUpdate = true;
     sys.pts.visible = false;
@@ -4789,17 +4896,54 @@ function setShadowSoft(soft){
 }
 function applyQuality(level){
   QUALITY.level = level;
-  /* 0.6 au cran le plus bas rendait a 60 % de resolution : l'image
-     devenait franchement mauvaise, ce qui est pire que quelques images
-     perdues sur un ecran de diffusion. 0.78 reste un vrai gain de charge
-     (-39 % de pixels) sans que ca se voie a ce point. */
-  const dpr = level>=5 ? 0.78 : level>=4 ? 0.9 : level>=2 ? 1 : level>=1 ? Math.min(DPR_MAX, 1.25) : DPR_MAX;
+  /* BOUCLE DE RETROACTION — la cause probable du « ça ressaute ».
+     Changer de cran declenche setShadowSoft et/ou setEcoMode, qui font un
+     scene.traverse posant needsUpdate sur TOUS les materiaux : le moteur
+     recompile alors ses shaders, ce qui coute plusieurs images d'un coup.
+     Sans garde-fou, qualityTick mesure ces images comme lentes et
+     declenche aussitot le cran suivant, qui recompile a son tour... en
+     cascade jusqu'en bas. On suspend donc toute mesure pendant 1,8 s
+     apres chaque changement, le temps que la recompilation passe et que
+     la cadence se stabilise. */
+  /* MEME BASE DE TEMPS que qualityTick, qui recoit performance.now()/1000
+     depuis animate() — et non clock.getElapsedTime(), qui part de zero a
+     la creation de l'horloge : melanger les deux rendrait la grace
+     inoperante. */
+  QUALITY.armedAt = performance.now()/1000 + 1.8;
+  QUALITY.samples = 0; QUALITY.slow = 0; QUALITY.fast = 0;
+  /* La resolution de rendu est de LOIN le changement le plus visible :
+     elle ne bouge donc plus qu'a partir du cran 3. Les crans 1 et 2 ne
+     touchent que des choses imperceptibles (resolution du bloom, type
+     d'ombre), de sorte qu'une degradation legere ne se voie pas du tout.
+     Au cran le plus bas, 0.78 et non 0.6 : rendre a 60 % de resolution
+     est pire, sur un ecran de diffusion, que quelques images perdues. */
+  const dpr = level>=5 ? 0.78 : level>=4 ? 0.9 : level>=3 ? 1 : DPR_MAX;
+  const eco = level >= 5;
+  const bs  = bloomScaleForLevel(level);
+  /* Rien de reellement different : on ne touche a rien. Les crans 1 et 2
+     partagent la meme resolution et le meme etat de mode eco ; sans cette
+     sortie, franchir l'un d'eux relancait toute la chaine de destruction
+     et reallocation des cibles de rendu pour un resultat identique. */
+  if(dpr === _qDpr && eco === _qEco && bs === _qBloom) return;
+  _qDpr = dpr; _qEco = eco; _qBloom = bs;
+
   if(renderer.getPixelRatio() !== dpr) renderer.setPixelRatio(dpr);
-  setEcoMode(level >= 5);
-  if(!ecoMode) setShadowSoft(level < 2);
+  setEcoMode(eco);
+  /* setShadowSoft N'EST PLUS APPELE ICI. C'etait le poste le plus cher de
+     tout le changement de cran : shadowMapType fait partie de la cle de
+     cache des programmes de three, donc en basculer le type force une
+     VRAIE recompilation GLSL de 8 a 15 programmes, soit 0,2 a 1,5 s de
+     gel — pour un bord d'ombre a peine plus net. Le type d'ombre est
+     desormais fige une fois pour toutes au chargement, selon le profil de
+     l'appareil, comme l'est deja le nombre d'echantillons du MSAA. */
   resize();
 }
-function bloomScaleForLevel(level){ return level>=3 ? 0.25 : 0.5; }
+/* Dernier etat applique, pour ne rien refaire quand rien ne change. */
+let _qDpr = null, _qEco = null, _qBloom = null;
+/* Resolution du bloom : divisee des le cran 1. C'est le premier levier
+   parce que c'est le seul qui ne se voie pratiquement pas — un halo est
+   flou par nature. */
+function bloomScaleForLevel(level){ return level>=1 ? 0.25 : 0.5; }
 /* ---------- Échelle de qualité automatique, DANS LES DEUX SENS ----------
 
    Ce qui n'allait pas, et que l'animateur a décrit par « au bout de
@@ -4891,6 +5035,11 @@ function qualityTick(realDt, now){
     QUALITY.locked = true;
   }
   else if(petitEcran || mobile) applyQuality(3);
+  /* Type d'ombre fige ici, une fois pour toutes : ombres douces sur un
+     ecran de diffusion, ombres simples sur telephone ou petit ecran. Il ne
+     bougera plus, pour qu'aucun changement de cran ne puisse declencher de
+     recompilation de shaders en plein direct. */
+  setShadowSoft(!(petitEcran || mobile));
   // Cran de depart : la remontee automatique ne depassera jamais ce niveau.
   QUALITY.base = QUALITY.level;
   QUALITY.floor = QUALITY.level;
@@ -4913,9 +5062,16 @@ function animate(){
 animate();
 
 /* ---------- Redimensionnement ---------- */
+let _rzW = 0, _rzH = 0, _rzPr = 0;
 function resize(){
   const w = wrap.clientWidth, h = wrap.clientHeight;
   if(w===0||h===0) return;
+  /* composer.setSize detruit et realloue la cible multi-echantillonnee
+     ET les onze cibles du bloom. Inutile de payer ca quand ni la taille
+     ni la densite de pixels n'ont bouge. */
+  const pr = renderer.getPixelRatio();
+  if(w === _rzW && h === _rzH && pr === _rzPr) return;
+  _rzW = w; _rzH = h; _rzPr = pr;
   renderer.setSize(w,h,false);
   composer.setSize(w,h);
   // facteur de projection des particules d'arrivee : depend de la hauteur
@@ -4925,6 +5081,7 @@ function resize(){
     const proj = (h * pr2) / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
     fxFlames.pts.material.uniforms.uProj.value = proj;
     fxStars.pts.material.uniforms.uProj.value  = proj;
+    fxSmoke.pts.material.uniforms.uProj.value  = proj;
   }
   const bs = bloomScaleForLevel(QUALITY.level);
   if(bs < 1) bloomPass.setSize(Math.round(w*bs), Math.round(h*bs));
