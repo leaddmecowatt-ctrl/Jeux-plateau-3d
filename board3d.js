@@ -4,7 +4,6 @@ import { GLTFLoader } from './vendor/three/examples/jsm/loaders/GLTFLoader.js';
 import { EffectComposer } from './vendor/three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from './vendor/three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from './vendor/three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { ShaderPass } from './vendor/three/examples/jsm/postprocessing/ShaderPass.js';
 
 /* =========================================================================
    PIKAPOLY — plateau 40 cases en vraie 3D (WebGL / three.js)
@@ -754,9 +753,11 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 /* 1.45 cramait en blanc pur les cases claires (vu en capture : la case
    Depart et sa voisine perdaient tout detail) et voilait l'image entiere.
    Verifie en capture : a 1.12 (premier essai) tout le plateau virait au
-   brun et les couleurs de categorie s'eteignaient. 1.28 garde le detail
-   dans les hautes lumieres sans eteindre les aplats colores. */
-renderer.toneMappingExposure = 1.28;
+   brun ; a 1.28 l'or restait terne et l'animateur a signale en direct que
+   "le dore ne s'affiche plus". 1.42 est a un cheveu de la valeur d'origine
+   (1.45) : l'or retrouve son eclat, et le peu de marge gagne suffit a ne
+   plus cramer les cases claires en blanc pur. */
+renderer.toneMappingExposure = 1.42;
 
 const scene = new THREE.Scene();
 
@@ -835,63 +836,34 @@ scene.add(camera);
    ce qui donne le rendu "jeu télévisé haut de gamme" au lieu d'un
    rendu plat. Seuil assez haut pour ne pas baver sur les textures
    photo/couleurs normales. */
-const composer = new EffectComposer(renderer);
-composer.addPass(new RenderPass(scene, camera));
-/* Seuil remonte 0.82 -> 0.90 et force baissee 0.55 -> 0.45 : a 0.82 les
-   photos de lot et les aplats colores des cases passaient le seuil et
-   bavaient, ce qui voilait tout le plateau. Seuls l'or emissif et les
-   effets additifs de celebration doivent depasser. */
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(1,1), 0.45, 0.4, 0.90);
-composer.addPass(bloomPass);
+/* Anticrenelage : cible de rendu MULTI-ECHANTILLONNEE (MSAA materiel),
+   et non plus une passe FXAA.
 
-/* Anticrenelage. Le rendu se fait dans une cible hors ecran (antialias:false
-   sur le WebGLRenderer, obligatoire avec l'EffectComposer), donc le MSAA du
-   navigateur ne s'applique pas : toutes les aretes du plateau sortaient en
-   escalier, tres visible sur le liser noir des cases. FXAA en passe finale
-   les lisse pour un cout quasi nul, sans fichier a vendorer. */
-const FXAAShader = {
-  uniforms: { tDiffuse: { value: null }, resolution: { value: new THREE.Vector2(1/1024, 1/1024) } },
-  vertexShader: `
-    varying vec2 vUv;
-    void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }
-  `,
-  fragmentShader: `
-    uniform sampler2D tDiffuse;
-    uniform vec2 resolution;
-    varying vec2 vUv;
-    #define SPAN_MAX 8.0
-    #define REDUCE_MUL (1.0/8.0)
-    #define REDUCE_MIN (1.0/128.0)
-    void main(){
-      vec2 inv = resolution;
-      vec3 luma = vec3(0.299, 0.587, 0.114);
-      vec3 rgbNW = texture2D(tDiffuse, vUv + vec2(-1.0,-1.0)*inv).rgb;
-      vec3 rgbNE = texture2D(tDiffuse, vUv + vec2( 1.0,-1.0)*inv).rgb;
-      vec3 rgbSW = texture2D(tDiffuse, vUv + vec2(-1.0, 1.0)*inv).rgb;
-      vec3 rgbSE = texture2D(tDiffuse, vUv + vec2( 1.0, 1.0)*inv).rgb;
-      vec4 texColor = texture2D(tDiffuse, vUv);
-      vec3 rgbM = texColor.rgb;
-      float lumaNW = dot(rgbNW, luma), lumaNE = dot(rgbNE, luma);
-      float lumaSW = dot(rgbSW, luma), lumaSE = dot(rgbSE, luma);
-      float lumaM  = dot(rgbM,  luma);
-      float lumaMin = min(lumaM, min(min(lumaNW,lumaNE), min(lumaSW,lumaSE)));
-      float lumaMax = max(lumaM, max(max(lumaNW,lumaNE), max(lumaSW,lumaSE)));
-      vec2 dir = vec2(-((lumaNW + lumaNE) - (lumaSW + lumaSE)),
-                       ((lumaNW + lumaSW) - (lumaNE + lumaSE)));
-      float dirReduce = max((lumaNW + lumaNE + lumaSW + lumaSE) * (0.25 * REDUCE_MUL), REDUCE_MIN);
-      float rcpDirMin = 1.0 / (min(abs(dir.x), abs(dir.y)) + dirReduce);
-      dir = min(vec2(SPAN_MAX), max(vec2(-SPAN_MAX), dir * rcpDirMin)) * inv;
-      vec3 rgbA = 0.5 * (texture2D(tDiffuse, vUv + dir*(1.0/3.0 - 0.5)).rgb +
-                         texture2D(tDiffuse, vUv + dir*(2.0/3.0 - 0.5)).rgb);
-      vec3 rgbB = rgbA*0.5 + 0.25 * (texture2D(tDiffuse, vUv + dir*(-0.5)).rgb +
-                                     texture2D(tDiffuse, vUv + dir*( 0.5)).rgb);
-      float lumaB = dot(rgbB, luma);
-      gl_FragColor = vec4((lumaB < lumaMin || lumaB > lumaMax) ? rgbA : rgbB, texColor.a);
-    }
-  `
-};
-const fxaaPass = new ShaderPass(FXAAShader);
-composer.addPass(fxaaPass);
+   Le rendu passe par l'EffectComposer, donc antialias:true sur le
+   WebGLRenderer ne sert a rien : la scene est dessinee dans une cible hors
+   ecran. Un premier correctif avait ajoute une passe FXAA, qui lisse bien
+   les aretes — mais FXAA est un anticrenelage PAR FLOU : il adoucit tout ce
+   qui presente des contrastes fins, donc en premier lieu le texte et les
+   photos de lot posees sur les cases. Compare en capture avant/apres, le
+   nom de la case passait de parfaitement lisible a illisible. Inacceptable.
+
+   EffectComposer accepte une cible de rendu fournie par l'appelant : on lui
+   en donne une avec samples:4, ce qui active le multi-echantillonnage
+   materiel de WebGL2. Les aretes sont lissees par le GPU au moment du
+   rendu, sans jamais toucher a l'interieur des surfaces — donc les textures
+   restent parfaitement nettes. */
+const msaaTarget = new THREE.WebGLRenderTarget(1, 1, {
+  type: THREE.HalfFloatType,
+  samples: 4,
+});
+const composer = new EffectComposer(renderer, msaaTarget);
+composer.addPass(new RenderPass(scene, camera));
+/* Seuil de bloom ramene de 0.90 a 0.83 et force de 0.45 a 0.52 : a 0.90
+   l'or emissif des cases ne passait plus le seuil du tout, et le plateau
+   perdait tout son eclat dore — c'etait le "le dore ne s'affiche plus"
+   rapporte en direct. 0.83 le laisse repasser sans faire baver les photos. */
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(1,1), 0.52, 0.4, 0.83);
+composer.addPass(bloomPass);
 
 /* Garde-fou anti-rognage des coins : au lieu d'un recul de caméra
    fixe (qui rapetissait tout le plateau en permanence, y compris de
@@ -1692,9 +1664,13 @@ function bevelledBox(w, h, d, bevel){
 const tileGoldMat = new THREE.MeshStandardMaterial({
   color:new THREE.Color(GOLD), roughness:.2, metalness:.9,
   emissive:new THREE.Color(GOLD), emissiveIntensity:.12,
-  normalMap: GOLD_MAPS.normalMap, roughnessMap: GOLD_MAPS.roughnessMap,
+  /* Pas de normalMap sur l'or. Sur un materiau tres metallique, perturber
+     les normales renvoie une grande partie des rayons hors de la camera :
+     le metal s'assombrit globalement au lieu de gagner du relief. Seule la
+     carte de rugosite est gardee — elle fait varier la brillance d'un point
+     a l'autre, ce qui suffit a casser l'aplat sans rien assombrir. */
+  roughnessMap: GOLD_MAPS.roughnessMap,
 });
-tileGoldMat.normalScale.set(0.55, 0.55);
 const tileBezelMat = new THREE.MeshStandardMaterial({
   color:0x0a0a0a, roughness:.5, metalness:.25,
   normalMap: TILE_MAPS.normalMap, roughnessMap: TILE_MAPS.roughnessMap,
@@ -4788,12 +4764,6 @@ function resize(){
   if(w===0||h===0) return;
   renderer.setSize(w,h,false);
   composer.setSize(w,h);
-  // FXAA travaille en pixels : sa resolution doit suivre la taille reelle
-  // de la cible de rendu (taille CSS x pixel ratio), sinon il lisse a cote.
-  {
-    const pr = renderer.getPixelRatio();
-    fxaaPass.material.uniforms.resolution.value.set(1/(w*pr), 1/(h*pr));
-  }
   // facteur de projection des particules d'arrivee : depend de la hauteur
   // reelle du rendu et du champ de vision, donc a recalculer ici
   {
