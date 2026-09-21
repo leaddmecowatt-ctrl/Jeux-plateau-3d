@@ -443,6 +443,7 @@ html.display-mode .display-badge{ display:block; }
 .card-draw-overlay{
   position:fixed;inset:0;z-index:55;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
   background:rgba(6,4,1,.86);opacity:0;visibility:hidden;padding:20px;
+  transform:translateZ(0);isolation:isolate;backface-visibility:hidden;   /* voir .rules-overlay */
   /* visibility DOIT etre transitionnee avec un delai egal a la duree du
      fondu : sans ca elle bascule a hidden instantanement a la fermeture,
      l'overlay disparait d'un bloc et la transition d'opacite se joue sur
@@ -498,6 +499,14 @@ html.display-mode .display-badge{ display:block; }
   position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;
   background:rgba(4,3,1,.88);opacity:0;visibility:hidden;transition:opacity .22s ease;
   padding:4%;font-size:18px;
+  /* Même remède que .celebration : un overlay fixe à l'intérieur de #app
+     pivoté, sans couche de composition propre, est peint DERRIÈRE le
+     canvas WebGL du plateau par Safari, quel que soit son z-index. Vu en
+     vidéo le 21/09 : la bulle passait sous le plateau. La couche est
+     rendue permanente. */
+  transform:translateZ(0);
+  isolation:isolate;
+  backface-visibility:hidden;
 }
 .rules-overlay.show{opacity:1;visibility:visible}
 .rules-bubble{
@@ -532,6 +541,7 @@ html.display-mode .display-badge{ display:block; }
 .mystery-overlay{
   position:fixed;inset:0;z-index:56;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
   background:rgba(6,4,1,.9);opacity:0;visibility:hidden;transition:opacity .25s ease;padding:20px;
+  transform:translateZ(0);isolation:isolate;backface-visibility:hidden;   /* voir .rules-overlay */
 }
 .mystery-overlay.show{opacity:1;visibility:visible}
 .mystery-stage{ position:relative;display:flex;gap:min(6vw,34px);perspective:1000px; }
