@@ -5315,7 +5315,7 @@ const RECAL = {
   miseEnd: 3300,                        // horizon du stock restant
   ratio: 0.59,                          // part reversée : marge 41 %
   games: Math.round(3300 / AVG_MISE),   // 367 parties
-  mystB: 3,                             // packs du coffret entamé, pour les lots mystère
+  mystB: 7,                             // boosters restants pour les lots mystère (stock au 21/09)
   recipe: [
     { cat:'jackpot300',  n:4  },   // ETB 30 ans
     { cat:'etb',         n:3  },   // coffrets ex entiers
@@ -5617,7 +5617,10 @@ function loadOutcomeState(){
    ce nombre sur les lots mystère du cycle (probabilité = boosters
    restants / lots mystère restants), jamais plus. Compteurs persistés
    avec la file. */
-const MYSTERY_BOOSTERS = 30;
+/* Stock réel au 21/09/2026 : il ne reste que 7 boosters pour les lots
+   mystère (stock séparé du « Booster du Marchand »). Jamais plus de 7
+   par pochette, quelle que soit la pochette. */
+const MYSTERY_BOOSTERS = 7;
 function newOutcomeState(){
   const batch = buildOutcomeBatch(OUTCOME_BATCH_SIZE);
   const mystN = batch.filter(c=>c==='alternative').length;
@@ -5654,6 +5657,19 @@ if(!recalRec){
   const mystN = batch.filter(c=>c==='alternative').length;
   outcomeState = { version: OUTCOME_BATCH_VERSION, batch, pos: 0, mystN, mystB: Math.min(RECAL.mystB, mystN) };
   saveOutcomeState();
+}
+/* La pochette déjà en mémoire du navigateur garde son propre compteur de
+   boosters mystère (mystB), posé à sa construction — changer la constante
+   ne la touche pas. On le remet donc UNE fois au stock réel (7, ou moins
+   s'il reste moins de lots mystère), sans toucher aux compteurs de
+   cagnotte ni à la file. Clé datée : ne se rejoue pas. */
+const MYST_CAP_KEY = 'pika_myst_cap';
+if(safeGetItem(MYST_CAP_KEY) !== '2026-09-21'){
+  const restants = outcomeState.batch.slice(outcomeState.pos).filter(c=>c==='alternative').length;
+  outcomeState.mystN = restants;
+  outcomeState.mystB = Math.min(MYSTERY_BOOSTERS, restants);
+  saveOutcomeState();
+  try{ localStorage.setItem(MYST_CAP_KEY, '2026-09-21'); }catch(e){}
 }
 // Un nouveau lot de résultats est régénéré automatiquement à
 // l'épuisement du précédent (jamais de rupture de stock) et à chaque
