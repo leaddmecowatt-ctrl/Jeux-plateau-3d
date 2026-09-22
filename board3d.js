@@ -927,6 +927,57 @@ function updateCornerSafety(dt){
   camera.updateProjectionMatrix();
 }
 
+/* ---------- Ombre de contact sous le pion ----------
+   La carte d'ombre donne bien une ombre PORTÉE, mais elle est douce et se
+   dilue justement sous les pieds — or c'est là que l'oeil cherche la preuve
+   que le personnage TOUCHE la surface. Toutes les productions de jeu en
+   direct doublent donc l'ombre portée d'un noircissement de contact serré
+   au point d'appui : c'est le détail qui fait basculer la lecture de
+   « collé devant le plateau » à « posé dessus », et il ne coûte qu'un
+   quadrilatère et une texture de 128 px dessinée une seule fois.
+
+   Le disque suit le pion à chaque image ; quand il saute, il s'élargit ET
+   s'efface — une ombre de contact perd son bord net dès qu'on décolle.
+   fog:false et toneMapped:false : c'est un artifice d'ancrage, pas un objet
+   de la scène, il ne doit subir ni brume ni courbe de tonalité. */
+const contactShadow = (() => {
+  const S = 128;
+  const cvs = document.createElement('canvas'); cvs.width = cvs.height = S;
+  const c = cvs.getContext('2d');
+  const g = c.createRadialGradient(S/2, S/2, 0, S/2, S/2, S/2);
+  g.addColorStop(0.00, 'rgba(0,0,0,0.82)');
+  g.addColorStop(0.40, 'rgba(0,0,0,0.44)');
+  g.addColorStop(0.76, 'rgba(0,0,0,0.10)');
+  g.addColorStop(1.00, 'rgba(0,0,0,0)');
+  c.fillStyle = g; c.fillRect(0,0,S,S);
+  const tex = new THREE.CanvasTexture(cvs);
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(1,1),
+    new THREE.MeshBasicMaterial({ map:tex, transparent:true, depthWrite:false,
+                                  fog:false, toneMapped:false })
+  );
+  mesh.rotation.x = -Math.PI/2;
+  mesh.renderOrder = 2;          // après la case, avant le pion
+  mesh.visible = false;
+  scene.add(mesh);
+  return mesh;
+})();
+function updateContactShadow(){
+  if(typeof player === 'undefined' || !player || !player.root || !player.root.parent){
+    contactShadow.visible = false; return;
+  }
+  const P = player.root.position;
+  const t = (typeof tiles !== 'undefined') ? tiles[currentIndex] : null;
+  const solY = (t && t.tileTopY !== undefined) ? t.tileTopY : 0.14;
+  const h = Math.max(0, P.y - solY);
+  const k = Math.min(1, h/1.6);                 // 0 au sol, 1 en haut du saut
+  const taille = 0.78 * (1 + k*0.85);
+  contactShadow.position.set(P.x, solY + 0.012, P.z);
+  contactShadow.scale.set(taille, taille, 1);
+  contactShadow.material.opacity = (1 - k*0.72) * 0.92;
+  contactShadow.visible = player.root.visible !== false;
+}
+
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0,0.3,0);
 controls.enableDamping = true;
@@ -1687,6 +1738,14 @@ function bevelledBox(w, h, d, bevel){
 }
 
 const tileGoldMat = new THREE.MeshStandardMaterial({
+  /* envMapIntensity 1.9. L'environnement de reflets existait déjà (le
+     dégradé studio passé au PMREM plus haut), mais aucun matériau ne lui
+     donnait de poids : à l'intensité par défaut, un métal placé dans un
+     environnement sombre reste mat quel que soit son "metalness". En le
+     portant à 1.9, l'or capte réellement le dégradé et cesse d'être une
+     couleur jaune pour devenir de la matière. Un seul nombre, et c'est le
+     changement le plus visible sur le plateau. */
+  envMapIntensity: 1.9,
   /* roughness .28 et non .2 : la roughnessMap MULTIPLIE cette valeur, et
      la carte procedurale a une moyenne de 0.72 — la rugosite effective
      tombait donc a 0.145 au lieu de 0.2. Sur un metal place dans un
@@ -1711,7 +1770,7 @@ const tileGoldMat = new THREE.MeshStandardMaterial({
   roughnessMap: GOLD_MAPS.roughnessMap,
 });
 const tileBezelMat = new THREE.MeshStandardMaterial({
-  color:0x0a0a0a, roughness:.5, metalness:.25,
+  color:0x0a0a0a, roughness:.5, metalness:.25, envMapIntensity:1.25,
   normalMap: TILE_MAPS.normalMap, roughnessMap: TILE_MAPS.roughnessMap,
 });
 /* TILE+0.115 et non TILE+0.09 : le biseau rentre les faces superieure et
@@ -1727,7 +1786,7 @@ const tileBezelGeo  = bevelledBox(TILE*0.97,0.035,TILE*0.97, 0.008);
 const tileBaseGeo = bevelledBox(TILE+0.05, 0.08, TILE+0.05, 0.014);
 const tileBodyGeo = bevelledBox(TILE, 0.14, TILE, 0.018);
 const baseTileMat = new THREE.MeshStandardMaterial({
-  color:0x050505, roughness:.6, metalness:.3,
+  color:0x050505, roughness:.6, metalness:.3, envMapIntensity:1.15,
   normalMap: TILE_MAPS.normalMap, roughnessMap: TILE_MAPS.roughnessMap,
 });
 const tileRivetGeo = new THREE.CylinderGeometry(0.035,0.035,0.02,8);
@@ -5198,6 +5257,7 @@ function animate(){
   _lastFrameAt = nowMs;
   if(!document.hidden && realDt > 0 && realDt < 1) qualityTick(realDt, nowMs/1000);
   frameStep(Math.min(clock.getDelta(), 0.05), clock.getElapsedTime());
+  updateContactShadow();
 }
 animate();
 
