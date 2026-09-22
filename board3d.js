@@ -2084,14 +2084,17 @@ for(let i=0;i<N_TILES;i++){
      la lumière, un léger satin (carte plastifiée), et l'ombre du pion vient
      s'y poser — c'est ce contact qui dit que le personnage est DESSUS.
      emissiveMap = la photo elle-même, à faible intensité : garantit que le
-     lot reste lisible même dans la partie la plus sombre du plateau. Sans
-     elle, une case à l'ombre deviendrait illisible ; avec elle trop forte,
-     on retrouverait l'aplat. 0.34 est le point d'équilibre vérifié en
-     rendu. */
+     lot reste lisible même dans la partie la plus sombre du plateau.
+     0.34 au premier réglage : trop fort. L'émissif S'AJOUTE à l'éclairage
+     reçu, et sur les photos claires (ETB, coffret : boîtes blanches) la
+     somme dépassait le seuil du flou lumineux — les cases brûlaient en
+     halo blanc, constaté en gros plan et sur la capture iPhone de
+     l'animateur. 0.10 suffit à la lisibilité à l'ombre sans jamais
+     franchir le seuil. */
   const faceMat = new THREE.MeshStandardMaterial({
     map: faceTex,
     roughness: 0.46, metalness: 0.0, envMapIntensity: 0.55,
-    emissive: new THREE.Color(0xffffff), emissiveMap: faceTex, emissiveIntensity: 0.34,
+    emissive: new THREE.Color(0xffffff), emissiveMap: faceTex, emissiveIntensity: 0.10,
   });
   const face = new THREE.Mesh(new THREE.PlaneGeometry(TILE*0.94,TILE*0.94), faceMat);
   face.rotation.x = -Math.PI/2;
