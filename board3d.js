@@ -713,7 +713,23 @@ try{
 /* 1,5x max : au-delà, l'image n'est pas visiblement plus nette sur un
    plateau de cette taille mais le flou lumineux coûte presque 2 fois plus
    (mesuré : bloom = ~17x le reste du rendu, proportionnel aux pixels). */
-const DPR_MAX = Math.min(window.devicePixelRatio||1, 1.5);
+/* Filtrage anisotrope au maximum pour TOUTE texture créée à partir d'ici.
+   Mesure faite dans le moteur : 179 textures sur 372 étaient en filtrage
+   par défaut (anisotropie 1). Vue en perspective — et la caméra est
+   désormais plus rasante — une case lointaine « bave » alors : sa photo et
+   son nom deviennent flous dans la profondeur. Posé une fois ici, avant la
+   création des textures, le réglage s'applique partout, y compris aux
+   photos de lot chargées plus tard. Coût négligeable sur tout GPU récent. */
+THREE.Texture.DEFAULT_ANISOTROPY = renderer.capabilities.getMaxAnisotropy();
+
+/* Plafond de résolution 1.5 -> 2 (polish 22/09). Mesuré : sur un écran
+   Retina (2x), le jeu se rendait à 1.5, soit 75 % de la finesse de l'écran,
+   puis étiré — le flou « qualité standard » constaté sur la télé et
+   l'iPhone. 2 couvre les écrans haute densité sans aller jusqu'à 3 (neuf
+   fois les pixels du 1x : le flou lumineux ne suivrait pas sur téléphone).
+   Si la machine peine, l'échelle de qualité automatique redescend d'elle-
+   même. */
+const DPR_MAX = Math.min(window.devicePixelRatio||1, 2);
 renderer.setPixelRatio(DPR_MAX);
 
 /* ---------- Perte du contexte WebGL ----------
@@ -1208,15 +1224,46 @@ scene.add(centerSpot);
 const key = new THREE.DirectionalLight(0xfff2df, 1.15);
 key.position.set(4.2,7,3.4);
 key.castShadow = true;
-key.shadow.mapSize.set(1024,1024);
-key.shadow.camera.left = -7; key.shadow.camera.right = 7;
-key.shadow.camera.top = 7; key.shadow.camera.bottom = -7;
+/* Ombre portée (polish 22/09). Mesuré : 1024 px sur une zone de 14 unités,
+   soit 73 px par unité — l'ombre du personnage tenait en une vingtaine de
+   pixels, une tache floue sans forme. Deux leviers :
+     - zone resserrée au plateau (12,8 au lieu de 14 : le plateau fait 10,
+       la marge couvre les lots flottants et le pion en bord de case) ;
+     - carte 2048 sur écran de diffusion, 1024 sur téléphone.
+   Résultat : 160 px par unité, 2,2 fois plus net — l'ombre prend enfin la
+   silhouette du personnage. */
+{
+  const _mobile = (Math.min(window.innerWidth, window.innerHeight) <= 520)
+               || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+  const S = _mobile ? 1024 : 2048;
+  key.shadow.mapSize.set(S, S);
+}
+key.shadow.camera.left = -6.4; key.shadow.camera.right = 6.4;
+key.shadow.camera.top = 6.4; key.shadow.camera.bottom = -6.4;
 key.shadow.camera.near = 1; key.shadow.camera.far = 20;
-key.shadow.bias = -0.0025;
+/* bias -0.0025 -> -0.0004 + normalBias 0.018. Un bias négatif fort DÉCOLLE
+   l'ombre de l'objet qui la projette (« peter-panning ») : l'ombre commençait
+   à distance des pieds, et c'est précisément ce vide que l'oeil lit comme
+   un personnage qui flotte — la mesure confirme que les semelles, elles,
+   touchent la case. Le normalBias traite l'acné d'ombre en décalant le long
+   de la normale, sans détacher l'ombre de son point de contact. */
+key.shadow.bias = -0.0004;
+key.shadow.normalBias = 0.018;
 scene.add(key);
 
-const rim = new THREE.DirectionalLight(0xffcf6b, 0.55);
-rim.position.set(-5,4,-4);
+/* Contre-jour aligné sur le SOLEIL DE LA PHOTO DE FOND (polish 22/09).
+   L'illustration derrière le plateau a une source de lumière évidente : un
+   soleil doré posé sur l'horizon, au centre, derrière la scène. Le contre-
+   jour du jeu, lui, venait de l'arrière-GAUCHE et restait faible (0,55) :
+   le plateau et le personnage étaient éclairés par un autre ciel que celui
+   qu'on voit derrière eux — c'est l'une des raisons pour lesquelles ils
+   semblaient posés sur l'image plutôt que dedans.
+   Recentré derrière et légèrement relevé, porté à 0,78 : l'arête haute des
+   cases et la silhouette du personnage attrapent un liseré doré qui vient
+   du même endroit que la lumière du décor. Pas de nouvelle source : on
+   corrige la direction d'une lumière existante. */
+const rim = new THREE.DirectionalLight(0xffcf6b, 0.78);
+rim.position.set(0.8,3.2,-7);
 scene.add(rim);
 
 /* Fill light froide, opposée à la key light : débouche les zones
@@ -2027,7 +2074,25 @@ for(let i=0;i<N_TILES;i++){
     // getFlatPhotoFace dessine désormais son propre fond + symbole)
     faceTex = getFlatPhotoFace(catKey, accentColor, null);
   }
-  const faceMat = new THREE.MeshBasicMaterial({map:faceTex});
+  /* Dessus de case ÉCLAIRÉ (polish 22/09). C'était un MeshBasicMaterial :
+     un matériau qui ignore la lumière ET les ombres — la ligne
+     « face.receiveShadow = true » plus bas ne faisait donc strictement
+     rien. Le dessus des 40 cases était un autocollant plat, toujours à la
+     même luminosité, sur lequel l'ombre du personnage ne se posait jamais :
+     l'effet exact « texture 2D collée sur un cube 3D ».
+     Désormais la photo est une surface physique : elle prend le modelé de
+     la lumière, un léger satin (carte plastifiée), et l'ombre du pion vient
+     s'y poser — c'est ce contact qui dit que le personnage est DESSUS.
+     emissiveMap = la photo elle-même, à faible intensité : garantit que le
+     lot reste lisible même dans la partie la plus sombre du plateau. Sans
+     elle, une case à l'ombre deviendrait illisible ; avec elle trop forte,
+     on retrouverait l'aplat. 0.34 est le point d'équilibre vérifié en
+     rendu. */
+  const faceMat = new THREE.MeshStandardMaterial({
+    map: faceTex,
+    roughness: 0.46, metalness: 0.0, envMapIntensity: 0.55,
+    emissive: new THREE.Color(0xffffff), emissiveMap: faceTex, emissiveIntensity: 0.34,
+  });
   const face = new THREE.Mesh(new THREE.PlaneGeometry(TILE*0.94,TILE*0.94), faceMat);
   face.rotation.x = -Math.PI/2;
   // Marge généreuse au-dessus du liseré : la carte (topGroup, qui
@@ -5363,7 +5428,13 @@ function qualityTick(realDt, now){
     applyQuality(Math.max(0, Math.min(QUALITY_LEVELS, q)));
     QUALITY.locked = true;
   }
-  else if(petitEcran || mobile) applyQuality(3);
+  /* Téléphone : cran 3 -> 2 (polish 22/09). Le cran de départ est aussi le
+     PLAFOND de remontée (QUALITY.base plus bas). Au cran 3, le rendu est à
+     la résolution 1x : sur un iPhone (écran 3x), le jeu était donc rendu
+     à un tiers de la finesse de l'écran, pour toujours — le flou constaté
+     sur la capture d'écran. Au cran 2 il se rend à DPR_MAX (2) ; si
+     l'appareil peine, l'échelle automatique redescend. */
+  else if(petitEcran || mobile) applyQuality(2);
   /* Type d'ombre fige ici, une fois pour toutes : ombres douces sur un
      ecran de diffusion, ombres simples sur telephone ou petit ecran. Il ne
      bougera plus, pour qu'aucun changement de cran ne puisse declencher de
