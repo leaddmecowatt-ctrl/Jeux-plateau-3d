@@ -209,8 +209,8 @@ await Promise.all(Object.entries(LOT_IMAGE_URLS).map(async ([k,url])=>{ LOT_IMAG
 const GOLD = '#e9c34a';
 const GOLD_BRIGHT = '#ffe27a';
 const SWATCH_COLORS = {
-  bronze:'#a9793a', blue:'#2f6fdc', red:'#e0323f', purple:'#9a5fe0',
-  green:'#33b46a', gold:'#e9c34a', danger:'#d62b2b',
+  bronze:'#243a78', blue:'#2f8ff0', red:'#e0323f', purple:'#9a5fe0',
+  green:'#33b46a', gold:'#e9c34a', danger:'#5e6b80',
   // 4 teintes dédiées pour dissocier clairement les 4 gros lots
   // (Duopack/Tripack/Coffret/ETB 30 ans) qui partageaient tous le
   // même "gold" auparavant, sur la légende ET sur les cases du
@@ -431,11 +431,24 @@ function getFlatPhotoFace(catKey, accentColor, badge){
   ctx.fillStyle = gloss; ctx.fillRect(0,0,size,size);
   ctx.restore();
 
-  roundRectPath(ctx,9,9,size-18,size-18,r);
-  ctx.shadowColor = accentColor; ctx.shadowBlur = size*0.035;
-  ctx.lineWidth = 10; ctx.strokeStyle = accentColor; ctx.stroke();
+  /* Filet de feuille d'or tout autour de la case, PUIS le liseré de
+     couleur de la catégorie juste à l'intérieur (22/09). Avant, le bord
+     était la seule couleur d'accent : deux cases voisines se touchaient
+     couleur contre couleur et, sur les communes (bronze), se fondaient
+     dans l'or du plateau. Le filet doré sépare chaque case de sa voisine
+     comme sur un plateau de luxe ; le dégradé clair/sombre en diagonale
+     imite le reflet d'une vraie feuille d'or. */
+  const leaf = ctx.createLinearGradient(0,0,size,size);
+  leaf.addColorStop(0.00,'#fff3b8'); leaf.addColorStop(0.28,GOLD);
+  leaf.addColorStop(0.52,'#9b7426'); leaf.addColorStop(0.76,'#f6d97c');
+  leaf.addColorStop(1.00,'#b88a2c');
+  roundRectPath(ctx,12,12,size-24,size-24,r);
+  ctx.lineWidth = 24; ctx.strokeStyle = leaf; ctx.stroke();
+  roundRectPath(ctx,28,28,size-56,size-56,r*0.9);
+  ctx.shadowColor = accentColor; ctx.shadowBlur = size*0.03;
+  ctx.lineWidth = 9; ctx.strokeStyle = accentColor; ctx.stroke();
   ctx.shadowBlur = 0;
-  roundRectPath(ctx,15,15,size-30,size-30,r*0.85);
+  roundRectPath(ctx,34,34,size-68,size-68,r*0.85);
   ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.stroke();
 
   // bandeau nom du lot en bas (jamais le prix)
@@ -828,86 +841,28 @@ function makeStudioBackdrop(){
    fond de la page (photo derrière le plateau) touche directement
    les cases, sans rectangle noir tout autour. */
 
-/* ==========================================================================
-   L'ARÈNE CÉLESTE — le monde de Pikapoly, construit en 3D
-   --------------------------------------------------------------------------
-   Avant : le ciel, le dragon et les rochers étaient une PHOTO CSS floutée à
-   22 px, posée derrière le canvas (#bgFill / .bg-band). La scène 3D ne
-   contenait que le plateau. Quoi qu'on fasse des matériaux, l'ensemble lisait
-   donc comme un plateau posé devant une affiche : le décor ne recevait pas la
-   lumière, ne reculait pas en perspective, et surtout ne se REFLÉTAIT nulle
-   part — l'or n'avait rien à refléter qu'un dégradé peint, d'où son aspect
-   "couleur jaune" plutôt que métal.
+/* Environnement de reflets pour l'or (bordures, cases, ornements) :
+   sans lui, le métal ne réagit qu'aux lumières ponctuelles et reste
+   plat/mat quel que soit son "metalness". C'est le dégradé studio
+   doré/noir dessiné ci-dessus — même ambiance que le plateau, aucun
+   fichier HDRI à charger. INVISIBLE : pas de scene.background, la
+   photo de fond de la page reste seule derrière le plateau.
 
-   Désormais le monde existe dans la scène : ciel, brume, rochers en
-   suspension, anneaux d'or et dragon sont de la géométrie. Ils sont éclairés
-   par les mêmes lumières que le plateau, ils reculent avec la caméra, et le
-   ciel sert D'ENVIRONNEMENT : c'est lui que l'or reflète.
-   ========================================================================= */
-
-/* Ciel équirectangulaire procédural : zénith indigo profond -> violet ->
-   embrasement doré à l'horizon, avec des bancs de nuages. Dessiné une fois
-   sur un canvas, aucun fichier à charger. Sert DEUX fois : fond visible de
-   la scène, et source de l'environnement de reflets (PMREM). */
-function makeSkyTexture(){
-  const w = 1024, h = 512;
-  const cvs = document.createElement('canvas'); cvs.width = w; cvs.height = h;
-  const ctx = cvs.getContext('2d');
-  const g = ctx.createLinearGradient(0,0,0,h);
-  /* Le haut du cadre doit rester NUIT. Premier essai : la bande chaude
-     commençait à 0,72 et occupait tout l'arrière-plan derrière le plateau,
-     qui s'y noyait (vérifié en rendu). Elle est descendue à 0,86 et
-     resserrée : l'embrasement devient un liseré d'horizon qui souligne la
-     silhouette du plateau au lieu de la manger. */
-  g.addColorStop(0.00, '#05071a');   // zénith, nuit haute
-  g.addColorStop(0.30, '#0d1030');
-  g.addColorStop(0.55, '#1b1740');
-  g.addColorStop(0.74, '#2e2352');   // bascule violette, tardive
-  g.addColorStop(0.86, '#6d4636');
-  g.addColorStop(0.93, '#c98f45');   // liseré d'embrasement, étroit
-  g.addColorStop(0.97, '#e8c483');
-  g.addColorStop(1.00, '#120d06');   // sous l'horizon : brume sombre
-  ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
-
-  // bancs de nuages : ellipses très étirées, opacité faible, accumulées
-  for(let i=0;i<190;i++){
-    const y = h*(0.46 + Math.random()*0.42);
-    const x = Math.random()*w;
-    const rx = 40 + Math.random()*190, ry = 3 + Math.random()*11;
-    // plus on est bas, plus le nuage prend la couleur chaude de l'horizon
-    const chaud = Math.min(1, Math.max(0, (y/h - 0.68)/0.3));
-    const lum = 150 + chaud*95;
-    ctx.fillStyle = 'rgba(' + Math.round(lum) + ',' + Math.round(lum*0.82) + ',' + Math.round(lum*0.66) + ',' + (0.030 + Math.random()*0.055) + ')';
-    ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI*2); ctx.fill();
-  }
-  // poussière d'étoiles dans la moitié haute
-  for(let i=0;i<420;i++){
-    const y = Math.random()*h*0.5, x = Math.random()*w;
-    const a = 0.10 + Math.random()*0.5;
-    ctx.fillStyle = 'rgba(255,248,224,' + a + ')';
-    ctx.fillRect(x, y, 1, 1);
-  }
-  const tex = new THREE.CanvasTexture(cvs);
-  tex.mapping = THREE.EquirectangularReflectionMapping;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
+   Rétabli le 22/09. Entre-temps l'or reflétait un ciel de nuit
+   procédural (zénith indigo). Or un métal n'a pas de couleur propre :
+   il prend celle de ce qu'il reflète, teintée de la sienne. Vu par la
+   caméra en plongée, le liseré entre les cases renvoyait le haut de ce
+   ciel — bleu nuit — et l'or virait au bronze sourd. L'animateur a
+   réclamé le retour de ce « reflet de feuille d'or » : il vient
+   d'ici, d'un environnement CHAUD, et de rien d'autre. */
 {
-  const sky = makeSkyTexture();
   const pmremGenerator = new THREE.PMREMGenerator(renderer);
   pmremGenerator.compileEquirectangularShader();
-  const envRT = pmremGenerator.fromEquirectangular(sky);
-  scene.environment = envRT.texture;   // ce que l'or reflète — INVISIBLE
-  /* PAS de scene.background. Le canvas reste transparent (alpha:true) et
-     c'est la PHOTO DE FOND de la page qui se voit derrière le plateau,
-     comme depuis toujours — l'animateur y tient, et il a raison : c'est
-     l'identité du jeu. Un premier essai posait ce ciel en fond de scène,
-     il recouvrait la photo. Le ciel ne sert donc plus qu'à une chose,
-     invisible mais décisive : donner à l'or quelque chose de riche à
-     refléter, et au décor une lumière d'ambiance cohérente. */
+  const studio = makeStudioBackdrop();
+  const envRT = pmremGenerator.fromEquirectangular(studio);
+  scene.environment = envRT.texture;
   pmremGenerator.dispose();
-  sky.dispose();
+  studio.dispose();
 }
 
 
@@ -1057,13 +1012,15 @@ composer.addPass(bloomPass);
    BASE_FOV dès que l'angle redevient sûr (vue de face par défaut =
    plateau au maximum, comme avant). */
 const BOARD_CORNER_R = (N_SIDE*CELL)/2 + 0.15;
-/* Hauteur d'échantillonnage 0.5 -> 1.45 : la garde ne regardait que le
-   plan des cases, alors que les PHOTOS DE LOT flottent bien au-dessus.
-   Le bord proche du plateau se faisait donc rogner dès que la caméra
-   descendait (constaté en rendu). On échantillonne aussi le milieu des
-   bords, pas seulement les 4 coins : de trois quarts, c'est un milieu de
-   bord qui sort du cadre en premier. */
-const _CORNER_Y = 1.45;
+/* Hauteur d'échantillonnage 0.5 (le dessus des cases) et marge de 7 %.
+   Un essai du 21/09 était monté à 1.45 et 13 %, pour ne pas rogner les
+   photos de lot flottantes — réglé à l'aveugle : le garde-fou recevait
+   alors dt = 0 et ne bougeait jamais le champ (voir animate()). Une fois
+   réparé, ces valeurs rapetissaient le plateau d'un quart en permanence.
+   Retour aux valeurs d'origine, éprouvées. Les milieux de bords restent
+   échantillonnés : de trois quarts, c'est parfois eux qui sortent en
+   premier. */
+const _CORNER_Y = 0.5;
 const boardCorners = [];
 for(const [cx,cz] of [[-1,-1],[1,-1],[1,1],[-1,1],[0,-1],[0,1],[-1,0],[1,0]]){
   boardCorners.push(new THREE.Vector3(cx*BOARD_CORNER_R, _CORNER_Y, cz*BOARD_CORNER_R));
@@ -1082,10 +1039,8 @@ function updateCornerSafety(dt){
     const tanH = (Math.abs(_cornerView.x)/depth)/camera.aspect;
     maxTan = Math.max(maxTan, tanV, tanH);
   }
-  // marge portée de 7 % à 13 % : à caméra basse le plateau arrive au ras
-  // du cadre, et 7 % ne suffisaient plus à lui laisser de l'air
   const targetFov = THREE.MathUtils.clamp(
-    THREE.MathUtils.radToDeg(2*Math.atan(maxTan/0.87)),
+    THREE.MathUtils.radToDeg(2*Math.atan(maxTan/0.93)),
     BASE_FOV, 76
   );
   camera.fov += (targetFov - camera.fov) * Math.min(1, dt*6);
@@ -1893,12 +1848,6 @@ function bevelledBox(w, h, d, bevel){
 }
 
 const tileGoldMat = new THREE.MeshStandardMaterial({
-  /* envMapIntensity 1.9 : l'or ne reflète plus un dégradé peint mais le
-     ciel réel de la scène (voir « L'ARÈNE CÉLESTE »). Au-dessus de 1, le
-     métal capte l'embrasement d'horizon et cesse d'être une couleur jaune
-     pour devenir de la matière. C'est le réglage le plus rentable de toute
-     la passe : un seul nombre, et le plateau change de catégorie. */
-  envMapIntensity: 1.9,
   /* roughness .28 et non .2 : la roughnessMap MULTIPLIE cette valeur, et
      la carte procedurale a une moyenne de 0.72 — la rugosite effective
      tombait donc a 0.145 au lieu de 0.2. Sur un metal place dans un
@@ -1923,7 +1872,7 @@ const tileGoldMat = new THREE.MeshStandardMaterial({
   roughnessMap: GOLD_MAPS.roughnessMap,
 });
 const tileBezelMat = new THREE.MeshStandardMaterial({
-  color:0x0a0a0a, roughness:.5, metalness:.25, envMapIntensity:1.25,
+  color:0x0a0a0a, roughness:.5, metalness:.25,
   normalMap: TILE_MAPS.normalMap, roughnessMap: TILE_MAPS.roughnessMap,
 });
 /* TILE+0.115 et non TILE+0.09 : le biseau rentre les faces superieure et
@@ -1939,7 +1888,7 @@ const tileBezelGeo  = bevelledBox(TILE*0.97,0.035,TILE*0.97, 0.008);
 const tileBaseGeo = bevelledBox(TILE+0.05, 0.08, TILE+0.05, 0.014);
 const tileBodyGeo = bevelledBox(TILE, 0.14, TILE, 0.018);
 const baseTileMat = new THREE.MeshStandardMaterial({
-  color:0x050505, roughness:.6, metalness:.3, envMapIntensity:1.15,
+  color:0x050505, roughness:.6, metalness:.3,
   normalMap: TILE_MAPS.normalMap, roughnessMap: TILE_MAPS.roughnessMap,
 });
 const tileRivetGeo = new THREE.CylinderGeometry(0.035,0.035,0.02,8);
@@ -5460,9 +5409,17 @@ function animate(){
   const realDt = _lastFrameAt ? (nowMs - _lastFrameAt)/1000 : 0;
   _lastFrameAt = nowMs;
   if(!document.hidden && realDt > 0 && realDt < 1) qualityTick(realDt, nowMs/1000);
+  /* getDelta() AVANT getElapsedTime() — l'ordre est vital. Dans three.js,
+     getElapsedTime() appelle lui-même getDelta() et remet le chrono à
+     l'instant présent : appelé en premier, il laissait au getDelta()
+     suivant un écart nul. Chaque image recevait alors dt = 0, et tout ce
+     qui avance avec le temps restait figé (animations du personnage,
+     particules, garde-fou de cadrage). Régression du 22/09, mesurée à la
+     sonde : dt valait 0 à toutes les images. */
+  const _dt = Math.min(clock.getDelta(), 0.05);
   const _t = clock.getElapsedTime();
   updateContactShadow();
-  frameStep(Math.min(clock.getDelta(), 0.05), _t);
+  frameStep(_dt, _t);
 }
 animate();
 
