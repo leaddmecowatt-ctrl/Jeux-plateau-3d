@@ -812,22 +812,437 @@ function makeStudioBackdrop(){
    fond de la page (photo derrière le plateau) touche directement
    les cases, sans rectangle noir tout autour. */
 
-/* Environnement de reflets pour l'or (bordures, cases, ornements) :
-   sans lui, le métal ne réagit qu'aux lumières ponctuelles et reste
-   plat/mat quel que soit son "metalness". On réutilise le dégradé
-   studio doré/noir déjà dessiné ci-dessus comme carte équirectangulaire
-   — même ambiance que le plateau, aucun fichier HDRI à charger. */
+/* ==========================================================================
+   L'ARÈNE CÉLESTE — le monde de Pikapoly, construit en 3D
+   --------------------------------------------------------------------------
+   Avant : le ciel, le dragon et les rochers étaient une PHOTO CSS floutée à
+   22 px, posée derrière le canvas (#bgFill / .bg-band). La scène 3D ne
+   contenait que le plateau. Quoi qu'on fasse des matériaux, l'ensemble lisait
+   donc comme un plateau posé devant une affiche : le décor ne recevait pas la
+   lumière, ne reculait pas en perspective, et surtout ne se REFLÉTAIT nulle
+   part — l'or n'avait rien à refléter qu'un dégradé peint, d'où son aspect
+   "couleur jaune" plutôt que métal.
+
+   Désormais le monde existe dans la scène : ciel, brume, rochers en
+   suspension, anneaux d'or et dragon sont de la géométrie. Ils sont éclairés
+   par les mêmes lumières que le plateau, ils reculent avec la caméra, et le
+   ciel sert D'ENVIRONNEMENT : c'est lui que l'or reflète.
+   ========================================================================= */
+
+/* Ciel équirectangulaire procédural : zénith indigo profond -> violet ->
+   embrasement doré à l'horizon, avec des bancs de nuages. Dessiné une fois
+   sur un canvas, aucun fichier à charger. Sert DEUX fois : fond visible de
+   la scène, et source de l'environnement de reflets (PMREM). */
+function makeSkyTexture(){
+  const w = 1024, h = 512;
+  const cvs = document.createElement('canvas'); cvs.width = w; cvs.height = h;
+  const ctx = cvs.getContext('2d');
+  const g = ctx.createLinearGradient(0,0,0,h);
+  /* Le haut du cadre doit rester NUIT. Premier essai : la bande chaude
+     commençait à 0,72 et occupait tout l'arrière-plan derrière le plateau,
+     qui s'y noyait (vérifié en rendu). Elle est descendue à 0,86 et
+     resserrée : l'embrasement devient un liseré d'horizon qui souligne la
+     silhouette du plateau au lieu de la manger. */
+  g.addColorStop(0.00, '#05071a');   // zénith, nuit haute
+  g.addColorStop(0.30, '#0d1030');
+  g.addColorStop(0.55, '#1b1740');
+  g.addColorStop(0.74, '#2e2352');   // bascule violette, tardive
+  g.addColorStop(0.86, '#6d4636');
+  g.addColorStop(0.93, '#c98f45');   // liseré d'embrasement, étroit
+  g.addColorStop(0.97, '#e8c483');
+  g.addColorStop(1.00, '#120d06');   // sous l'horizon : brume sombre
+  ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
+
+  // bancs de nuages : ellipses très étirées, opacité faible, accumulées
+  for(let i=0;i<190;i++){
+    const y = h*(0.46 + Math.random()*0.42);
+    const x = Math.random()*w;
+    const rx = 40 + Math.random()*190, ry = 3 + Math.random()*11;
+    // plus on est bas, plus le nuage prend la couleur chaude de l'horizon
+    const chaud = Math.min(1, Math.max(0, (y/h - 0.68)/0.3));
+    const lum = 150 + chaud*95;
+    ctx.fillStyle = 'rgba(' + Math.round(lum) + ',' + Math.round(lum*0.82) + ',' + Math.round(lum*0.66) + ',' + (0.030 + Math.random()*0.055) + ')';
+    ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI*2); ctx.fill();
+  }
+  // poussière d'étoiles dans la moitié haute
+  for(let i=0;i<420;i++){
+    const y = Math.random()*h*0.5, x = Math.random()*w;
+    const a = 0.10 + Math.random()*0.5;
+    ctx.fillStyle = 'rgba(255,248,224,' + a + ')';
+    ctx.fillRect(x, y, 1, 1);
+  }
+  const tex = new THREE.CanvasTexture(cvs);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 {
+  const sky = makeSkyTexture();
   const pmremGenerator = new THREE.PMREMGenerator(renderer);
   pmremGenerator.compileEquirectangularShader();
-  const envRT = pmremGenerator.fromEquirectangular(makeStudioBackdrop());
-  scene.environment = envRT.texture;
+  const envRT = pmremGenerator.fromEquirectangular(sky);
+  scene.environment = envRT.texture;   // ce que l'or reflète
+  scene.background  = envRT.texture;   // ce que la caméra voit derrière
+  /* backgroundIntensity < 1 : le ciel doit rester un ARRIÈRE-plan. À 1 il
+     concurrence le plateau en luminosité et le regard ne sait plus où se
+     poser — exactement le défaut d'un rendu amateur. */
+  scene.backgroundIntensity = 0.50;
+  scene.backgroundBlurriness = 0.035;  // un souffle de flou : profondeur
   pmremGenerator.dispose();
+  sky.dispose();
+}
+
+/* Brume : la profondeur atmosphérique. Le poste le moins cher et le plus
+   rentable de toute cette passe — c'est elle qui donne l'échelle, en
+   effaçant progressivement les rochers lointains et le dragon. */
+/* densité 0.0165 -> 0.0092 : à 0.0165 la brume mangeait le dragon et la
+   couronne lointaine de rochers, qui sont à 40-70 unités. On garde la
+   profondeur atmosphérique, on cesse d'effacer le décor. */
+scene.fog = new THREE.FogExp2(0x2a2240, 0.0092);
+
+/* ---------- Le monde autour du plateau ----------
+   Tout est dans un groupe unique : une seule bascule pour le mode éco, et
+   un seul objet à faire dériver lentement. */
+const skyWorld = new THREE.Group();
+skyWorld.name = 'skyWorld';
+scene.add(skyWorld);
+
+/* Rochers en suspension. Icosaèdre déformé une fois, puis instancié : 26
+   rochers pour UN seul appel de dessin. Répartis sur trois couronnes de
+   profondeur, pour que la caméra lise un vrai volume d'espace et pas un
+   décor plat. */
+{
+  const geo = new THREE.IcosahedronGeometry(1, 1);
+  const pos = geo.attributes.position;
+  const v = new THREE.Vector3();
+  for(let i=0;i<pos.count;i++){
+    v.fromBufferAttribute(pos, i);
+    // déformation déterministe : facettes anguleuses, pas une patate lisse
+    const n = Math.sin(v.x*3.1)*Math.cos(v.y*2.7)*Math.sin(v.z*3.7);
+    v.multiplyScalar(1 + n*0.34);
+    v.y *= 0.72;                      // rochers aplatis : ils "flottent" mieux
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  geo.computeVertexNormals();
+
+  const rockMat = new THREE.MeshStandardMaterial({
+    color: 0x2b2438, roughness: 0.92, metalness: 0.05,
+    emissive: new THREE.Color(0x120c22), emissiveIntensity: 0.45,
+  });
+  const ROCKS = 26;
+  const rocks = new THREE.InstancedMesh(geo, rockMat, ROCKS);
+  rocks.frustumCulled = false;
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
+  const sc = new THREE.Vector3(), tr = new THREE.Vector3();
+  const rockPhase = [];
+  for(let i=0;i<ROCKS;i++){
+    /* Positions posées à l'identité ici : elles sont calculées plus bas par
+       placeSkyWorld(), depuis la caméra RÉELLE une fois cadrée. Voir le
+       commentaire de cette fonction — c'est la seule façon fiable.
+       (ancien calcul, conservé pour la dispersion) */
+    /* Placement DANS LE REPÈRE DE LA CAMÉRA, et non en coordonnées monde.
+       Trois essais en coordonnées monde ont donné 0 rocher cadré sur 26 à la
+       sonde : estimer « derrière le plateau, un peu en hauteur » ne marche
+       pas quand l'objectif n'ouvre que 40°. On construit donc chaque
+       position à partir de l'axe de visée : un écart horizontal, un écart
+       vertical, une distance. Tout ce qui est dans ces bornes angulaires est
+       cadré PAR CONSTRUCTION.
+       Repère de visée, caméra (0 ; 11,2 ; 15,8) visant (0 ; 0,3 ; 0) :
+         axe    = (0 ; -0,5677 ; -0,8229)
+         droite = (1 ; 0 ; 0)
+         haut   = (0 ; 0,8229 ; -0,5677)
+       Écarts tenus sous 15° (demi-ouverture ~20°), verticalement au-dessus
+       de l'axe pour se placer dans la bande de ciel au-dessus du plateau. */
+    const couronne = i % 3;                          // 0 proche, 2 lointaine
+    const dist = 34 + couronne*17 + (i*3.7 % 13);    // 34 -> 88
+    const hA = ((((i*137.508) % 360)/360) - 0.5) * 2 * 0.255;  // ±14,6°
+    const vA = 0.045 + ((i*5.1) % 17) * 0.0145;                // +2,6° -> +16°
+    const dx = Math.tan(hA)*dist, dy = Math.tan(vA)*dist;
+    const x = 0        + 1*dx + 0*dy;
+    const y = 11.2 + (-0.5677)*dist + 0*dx + 0.8229*dy;
+    const z = 15.8 + (-0.8229)*dist + 0*dx + (-0.5677)*dy;
+    const s = (1.5 + (i*1.9 % 3.4)) * (1 + couronne*0.55);
+    tr.set(x, y, z);
+    e.set(i*0.7, i*1.3, i*0.4);
+    q.setFromEuler(e);
+    sc.set(s, s*0.8, s);
+    m.compose(tr, q, sc);
+    rocks.setMatrixAt(i, m);
+    rockPhase.push({ base:y, sp:0.12 + (i%5)*0.035, ph:i*1.1, m:m.clone() });
+  }
+  rocks.instanceMatrix.needsUpdate = true;
+  skyWorld.add(rocks);
+  skyWorld.userData.rocks = rocks;
+  skyWorld.userData.rockPhase = rockPhase;
+}
+
+/* Anneaux d'or : l'élément le plus identitaire de Pikapoly. En volume, en
+   métal, ils attrapent le ciel — c'est là que le nouvel environnement se
+   voit le plus. Trois tailles, trois inclinaisons, rotations lentes et
+   désynchronisées. */
+{
+  const ringMat = new THREE.MeshStandardMaterial({
+    color: 0xd9ab4e, roughness: 0.22, metalness: 1.0,
+    emissive: new THREE.Color(GOLD), emissiveIntensity: 0.30,
+    envMapIntensity: 2.1,
+  });
+  const anneaux = [];
+  const defs = [
+    /* Écartés et reculés après rendu : au premier essai les anneaux
+       coupaient le plateau en diagonale. Ils doivent ENCADRER la scène, pas
+       la traverser — d'où des rayons plus grands, des centres poussés
+       derrière et sur les côtés, et des inclinaisons qui les présentent de
+       trois quarts plutôt que de face. */
+    { R:19.0, t:0.20, rx:1.20, ry: 0.35, y: 5.5, x:-13, z:-30, sp: 0.045 },
+    { R:27.0, t:0.26, rx:1.05, ry:-0.55, y:10.0, x: 16, z:-44, sp:-0.028 },
+    { R:12.0, t:0.14, rx:1.38, ry: 0.95, y:-4.5, x: 11, z:-22, sp: 0.070 },
+  ];
+  for(const d of defs){
+    const mesh = new THREE.Mesh(new THREE.TorusGeometry(d.R, d.t, 10, 96), ringMat);
+    mesh.position.set(d.x, d.y, d.z);
+    mesh.rotation.set(d.rx, d.ry, 0);
+    mesh.userData.sp = d.sp;
+    skyWorld.add(mesh);
+    anneaux.push(mesh);
+  }
+  skyWorld.userData.anneaux = anneaux;
+}
+
+/* Le dragon. Un serpent céleste : courbe de Catmull-Rom échantillonnée en
+   tube, épaisseur qui décroît vers la queue. Silhouette sombre à liseré
+   doré, placée LOIN et à demi noyée dans la brume — sa force vient de son
+   échelle et de ce qu'on n'en voit pas. */
+{
+  const pts = [];
+  for(let i=0;i<=11;i++){
+    const t = i/11;
+    /* Même calcul que pour les rochers : à ~60 unités devant une caméra qui
+       plonge de 35°, la bande visible est centrée autour de y = -7. Le
+       dragon déroule donc sa courbe SOUS l'horizon de la caméra, au loin —
+       ce qui est aussi la lecture juste d'un monde d'îlots suspendus : on
+       le domine. Deux essais précédents (y=+7 puis y=+19) le plaçaient
+       au-dessus du cadre. */
+    pts.push(new THREE.Vector3(
+      -58 + t*116,
+      -17 + Math.sin(t*Math.PI*2.1)*6.5 + t*2,
+      -56 + Math.cos(t*Math.PI*1.7)*12
+    ));
+  }
+  const courbe = new THREE.CatmullRomCurve3(pts);
+  const SEG = 150, ANN = 9;
+  const geo = new THREE.TubeGeometry(courbe, SEG, 1, ANN, false);
+  // effilage : le tube est de rayon 1, on remet chaque anneau à l'échelle
+  const pos = geo.attributes.position, nor = geo.attributes.normal;
+  const P = new THREE.Vector3(), N = new THREE.Vector3(), C = new THREE.Vector3();
+  for(let i=0;i<pos.count;i++){
+    const t = Math.floor(i/(ANN+1)) / SEG;
+    // tête large, corps plein, queue fine
+    const r = 2.6 * Math.pow(1 - t, 0.62) * (1 + Math.exp(-t*26)*1.5);
+    P.fromBufferAttribute(pos, i);
+    N.fromBufferAttribute(nor, i);
+    C.copy(P).addScaledVector(N, -1);           // centre de l'anneau
+    P.copy(C).addScaledVector(N, r);
+    pos.setXYZ(i, P.x, P.y, P.z);
+  }
+  geo.computeVertexNormals();
+
+  /* Vert sombre à liseré émissif : contre un ciel nuit-violet, un corps
+     seulement sombre disparaît. L'émissif porte la silhouette sans la
+     transformer en néon — c'est le liseré qui dit l'échelle. */
+  /* Émissif porté à 1.15 et teinte éclaircie : la sonde confirmait le
+     dragon DANS le champ, mais un corps vert sombre sur un ciel nuit-violet
+     ne se lit tout simplement pas. Ce n'est pas un néon — c'est le minimum
+     pour qu'une silhouette existe contre une nuit. */
+  const dragon = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+    color: 0x2d6b45, roughness: 0.42, metalness: 0.5,
+    /* 1.15 -> 0.62 : à pleine intensité et placé près, le dragon devenait
+       une bande turquoise en travers du cadre. Reculé à 132 unités, il lui
+       faut juste assez d'émissif pour exister dans la brume — une
+       silhouette, pas une enseigne. */
+    emissive: new THREE.Color(0x6acc8f), emissiveIntensity: 0.62,
+    envMapIntensity: 1.8,
+  }));
+  dragon.name = 'dragon';
+  skyWorld.add(dragon);
+  skyWorld.userData.dragon = dragon;
+}
+
+/* ---------- Ombre de contact sous le pion ----------
+   La carte d'ombre projetée donne bien une ombre portée, mais elle est
+   douce et se dilue juste sous les pieds — là où l'oeil cherche justement
+   la preuve que le personnage TOUCHE la surface. Toutes les productions de
+   casino live doublent donc l'ombre projetée d'un noircissement de contact
+   dur et serré au point d'appui. C'est le détail qui fait basculer la
+   lecture de "collé devant le décor" à "posé dessus", et il ne coûte qu'un
+   quadrilatère.
+
+   Gradient radial pré-dessiné, jamais recalculé ; le disque suit le pion à
+   chaque image et son opacité décroît quand il saute (une ombre s'efface
+   en s'élargissant quand on décolle). */
+const contactShadow = (() => {
+  const S = 128;
+  const cvs = document.createElement('canvas'); cvs.width = cvs.height = S;
+  const c = cvs.getContext('2d');
+  const g = c.createRadialGradient(S/2, S/2, 0, S/2, S/2, S/2);
+  g.addColorStop(0.00, 'rgba(0,0,0,0.80)');
+  g.addColorStop(0.42, 'rgba(0,0,0,0.42)');
+  g.addColorStop(0.78, 'rgba(0,0,0,0.09)');
+  g.addColorStop(1.00, 'rgba(0,0,0,0)');
+  c.fillStyle = g; c.fillRect(0,0,S,S);
+  const tex = new THREE.CanvasTexture(cvs);
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(1,1),
+    new THREE.MeshBasicMaterial({
+      map: tex, transparent: true, depthWrite: false,
+      // fog:false — l'ombre est au premier plan, la brume n'a rien à y faire
+      fog: false, toneMapped: false,
+    })
+  );
+  mesh.rotation.x = -Math.PI/2;
+  mesh.renderOrder = 2;           // après les cases, avant le pion
+  mesh.visible = false;
+  scene.add(mesh);
+  return mesh;
+})();
+
+/* Dérive du monde : lente, continue, jamais spectaculaire. Ce qui doit
+   attirer l'oeil reste le plateau ; le monde, lui, respire. */
+window.__sonde = function(){
+  camera.updateMatrixWorld(); camera.updateProjectionMatrix();
+  const f = new THREE.Frustum().setFromProjectionMatrix(
+    new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+  const u = skyWorld.userData, out = {fov:+camera.fov.toFixed(1), rochersVus:0, rochersTotal:0,
+    camPos:[+camera.position.x.toFixed(2),+camera.position.y.toFixed(2),+camera.position.z.toFixed(2)],
+    cible:[+controls.target.x.toFixed(2),+controls.target.y.toFixed(2),+controls.target.z.toFixed(2)],
+    aspect:+camera.aspect.toFixed(3), rochers3:[]};
+  if(u.rockPhase){
+    const tr=new THREE.Vector3(), q=new THREE.Quaternion(), sc=new THREE.Vector3();
+    out.rochersTotal = u.rockPhase.length;
+    for(const rp of u.rockPhase){
+      rp.m.decompose(tr,q,sc);
+      if(f.containsPoint(tr)) out.rochersVus++;
+      if(out.rochers3.length<3) out.rochers3.push([+tr.x.toFixed(1),+tr.y.toFixed(1),+tr.z.toFixed(1)]);
+    }
+  }
+  if(u.dragon){
+    u.dragon.geometry.computeBoundingSphere();
+    const bs = u.dragon.geometry.boundingSphere.clone(); bs.applyMatrix4(u.dragon.matrixWorld);
+    out.dragonVu = f.intersectsSphere(bs);
+    out.dragonY = +u.dragon.position.y.toFixed(1);
+  }
+  if(u.anneaux) out.anneauxVus = u.anneaux.filter(a=>{
+    a.geometry.computeBoundingSphere();
+    const bs=a.geometry.boundingSphere.clone(); bs.applyMatrix4(a.matrixWorld); return f.intersectsSphere(bs);
+  }).length;
+  return out;
+};
+/* Sème les rochers dans le cône RÉELLEMENT cadré, à partir de la caméra
+   telle qu'elle est après fitCameraToAspect().
+   Pourquoi pas des coordonnées monde fixes : quatre tentatives successives
+   ont donné 0 ou 1 rocher visible sur 26 à la sonde. La raison est
+   géométrique — l'objectif n'ouvre que 40°, et la direction de visée change
+   avec la forme du cadre (trois modes : défaut, carré, portrait). Un décor
+   « posé derrière le plateau » est donc hors champ dans au moins deux modes
+   sur trois. En construisant chaque position à partir de l'axe de visée
+   courant (un écart horizontal, un écart vertical, une distance), la
+   visibilité est garantie par construction, et le décor se replace tout
+   seul quand l'écran change de forme. */
+function placeSkyWorld(){
+  const u = skyWorld.userData;
+  if(!u.rocks || !u.rockPhase) return;
+  const axe = new THREE.Vector3().subVectors(controls.target, camera.position).normalize();
+  const droite = new THREE.Vector3().crossVectors(axe, new THREE.Vector3(0,1,0)).normalize();
+  const haut = new THREE.Vector3().crossVectors(droite, axe).normalize();
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
+  const sc = new THREE.Vector3(), tr = new THREE.Vector3();
+  for(let i=0;i<u.rockPhase.length;i++){
+    const couronne = i % 3;
+    /* Éloignés après rendu : à 34-88 unités les rochers formaient un MUR
+       juste derrière le plateau, pas des îlots suspendus. La profondeur
+       d'un décor ne vient pas de sa taille à l'écran mais de son
+       étagement : trois couronnes bien séparées, de 60 à 150. */
+    const dist = 60 + couronne*32 + (i*4.1 % 24);              // 60 -> 148
+    const hA = ((((i*137.508) % 360)/360) - 0.5) * 2 * 0.225;  // ±12,9°
+    const vA = 0.038 + ((i*5.1) % 17) * 0.0105;                // +2,2° -> +12,3°
+    tr.copy(camera.position)
+      .addScaledVector(axe, dist)
+      .addScaledVector(droite, Math.tan(hA)*dist)
+      .addScaledVector(haut,   Math.tan(vA)*dist);
+    /* L'échelle ne compense PAS l'éloignement : un rocher lointain doit
+       rester petit à l'écran, c'est ce qui crée la sensation d'espace. */
+    const sca = (2.2 + (i*2.4 % 4.6)) * (1 + couronne*0.35);
+    e.set(i*0.7, i*1.3, i*0.4); q.setFromEuler(e);
+    sc.set(sca, sca*0.8, sca);
+    m.compose(tr, q, sc);
+    u.rocks.setMatrixAt(i, m);
+    u.rockPhase[i].base = tr.y;
+    u.rockPhase[i].m.copy(m);
+  }
+  u.rocks.instanceMatrix.needsUpdate = true;
+  // le dragon déroule sa courbe loin devant, sous l'axe de visée
+  if(u.dragon){
+    const d = new THREE.Vector3().copy(camera.position)
+      .addScaledVector(axe, 132)
+      .addScaledVector(haut, Math.tan(0.115)*74);   // +6,6° : juste au-dessus du plateau
+    u.dragon.position.set(d.x, d.y, d.z);
+    u.dragon.userData.baseY = d.y;
+  }
+}
+
+function updateSkyWorld(t){
+  // ancrage du pion — voir contactShadow ci-dessus
+  if(typeof player !== 'undefined' && player && player.root && player.root.parent){
+    const P = player.root.position;
+    // hauteur du pion au-dessus de sa case : plus il monte, plus l'ombre
+    // s'élargit et s'efface
+    const solY = (typeof tiles !== 'undefined' && tiles[currentIndex] && tiles[currentIndex].tileTopY !== undefined)
+      ? tiles[currentIndex].tileTopY : 0.14;
+    const h = Math.max(0, P.y - solY);
+    const k = Math.min(1, h/1.6);
+    const taille = 0.78 * (1 + k*0.85);
+    contactShadow.position.set(P.x, solY + 0.012, P.z);
+    contactShadow.scale.set(taille, taille, 1);
+    contactShadow.material.opacity = (1 - k*0.72) * 0.92;
+    contactShadow.visible = player.root.visible !== false;
+  } else {
+    contactShadow.visible = false;
+  }
+  const u = skyWorld.userData;
+  if(u.rocks && u.rockPhase){
+    const m = new THREE.Matrix4(), tr = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
+    for(let i=0;i<u.rockPhase.length;i++){
+      const rp = u.rockPhase[i];
+      rp.m.decompose(tr, q, sc);
+      tr.y = rp.base + Math.sin(t*rp.sp + rp.ph)*0.85;
+      m.compose(tr, q, sc);
+      u.rocks.setMatrixAt(i, m);
+    }
+    u.rocks.instanceMatrix.needsUpdate = true;
+  }
+  if(u.anneaux) for(const a of u.anneaux) a.rotation.z = t*a.userData.sp;
+  if(u.dragon){
+    const by = u.dragon.userData.baseY;
+    if(by !== undefined) u.dragon.position.y = by + Math.sin(t*0.09)*1.9;
+    u.dragon.rotation.y = Math.sin(t*0.055)*0.07;
+  }
 }
 
 const BASE_FOV = 40;
-const camera = new THREE.PerspectiveCamera(BASE_FOV,1,0.1,100);
-camera.position.set(0,13.5,11);
+const camera = new THREE.PerspectiveCamera(BASE_FOV,1,0.1,260);
+/* Caméra abaissée : 51° au-dessus du plateau -> 35°. Une plongée à 51°
+   écrase la perspective et donne la "photo de boîte de jeu" ; à 35° les
+   cases fuient vers un point de fuite, le pion prend de la hauteur dans le
+   cadre et le monde derrière se déploie. Pas plus bas : l'animateur doit
+   garder les 40 cases lisibles d'un coup d'oeil, ce qu'un plan au ras du
+   plateau (comme les jeux de casino, qui n'ont pas cette contrainte)
+   interdirait. Distance inchangée (~16,6), donc le cadrage et les butées
+   Distance portée de 17,4 à 18,6 : à angle abaissé le bord proche du
+   plateau avance dans le cadre et se faisait rogner (vérifié en rendu).
+   Reculer rend aussi sa place au ciel, qui n'est plus un liseré.
+   far 100 -> 260 : le dragon et la couronne lointaine de rochers sont à
+   plus de 100 unités et étaient purement et simplement coupés. */
+camera.position.set(0,11.2,15.8);
 scene.add(camera);
 
 /* Post-traitement bloom : fait "exploser" en halo lumineux tout ce qui
@@ -898,12 +1313,17 @@ composer.addPass(bloomPass);
    BASE_FOV dès que l'angle redevient sûr (vue de face par défaut =
    plateau au maximum, comme avant). */
 const BOARD_CORNER_R = (N_SIDE*CELL)/2 + 0.15;
-const boardCorners = [
-  new THREE.Vector3(-BOARD_CORNER_R, 0.5, -BOARD_CORNER_R),
-  new THREE.Vector3( BOARD_CORNER_R, 0.5, -BOARD_CORNER_R),
-  new THREE.Vector3( BOARD_CORNER_R, 0.5,  BOARD_CORNER_R),
-  new THREE.Vector3(-BOARD_CORNER_R, 0.5,  BOARD_CORNER_R),
-];
+/* Hauteur d'échantillonnage 0.5 -> 1.45 : la garde ne regardait que le
+   plan des cases, alors que les PHOTOS DE LOT flottent bien au-dessus.
+   Le bord proche du plateau se faisait donc rogner dès que la caméra
+   descendait (constaté en rendu). On échantillonne aussi le milieu des
+   bords, pas seulement les 4 coins : de trois quarts, c'est un milieu de
+   bord qui sort du cadre en premier. */
+const _CORNER_Y = 1.45;
+const boardCorners = [];
+for(const [cx,cz] of [[-1,-1],[1,-1],[1,1],[-1,1],[0,-1],[0,1],[-1,0],[1,0]]){
+  boardCorners.push(new THREE.Vector3(cx*BOARD_CORNER_R, _CORNER_Y, cz*BOARD_CORNER_R));
+}
 let cameraPunchActive = false;
 const _cornerView = new THREE.Vector3();
 function updateCornerSafety(dt){
@@ -918,10 +1338,11 @@ function updateCornerSafety(dt){
     const tanH = (Math.abs(_cornerView.x)/depth)/camera.aspect;
     maxTan = Math.max(maxTan, tanV, tanH);
   }
-  // marge de 7% pour ne jamais laisser un coin à ras du bord
+  // marge portée de 7 % à 13 % : à caméra basse le plateau arrive au ras
+  // du cadre, et 7 % ne suffisaient plus à lui laisser de l'air
   const targetFov = THREE.MathUtils.clamp(
-    THREE.MathUtils.radToDeg(2*Math.atan(maxTan/0.93)),
-    BASE_FOV, 72
+    THREE.MathUtils.radToDeg(2*Math.atan(maxTan/0.87)),
+    BASE_FOV, 76
   );
   camera.fov += (targetFov - camera.fov) * Math.min(1, dt*6);
   camera.updateProjectionMatrix();
@@ -932,7 +1353,7 @@ controls.target.set(0,0.3,0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.minDistance = 10.5;
-controls.maxDistance = 21;
+controls.maxDistance = 24;
 controls.minPolarAngle = 0.35;
 controls.maxPolarAngle = 1.15;
 controls.enablePan = false;
@@ -953,13 +1374,23 @@ controls.autoRotateSpeed = 0.55;
      plateau remplisse la hauteur au lieu de laisser du ciel au-dessus.
    Le garde-fou anti-rognage des coins (updateCornerSafety) élargit le
    champ si un coin devait sortir : les 4 coins restent toujours visibles. */
-const CAM_DIR_DEFAULT = new THREE.Vector3(0, 13.2, 11).normalize();   // vue d'origine (cible en y=0,3)
-const CAM_DIR_SQUARE  = new THREE.Vector3(0, 14.9, 9).normalize();    // plongée un peu plus marquée
+/* Plongée abaissée sur les trois cadrages (21/09). C'est ICI que la
+   position de la caméra est réellement décidée : fitCameraToAspect()
+   recalcule camera.position à partir de ces directions à chaque
+   redimensionnement, donc un camera.position.set() au chargement est
+   écrasé quelques millisecondes plus tard — mesuré à la sonde, la caméra
+   se retrouvait à 59° de plongée alors qu'on l'avait posée à 35°.
+   50°->39° (défaut) et 59°->46° (cadre carré, le mode télé) : les cases
+   fuient vers un point de fuite au lieu d'être écrasées vues de dessus,
+   et il reste enfin du ciel au-dessus du bord lointain — c'est cette
+   bande-là qui donne sa place au monde. */
+const CAM_DIR_DEFAULT = new THREE.Vector3(0, 10.5, 13.0).normalize();  // 39° de plongée
+const CAM_DIR_SQUARE  = new THREE.Vector3(0, 12.0, 11.5).normalize();  // 46°, cadre presque carré
 /* Cadre plus haut que large mais pas étroit (télé posée en portrait) :
    vue nettement plus en plongée, le plateau projeté devient presque
    carré et remplit la largeur ET la hauteur du cadre au lieu de laisser
    un grand ciel au-dessus. */
-const CAM_DIR_TALL    = new THREE.Vector3(0, 16.4, 6.6).normalize();
+const CAM_DIR_TALL    = new THREE.Vector3(0, 14.0, 9.0).normalize();   // 57°, télé en portrait
 const CAM_BASE_MIN = controls.minDistance, CAM_BASE_MAX = controls.maxDistance;
 const CAM_BASE_DIST = camera.position.distanceTo(controls.target);   // distance de la vue d'origine (cadre carré)
 let camFitFactor = 1, camFitMode = 'default';
@@ -996,6 +1427,9 @@ function fitCameraToAspect(){
   // Distance ABSOLUE (vue d'origine × facteur), pas un cumul de ratios :
   // une suite de redimensionnements (télé tournée, plein écran, fenêtre
   // déplacée) redonne toujours exactement le même cadrage.
+  // le décor céleste est semé depuis la caméra : il doit se replacer à
+  // chaque changement de cadrage (voir placeSkyWorld)
+  setTimeout(()=>{ try{ placeSkyWorld(); }catch(e){} }, 0);
   const dist = CAM_BASE_DIST * f;
   // clone : les directions de référence sont partagées, multiplyScalar
   // les modifierait en place (cadrage faux au 2e changement de mode)
@@ -1687,6 +2121,12 @@ function bevelledBox(w, h, d, bevel){
 }
 
 const tileGoldMat = new THREE.MeshStandardMaterial({
+  /* envMapIntensity 1.9 : l'or ne reflète plus un dégradé peint mais le
+     ciel réel de la scène (voir « L'ARÈNE CÉLESTE »). Au-dessus de 1, le
+     métal capte l'embrasement d'horizon et cesse d'être une couleur jaune
+     pour devenir de la matière. C'est le réglage le plus rentable de toute
+     la passe : un seul nombre, et le plateau change de catégorie. */
+  envMapIntensity: 1.9,
   /* roughness .28 et non .2 : la roughnessMap MULTIPLIE cette valeur, et
      la carte procedurale a une moyenne de 0.72 — la rugosite effective
      tombait donc a 0.145 au lieu de 0.2. Sur un metal place dans un
@@ -1711,7 +2151,7 @@ const tileGoldMat = new THREE.MeshStandardMaterial({
   roughnessMap: GOLD_MAPS.roughnessMap,
 });
 const tileBezelMat = new THREE.MeshStandardMaterial({
-  color:0x0a0a0a, roughness:.5, metalness:.25,
+  color:0x0a0a0a, roughness:.5, metalness:.25, envMapIntensity:1.25,
   normalMap: TILE_MAPS.normalMap, roughnessMap: TILE_MAPS.roughnessMap,
 });
 /* TILE+0.115 et non TILE+0.09 : le biseau rentre les faces superieure et
@@ -1727,7 +2167,7 @@ const tileBezelGeo  = bevelledBox(TILE*0.97,0.035,TILE*0.97, 0.008);
 const tileBaseGeo = bevelledBox(TILE+0.05, 0.08, TILE+0.05, 0.014);
 const tileBodyGeo = bevelledBox(TILE, 0.14, TILE, 0.018);
 const baseTileMat = new THREE.MeshStandardMaterial({
-  color:0x050505, roughness:.6, metalness:.3,
+  color:0x050505, roughness:.6, metalness:.3, envMapIntensity:1.15,
   normalMap: TILE_MAPS.normalMap, roughnessMap: TILE_MAPS.roughnessMap,
 });
 const tileRivetGeo = new THREE.CylinderGeometry(0.035,0.035,0.02,8);
@@ -5005,6 +5445,13 @@ function setEcoMode(on){
   ecoMode = on;
   if(bloomPass) bloomPass.enabled = !on;
   renderer.shadowMap.enabled = !on;
+  /* Mode éco : le monde céleste (rochers, anneaux, dragon) s'efface, mais le
+     CIEL reste — il est gratuit (un fond, pas de la géométrie) et c'est lui
+     qui porte les reflets de l'or. Un appareil à la peine perd le décor,
+     jamais la matière du plateau. La brume s'épaissit pour fermer l'horizon
+     proprement là où les rochers ont disparu. */
+  if(typeof skyWorld !== 'undefined' && skyWorld) skyWorld.visible = !on;
+  if(scene.fog) scene.fog.density = on ? 0.030 : 0.0092;
   // La classe « eco » coupe aussi la décoration COTÉ PAGE (voir la CSS) :
   // le coût d'une page n'est pas seulement celui de la scène 3D.
   document.documentElement.classList.toggle('eco', on);
@@ -5197,7 +5644,9 @@ function animate(){
   const realDt = _lastFrameAt ? (nowMs - _lastFrameAt)/1000 : 0;
   _lastFrameAt = nowMs;
   if(!document.hidden && realDt > 0 && realDt < 1) qualityTick(realDt, nowMs/1000);
-  frameStep(Math.min(clock.getDelta(), 0.05), clock.getElapsedTime());
+  const _t = clock.getElapsedTime();
+  updateSkyWorld(_t);
+  frameStep(Math.min(clock.getDelta(), 0.05), _t);
 }
 animate();
 
