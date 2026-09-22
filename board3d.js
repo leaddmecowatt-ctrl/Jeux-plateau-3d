@@ -895,55 +895,12 @@ function makeSkyTexture(){
 }
 
 
-/* ---------- Le monde autour du plateau ----------
-   Tout est dans un groupe unique : une seule bascule pour le mode éco, et
-   un seul objet à faire dériver lentement. */
-const skyWorld = new THREE.Group();
-skyWorld.name = 'skyWorld';
-scene.add(skyWorld);
-
-/* Rochers et dragon en 3D : RETIRÉS (22/09).
-   Ils avaient été ajoutés pour donner du volume autour du plateau. Vus en
-   rendu par-dessus la photo de fond, le constat est sans appel : les
-   rochers sont des masses sombres qui RECOUVRENT l'illustration, et le
-   dragon procédural double celui de la photo — deux dragons, deux séries
-   d'îlots, le regard ne sait plus lequel lire. La photo tient déjà ce
-   rôle, et bien mieux. Ne restent que les anneaux d'or : en volume et en
-   métal, ils ajoutent une vraie profondeur DEVANT l'illustration sans en
-   masquer quoi que ce soit, et ils font écho aux anneaux qu'elle contient
-   déjà. */
-
-/* Anneaux d'or : l'élément le plus identitaire de Pikapoly. En volume, en
-   métal, ils attrapent le ciel — c'est là que le nouvel environnement se
-   voit le plus. Trois tailles, trois inclinaisons, rotations lentes et
-   désynchronisées. */
-{
-  const ringMat = new THREE.MeshStandardMaterial({
-    color: 0xd9ab4e, roughness: 0.22, metalness: 1.0,
-    emissive: new THREE.Color(GOLD), emissiveIntensity: 0.30,
-    envMapIntensity: 2.1,
-  });
-  const anneaux = [];
-  const defs = [
-    /* Écartés et reculés après rendu : au premier essai les anneaux
-       coupaient le plateau en diagonale. Ils doivent ENCADRER la scène, pas
-       la traverser — d'où des rayons plus grands, des centres poussés
-       derrière et sur les côtés, et des inclinaisons qui les présentent de
-       trois quarts plutôt que de face. */
-    { R:19.0, t:0.20, rx:1.20, ry: 0.35, y: 5.5, x:-13, z:-30, sp: 0.045 },
-    { R:27.0, t:0.26, rx:1.05, ry:-0.55, y:10.0, x: 16, z:-44, sp:-0.028 },
-    { R:12.0, t:0.14, rx:1.38, ry: 0.95, y:-4.5, x: 11, z:-22, sp: 0.070 },
-  ];
-  for(const d of defs){
-    const mesh = new THREE.Mesh(new THREE.TorusGeometry(d.R, d.t, 10, 96), ringMat);
-    mesh.position.set(d.x, d.y, d.z);
-    mesh.rotation.set(d.rx, d.ry, 0);
-    mesh.userData.sp = d.sp;
-    skyWorld.add(mesh);
-    anneaux.push(mesh);
-  }
-  skyWorld.userData.anneaux = anneaux;
-}
+/* Décor 3D ajouté autour du plateau (rochers, dragon, anneaux d'or) :
+   ENTIÈREMENT RETIRÉ, à la demande de l'animateur. La photo de fond porte
+   déjà cet univers, et bien mieux — les anneaux d'or qu'elle contient sont
+   les siens. Ne subsiste de cette passe que ce qui touche la MATIÈRE :
+   l'environnement de reflets ci-dessus, invisible, qui donne à l'or du
+   plateau et au personnage quelque chose de riche à refléter. */
 
 /* Dérive du monde : lente, continue, jamais spectaculaire. Ce qui doit
    attirer l'oeil reste le plateau ; le monde, lui, respire. */
@@ -980,8 +937,7 @@ const contactShadow = (() => {
   return mesh;
 })();
 
-function updateSkyWorld(t){
-  // ancrage du pion — voir contactShadow ci-dessus
+function updateContactShadow(){
   if(typeof player !== 'undefined' && player && player.root && player.root.parent){
     const P = player.root.position;
     // hauteur du pion au-dessus de sa case : plus il monte, plus l'ombre
@@ -997,13 +953,6 @@ function updateSkyWorld(t){
     contactShadow.visible = player.root.visible !== false;
   } else {
     contactShadow.visible = false;
-  }
-  const u = skyWorld.userData;
-  if(u.anneaux) for(const a of u.anneaux) a.rotation.z = t*a.userData.sp;
-  if(u.dragon){
-    const by = u.dragon.userData.baseY;
-    if(by !== undefined) u.dragon.position.y = by + Math.sin(t*0.09)*1.9;
-    u.dragon.rotation.y = Math.sin(t*0.055)*0.07;
   }
 }
 
@@ -3729,15 +3678,39 @@ async function loadPlayerModel(player){
     o.castShadow = true;
     const oldMat = o.material;
     if(oldMat.name === 'skin') skinMat = null;   // (posé plus bas sur le nouveau matériau)
-    const newMat = new THREE.MeshToonMaterial({
+    /* FINITION DU PERSONNAGE — le point qui change tout.
+       Les 7 matériaux du GLB étaient remplacés par du MeshToonMaterial :
+       un ombrage en 4 paliers tranchés, c'est-à-dire du cel-shading. C'est
+       LUI, et lui seul, qui donnait au personnage son aspect « dessin animé
+       plat » — pas le modèle, qui est bon. Un personnage de jeu en direct
+       haut de gamme est en ombrage LISSE : la lumière y roule sur les
+       volumes au lieu de sauter d'un palier à l'autre, et c'est ce qui fait
+       lire le relief — une moustache, un pli de tissu, une joue.
+       MeshStandardMaterial rend ce dégradé continu et rend le personnage
+       sensible à l'environnement de reflets de la scène, comme le plateau.
+       Couleurs, textures et double face sont repris tels quels : le
+       personnage ne change pas, seule sa façon de recevoir la lumière
+       change.
+       Rugosité par matériau : peau, cheveux et tissu ne renvoient pas la
+       lumière de la même façon, et c'est cette différence qui fait qu'un
+       rendu « a l'air fini ». Uniforme, tout paraît en plastique. */
+    const _nom = (oldMat.name || '').toLowerCase();
+    const _peau = _nom.includes('skin') || _nom.includes('peau') || _nom.includes('face');
+    const _cheveux = _nom.includes('hair') || _nom.includes('cheveu');
+    const newMat = new THREE.MeshStandardMaterial({
       map: oldMat.map || null,
-      gradientMap: toonGradientMap,
       color: oldMat.color ? oldMat.color.clone() : new THREE.Color(0xffffff),
+      roughness: _peau ? 0.62 : _cheveux ? 0.78 : 0.88,
+      metalness: 0.0,
+      /* Le personnage capte le même environnement que le plateau : sans
+         cela il resterait « détouré », éclairé par d'autres règles que la
+         scène où il se tient — le défaut exact qu'on corrige ici. */
+      envMapIntensity: 0.85,
       // Les 7 materiaux du GLB sont doubleSided : sans le reprendre ici,
-      // le toon repassait en FrontSide et toutes les surfaces fines
-      // (bord du chapeau de paille, echarpe, lanieres des sandales)
-      // devenaient traversables du regard — le chapeau apparaissait
-      // comme un disque translucide pose a cote du personnage.
+      // toutes les surfaces fines (bord du chapeau de paille, echarpe,
+      // lanieres des sandales) deviendraient traversables du regard — le
+      // chapeau apparaissait comme un disque translucide a cote du
+      // personnage.
       side: oldMat.side !== undefined ? oldMat.side : THREE.FrontSide,
     });
     o.material = newMat;
@@ -5221,12 +5194,6 @@ function setEcoMode(on){
   ecoMode = on;
   if(bloomPass) bloomPass.enabled = !on;
   renderer.shadowMap.enabled = !on;
-  /* Mode éco : le monde céleste (rochers, anneaux, dragon) s'efface, mais le
-     CIEL reste — il est gratuit (un fond, pas de la géométrie) et c'est lui
-     qui porte les reflets de l'or. Un appareil à la peine perd le décor,
-     jamais la matière du plateau. La brume s'épaissit pour fermer l'horizon
-     proprement là où les rochers ont disparu. */
-  if(typeof skyWorld !== 'undefined' && skyWorld) skyWorld.visible = !on;
   // La classe « eco » coupe aussi la décoration COTÉ PAGE (voir la CSS) :
   // le coût d'une page n'est pas seulement celui de la scène 3D.
   document.documentElement.classList.toggle('eco', on);
@@ -5420,7 +5387,7 @@ function animate(){
   _lastFrameAt = nowMs;
   if(!document.hidden && realDt > 0 && realDt < 1) qualityTick(realDt, nowMs/1000);
   const _t = clock.getElapsedTime();
-  updateSkyWorld(_t);
+  updateContactShadow();
   frameStep(Math.min(clock.getDelta(), 0.05), _t);
 }
 animate();
