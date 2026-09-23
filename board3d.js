@@ -8320,6 +8320,25 @@ let NEAR_MISS_W = 1.8;
 // les 3 Duopacks, 89 % des parties en avaient un et l'effet se diluait
 const NEAR_MISS_LOTS = new Set(['booster50','etb','jackpot300']);
 const DICE_W = {2:1,3:2,4:3,5:4,6:5,7:6,8:5,9:4,10:3,11:2,12:1};
+/* RYTHME DES LOTS DE PASSAGE (23/09, l'animateur : « il n'y a que des
+   boosters qui tombent, on est au 17e coup »). Le pion s'arrête souvent sur
+   une case Booster en chemin (dès le 1er lancer : case 11) ; le joueur la
+   garde, et l'échange dans la pochette (claimCurrentLot) va chercher un
+   booster PLUS LOIN : les 42 boosters partaient tous au début. Désormais
+   une case de passage n'offre un booster, un Lot Mystère ou une Carte
+   gratuite que si ce lot n'est pas déjà EN AVANCE sur la pochette : il doit
+   en rester au moins autant que la part prévue pour les coups restants
+   (marge d'un lot). Les communes restent toujours possibles. */
+function passageAuRythme(cat){
+  const b = outcomeState.batch, pos = outcomeState.pos;
+  let reste = 0;
+  for(let j=pos;j<b.length;j++) if(b[j]===cat) reste++;
+  if(reste <= 0) return false;
+  const ligne = POUCH.find(r=>r.cat===cat);
+  if(!ligne || !b.length) return true;
+  const attendu = ligne.n * (b.length - pos) / b.length;   // part « normale » des coups restants
+  return reste - 1 >= attendu - 1;                          // en garder un ne met pas ce lot en avance
+}
 function landable(idx, targetCat){
   if(idx===0) return false;                 // Départ : jamais de lot
   const cat = tiles[idx].catKey;
@@ -8333,7 +8352,7 @@ function landable(idx, targetCat){
      n'existait vers le lot prévu, le pion tombait sur une mauvaise case et
      la pochette dépassait 245 coups. Garder une commune qui n'est plus en
      stock est refusé à la touche D (claimCurrentLot). */
-  if(cat !== 'commune' && !pouchHas(cat)) return false;
+  if(cat !== 'commune' && !passageAuRythme(cat)) return false;
   const c = OUTCOME_COST[cat];
   if(c===undefined) return false;
   /* En cours de route : tous les PETITS lots (commune, Caisse, Lot
@@ -8470,7 +8489,7 @@ function planTotal(pos, rollsLeft, targetCat){
     /* Cases de passage : d'abord celles dont le lot est encore EN STOCK. Une
        commune épuisée n'est prise que s'il n'y a pas d'autre chemin (fin de
        pochette) — sinon « garder » y était souvent refusé (audit 2). */
-    const enStock = t => { const c = tiles[landingIndex(pos,t)].catKey; return c === targetCat || pouchHas(c); };
+    const enStock = t => { const c = tiles[landingIndex(pos,t)].catKey; return c === targetCat || passageAuRythme(c); };
     { const a = single.filter(enStock); if(a.length) single.splice(0, single.length, ...a); }
     { const a = double.filter(enStock); if(a.length) double.splice(0, double.length, ...a); }
     if(early.length && Math.random() < EARLY_LANDING_P) return { total: pickWeightedTotal(early, pos), onTarget: true, wantDouble: false };
