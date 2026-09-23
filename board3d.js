@@ -7083,7 +7083,7 @@ function ceilingFor(mise){
 let totalMise = parseFloat(safeGetItem(TOTAL_MISE_KEY)) || 0;
 let totalPaid = parseFloat(safeGetItem(TOTAL_PAID_KEY)) || 0;
 function saveTotals(){
-  if(isDisplay) return;   // l'écran public ne fait qu'afficher : il n'écrit jamais l'état partagé
+  if(isDisplay || window.PIKA_DEMO_JACKPOT) return;   // écran public et démo : n'écrivent jamais l'état partagé
   try{
     localStorage.setItem(TOTAL_MISE_KEY, String(totalMise));
     localStorage.setItem(TOTAL_PAID_KEY, String(totalPaid));
@@ -7280,9 +7280,9 @@ function loadOutcomeState(){
          interrompue n'a pas été gagné — il retourne en tête de pochette,
          comme avec « Recommencer ». Audit 23/09 : il était perdu, et le
          coup compté. */
-      if(parsed && parsed.enCours && parsed.pos > 0){ parsed.pos--; parsed.enCours = false; }
+      if(parsed && parsed.enCours && parsed.pos > 0){ parsed.pos--; parsed.enCours = false; parsed._miseARetirer = true; }
       if(parsed && parsed.version===OUTCOME_BATCH_VERSION && Array.isArray(parsed.batch)
-         && typeof parsed.pos==='number' && parsed.pos < parsed.batch.length
+         && typeof parsed.pos==='number' && parsed.pos <= parsed.batch.length   // pochette finie : « 245 coups sur 245 » jusqu'au B suivant
          && Array.isArray(parsed.myst) && typeof parsed.mystPos==='number'){
         return parsed;
       }
@@ -7303,8 +7303,10 @@ function drawMysterySub(){
   return sub;
 }
 let outcomeState = loadOutcomeState();
+// partie interrompue par un rechargement : sa mise ne compte plus (comme avec C)
+if(outcomeState._miseARetirer){ delete outcomeState._miseARetirer; totalMise = Math.max(0, totalMise - AVG_MISE); saveTotals(); }
 function saveOutcomeState(){
-  if(isDisplay) return;   // voir saveTotals
+  if(isDisplay || window.PIKA_DEMO_JACKPOT) return;   // voir saveTotals
   try{ localStorage.setItem(OUTCOME_BATCH_KEY, JSON.stringify(outcomeState)); }catch(e){}
 }
 saveOutcomeState();
@@ -8352,6 +8354,12 @@ function planTotal(pos, rollsLeft, targetCat){
       const pick = viaChance[Math.floor(Math.random()*viaChance.length)];
       return { total: pick.t, onTarget: false, wantDouble: false, cardDelta: pick.d };
     }
+    /* Cases de passage : d'abord celles dont le lot est encore EN STOCK. Une
+       commune épuisée n'est prise que s'il n'y a pas d'autre chemin (fin de
+       pochette) — sinon « garder » y était souvent refusé (audit 2). */
+    const enStock = t => { const c = tiles[landingIndex(pos,t)].catKey; return c === targetCat || pouchHas(c); };
+    { const a = single.filter(enStock); if(a.length) single.splice(0, single.length, ...a); }
+    { const a = double.filter(enStock); if(a.length) double.splice(0, double.length, ...a); }
     if(early.length && Math.random() < EARLY_LANDING_P) return { total: pickWeightedTotal(early, pos), onTarget: true, wantDouble: false };
     if(double.length && (!single.length || Math.random() < 1/3)) return { total: pickWeightedTotal(double, pos), onTarget: false, wantDouble: true };
     if(single.length){
@@ -8404,7 +8412,7 @@ async function claimCurrentLot(){
   {
     const cat = tiles[currentIndex].catKey;
     if(!forcedGame && pendingOutcome && cat !== pendingOutcome && !pouchHas(cat) && rollsUsed < rollsAllowed && !finished){
-      showKeyHint('Plus de « '+CATS[cat].label+' » dans la pochette : relancez (B)');
+      showKeyHint('Lot indisponible : relancez (B)');
       return;
     }
   }
@@ -8513,6 +8521,9 @@ if(undoBtn) undoBtn.addEventListener('click', ()=>{
   // lancers suivants restent pipés vers sa case
   pendingOutcome = lastWinUndo.pending || null;
   forcedGame = !!lastWinUndo.forced;
+  // la partie reprend : si la page est rechargée maintenant, son lot doit
+  // retourner dans la pochette (audit 2 du 23/09)
+  if(pendingOutcome && !forcedGame){ outcomeState.enCours = true; saveOutcomeState(); }
   updateCue();
   if(!finished) validate.disabled = (rollsUsed>=rollsAllowed);
   clearWinUndo();
