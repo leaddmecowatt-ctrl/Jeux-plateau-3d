@@ -7382,6 +7382,41 @@ function drawMysterySub(){
   return sub;
 }
 let outcomeState = loadOutcomeState();
+/* STOCK RÉEL (23/09, en direct, au coup 27 sur 245). L'animateur : « il me
+   reste exactement 22 boosters, 3 tripacks, 2 coffrets, 1 ETB, 1 duopack ;
+   le reste en Lots Mystère (EX et boosters japonais) comme d'habitude ».
+   Une seule fois, sur la pochette en cours : les coups RESTANTS sont
+   reconstruits avec ces quantités exactes ; les places restantes sont
+   partagées entre Lot Mystère, Carte gratuite et Pioche dans les
+   proportions de la pochette (90 / 7 / 100), les Lots Mystère gardant
+   2 EX pour 1 booster japonais. Coups déjà joués et compteur inchangés. */
+{
+  const AJUST_KEY = 'pika_ajust_stock_2309';
+  const st = outcomeState;
+  if(!isDisplay && !window.PIKA_DEMO_JACKPOT && !safeGetItem(AJUST_KEY)){
+    const reste = st.batch.length - st.pos;
+    const fixes = { booster8:22, booster50:3, etb:2, jackpot300:1, gradee:1 };
+    const nFix = Object.values(fixes).reduce((a,b)=>a+b, 0);
+    if(st.pos >= 20 && st.pos <= 80 && reste > nFix + 20){
+      const libres = reste - nFix;
+      const alt = Math.round(libres*90/197), parc = Math.round(libres*7/197), com = libres - alt - parc;
+      const q = [];
+      Object.entries(fixes).forEach(([c,n])=>{ for(let i=0;i<n;i++) q.push(c); });
+      for(let i=0;i<alt;i++) q.push('alternative');
+      for(let i=0;i<parc;i++) q.push('parc');
+      for(let i=0;i<com;i++) q.push('commune');
+      shuffleInPlace(q);
+      st.batch = st.batch.slice(0, st.pos).concat(q);
+      const mq = [];
+      const jp = Math.round(alt/3);
+      for(let i=0;i<alt-jp;i++) mq.push('carte');
+      for(let i=0;i<jp;i++) mq.push('booster');
+      st.myst = st.myst.slice(0, st.mystPos).concat(shuffleInPlace(mq));
+      st.ajustStock = { pos: st.pos, fixes, alt, parc, com, jp };
+    }
+    try{ localStorage.setItem(AJUST_KEY, String(Date.now())); }catch(e){}
+  }
+}
 // partie interrompue par un rechargement : sa mise ne compte plus (comme avec C)
 if(outcomeState._miseARetirer){ delete outcomeState._miseARetirer; totalMise = Math.max(0, totalMise - AVG_MISE); saveTotals(); }
 function saveOutcomeState(){
