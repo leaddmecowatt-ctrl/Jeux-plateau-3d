@@ -8141,7 +8141,9 @@ const INTERMEDIATE_MAX_COST = 17;  // booster (17 €) au maximum en cours de ro
 let CARD_ROUTE_P = 0.40;   // dernier lancer : détour par Chance quand il est possible
 const EARLY_LANDING_P = 0.30;
 const TEMPTING_P = 0.45;
-const CHANCE_MID_P = 0.55;      // lancer intermédiaire : passage par Chance quand il est possible        // part des lancers intermédiaires posés sur une case tentante   // part des lancers intermédiaires qui posent déjà sur le lot prévu
+const CHANCE_MID_P = 0.55;
+const NEAR_MISS_P = 0.35;       // lancer intermédiaire : arrêt juste à côté d'un gros lot
+const BIG_LOTS = new Set(['gradee','booster50','etb','jackpot300']);      // lancer intermédiaire : passage par Chance quand il est possible        // part des lancers intermédiaires posés sur une case tentante   // part des lancers intermédiaires qui posent déjà sur le lot prévu
 const DICE_W = {2:1,3:2,4:3,5:4,6:5,7:6,8:5,9:4,10:3,11:2,12:1};
 function landable(idx, targetCat){
   if(idx===0) return false;                 // Départ : jamais de lot
@@ -8268,7 +8270,16 @@ function planTotal(pos, rollsLeft, targetCat){
          environ, quand il y en a une sur le chemin, le pion s'y arrête : le
          joueur hésite, relance pour tenter mieux… et le tirage continue. */
       const tempting = single.filter(t=>{ const c = tiles[landingIndex(pos,t)].catKey; return c!=='commune' && c!==targetCat; });
-      const pool = (tempting.length && Math.random() < TEMPTING_P) ? tempting : single;
+      /* « Raté de peu » : arrêt JUSTE à côté d'une case de gros lot
+         (Duopack, Tripack, Coffret, ETB). Ces cases ne peuvent pas être un
+         arrêt de passage (le joueur garderait un gros lot non prévu) : sans
+         ça, le pion ne s'en approchait jamais et tournait toujours sur les
+         mêmes cases — « le jeu fait robot », constaté par l'animateur. */
+      const presque = single.filter(t=>{ const j = landingIndex(pos,t); return BIG_LOTS.has(tiles[(j+1)%N_TILES].catKey) || BIG_LOTS.has(tiles[(j+N_TILES-1)%N_TILES].catKey); });
+      const r = Math.random();
+      const pool = (tempting.length && r < TEMPTING_P) ? tempting
+                 : (presque.length && r < TEMPTING_P + NEAR_MISS_P) ? presque
+                 : single;
       return { total: pickWeightedTotal(pool), onTarget: false, wantDouble: false };
     }
   }
