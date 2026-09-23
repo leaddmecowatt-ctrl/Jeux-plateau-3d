@@ -5311,41 +5311,10 @@ let rollsAllowed = 3;
 // Lot déjà décidé d'avance pour la partie en cours (voir le système de
 // lot prédéterminé plus bas) : null tant qu'aucune mise n'a démarré.
 let pendingOutcome = null;
-/* Commandes animateur avant le premier lancer : une touche par lot,
-   la prochaine partie fait tomber ce lot, point. Chiffres 1 à 6 dans
-   l'ordre des lots (1 ETB, 2 Coffret, 3 Tripack, 4 Duopack, 5 Booster,
-   6 Lot Mystère), plus Z = ETB et M = Tripack. Cette partie est HORS comptabilité : ni la
-   mise ni le lot n'entrent dans la cagnotte / le plafond de reversement,
-   et la file pré-calculée des 500 parties n'est pas touchée (c'est une
-   ETB en plus, offerte par l'animateur). Z une seconde fois avant le
-   lancer annule. forcedGame = la partie en cours est cette partie-bonus. */
-let forcedCat = null;      // catégorie forcée pour la partie à venir, ou null
-/* M a ete retiree de cette table pour servir a l'affichage des regles.
-   Aucune fonction n'est perdue : M valait {cat:'booster50'} (Tripack), ce
-   que FORCE_DIGITS[2] — la touche 3 — fait a l'identique juste en dessous.
-   M etait donc un doublon pur. Le Tripack force reste accessible par 3. */
-const FORCE_KEYS = { z:{cat:'jackpot300', name:'ETB'} };
-// touches chiffres : par position physique (e.code), donc sans Maj sur un clavier AZERTY
-const FORCE_DIGITS = [
-  {cat:'jackpot300',  name:'ETB'},
-  {cat:'etb',         name:'Coffret'},
-  {cat:'booster50',   name:'Tripack'},
-  {cat:'gradee',      name:'Duopack'},
-  {cat:'booster8',    name:'Booster'},
-  {cat:'alternative', name:'Lot Mystère'},
-];
-/* Touches programmées (Z, 1 à 6) RETIRÉES à la demande de l'animateur
-   (23/09) : plus aucun lot ne peut être forcé au clavier, tout sort de la
-   pochette. Le code des parties-bonus reste en place mais n'est plus
-   joignable (forceKeyFor ne reconnaît plus aucune touche). */
-const FORCE_KEYS_ON = false;
-function forceKeyFor(e){
-  if(!FORCE_KEYS_ON) return null;
-  const m = /^(?:Digit|Numpad)([1-6])$/.exec(e.code || '');
-  if(m) return Object.assign({key:m[1]}, FORCE_DIGITS[+m[1]-1]);
-  const k = e.key.toLowerCase();
-  return FORCE_KEYS[k] ? Object.assign({key:k.toUpperCase()}, FORCE_KEYS[k]) : null;
-}
+/* Touches programmées (Z, 1 à 6 = lot forcé) SUPPRIMÉES du code à la
+   demande de l'animateur (23/09) : aucune touche ne peut plus décider d'un
+   lot, tout sort de la pochette. forcedGame ne sert plus qu'à la page de
+   démonstration du jackpot (partie hors pochette et hors comptabilité). */
 let forcedGame = false;
 
 function tileAt(idx){ return idx===-1 ? START_NODE : tiles[idx]; }
@@ -7378,7 +7347,7 @@ function updateCue(){
   if(isDisplay) return;
   updateCoupCount();
   {
-    const cat = pendingOutcome || (forcedCat || peekNextOutcome());
+    const cat = pendingOutcome || peekNextOutcome();
     // même forme ★, juste une teinte un peu plus claire (classe .cue)
     const big = (cat==='jackpot300' || cat==='etb');   // ETB ou coffret : même signal
     if(brandStarL) brandStarL.classList.toggle('cue', big);
@@ -7388,9 +7357,9 @@ function updateCue(){
   // Pendant une partie : le lot de cette partie. Dès qu'il est validé
   // (ou avant le premier lancer) : le lot de la partie SUIVANTE, déjà
   // en tête de file — l'animateur le sait avant d'appuyer sur C.
-  const cat = pendingOutcome || (forcedCat || peekNextOutcome());
-  // point blanc = un lot est programmé (touche 1-6 / Z / M) pour cette partie
-  const forcedNow = !!forcedCat || forcedGame;
+  const cat = pendingOutcome || peekNextOutcome();
+  // point blanc = partie hors pochette (page de démonstration seulement)
+  const forcedNow = forcedGame;
   cueDot.className = 'cue-dot' + (cat==='jackpot300' ? ' etb' : cat==='etb' ? ' coffret' : '') + (forcedNow ? ' forced' : '');
 }
 function nextPredeterminedOutcome(){
@@ -7403,14 +7372,6 @@ function nextPredeterminedOutcome(){
   // retournera dans la pochette au chargement (voir loadOutcomeState)
   outcomeState.enCours = true;
   saveOutcomeState();
-  return cat;
-}
-/* Lot forcé (touches Z / M) : partie-bonus hors comptabilité, la file
-   des lots et la cagnotte ne bougent pas. */
-function takeForcedLot(){
-  const cat = forcedCat;
-  forcedCat = null;
-  forcedGame = true;
   return cat;
 }
 function resetOutcomeBatch(){
@@ -8112,7 +8073,6 @@ function restart(){
     totalMise = Math.max(0, totalMise - AVG_MISE); saveTotals();
   }
   pendingOutcome = null;
-  forcedCat = null;
   forcedGame = false;
   plannedCardDelta = null;
   walk = null;
@@ -8155,17 +8115,10 @@ async function drawAndMove(){
   // partie complète = une mise, créditée automatiquement à la
   // cagnotte interne, sans aucune saisie manuelle.
   if(currentIndex===-1){
-    if(forcedCat){
-      // partie-bonus (touche Z / M) : ni mise ni lot comptés
-      pendingOutcome = takeForcedLot();
-    }else{
-      totalMise += AVG_MISE;
-      saveTotals();
-      // Le lot de cette mise est décidé maintenant, tiré du lot
-      // pré-calculé — les dés qui vont suivre restent honnêtes à
-      // l'écran, mais ne décident plus du lot réellement remporté.
-      pendingOutcome = nextPredeterminedOutcome();
-    }
+    totalMise += AVG_MISE;
+    saveTotals();
+    // Le lot de cette mise est décidé maintenant, tiré de la pochette
+    pendingOutcome = nextPredeterminedOutcome();
     updateCue();
   }
   // On continue plutôt que de garder le lot affiché : l'aperçu (ou le
@@ -8724,19 +8677,6 @@ window.addEventListener('keydown', (e)=>{
     else if(moving){ claimKeyAt = performance.now(); showKeyHint('⏳ Le lot sera gardé dès l’arrivée du personnage'); }
     else if(winBtn && winBtn.disabled && currentIndex>0) showKeyHint('Lot déjà validé — C pour recommencer');
     else if(currentIndex<=0) showKeyHint('Aucun lot à garder : tirez d’abord les cartes (B)');
-  }
-  else if(forceKeyFor(e)){
-    const fk = forceKeyFor(e);
-    // Z n'annule plus le dernier lot (retiré à la demande de l'animateur) :
-    // l'annulation reste possible avec le bouton « Annuler » à l'écran.
-    if(currentIndex===-1 && !moving && !finished){
-      // avant le premier lancer : le lot de la touche tombera dans la partie
-      // qui vient. AUCUN texte à l'écran (les joueurs ne doivent rien voir) :
-      // seul le point discret en bas à gauche (blanc) confirme à l'animateur.
-      forcedCat = (forcedCat === fk.cat) ? null : fk.cat;
-      updateCue();
-    }
-    // touche pressée au mauvais moment : silence, rien à l'écran
   }
   else if(k==='f'){ toggleFullscreen(); }
   else if(k==='r'){ cycleRotation(); }

@@ -52,8 +52,8 @@ les animations, confettis et timings **ne se vérifient pas** — seul un vrai a
 **Commandes clavier** (`addEventListener('keydown'`) : A démarrer · B tirer les cartes ·
 D garder le lot · C recommencer · F plein écran · R pivoter l'image ·
 M affiche la **bulle de règles** (M ou Échap pour fermer). Les touches programmées
-(Z, 1–6 = lot forcé) sont **retirées** depuis le 23/09 (`FORCE_KEYS_ON = false`) : tout
-sort de la pochette.
+(Z, 1–6 = lot forcé) sont **supprimées du code** depuis le 23/09 : aucune touche ne décide
+d'un lot, tout sort de la pochette.
 
 **Lots** : `PAYOUT_LADDER` (catégories et valeur marché de chaque lot), `OUTCOME_COST`,
 `TIER_LEVEL` (intensité de la célébration), `LOT_IMAGE_URLS`, `CATEGORY_MESSAGES`.
@@ -89,8 +89,8 @@ bonne case (`EARLY_LANDING_P`) ; au même lancer, jamais le total de la partie p
 
 **Recalibrage** (`RECAL`) : historique ; il ne construit plus de file depuis la pochette de 245.
 
-**Lots forcés** (`forcedCat`, `takeForcedLot`) : code conservé mais injoignable (touches
-retirées). S'ils revenaient, ils sont hors pochette et hors comptabilité.
+**Lots forcés** : supprimés (touches et code). Seul `forcedGame` reste, pour la page de
+démonstration du jackpot (partie hors pochette et hors comptabilité).
 
 **Compteur de coups** (`updateCoupCount`, `#coupCount`) : « N coups sur 245 » sous le titre,
 = position dans la pochette moins le coup en cours ; relayé à l'écran public. « Recommencer »
@@ -135,7 +135,7 @@ décoration). Le contexte WebGL perdu est rattrapé (`webglcontextlost`).
 - Les pourcentages de chance ne s'affichent pas à l'écran.
 - Aucun texte à l'écran quand une touche forcée est pressée (le public ne doit rien voir).
 - La pochette fait **exactement 245 coups** avec les quantités de `POUCH` : rien ne s'y ajoute,
-  rien ne s'en retire (sauf les lots forcés, hors pochette).
+  rien ne s'en retire.
 - Le résultat est décidé avant l'animation ; l'animation ne change jamais les quantités.
 
 ## Historique utile
