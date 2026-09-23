@@ -163,9 +163,13 @@ function drawCard(deck){
 const BOARD_DATA = [
   'booster8','alternative','chest','commune','commune','commune','chance','commune','commune*',
   'gradee','booster8','alternative','gradee','commune','commune','chest','commune','commune',
-  'commune','chance','commune','commune','commune','gradee','commune','booster50','prison',
+  'commune','chance','alternative','commune','commune','gradee','commune','booster50','prison',
   'parc','commune','commune','booster8','booster8','chance','commune','etb','jackpot300',
 ].map(tok=>({ cat: tok.replace('*',''), isVisite: tok.endsWith('*') }));
+// Case 21 : Lot Mystère (23/09, accord de l'animateur ; c'était une commune).
+// Le Lot Mystère (90 coups sur 245) n'existait qu'en cases 2 et 12 : la
+// case 2 est hors d'atteinte depuis Départ, le pion allait donc TOUJOURS en
+// case 12 en trois petits pas (3 à 5). Aucune case ajoutée.
 // Case 28 (angle, à côté de la Prison) : Parc gratuit, où tombent les cartes
 // promo (demande de l'animateur, 23/09 ; c'était une commune).
 if(BOARD_DATA.length !== N_TILES) throw new Error('BOARD_DATA: '+BOARD_DATA.length+' cases pour N_TILES='+N_TILES);

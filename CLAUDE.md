@@ -58,7 +58,7 @@ d'un lot, tout sort de la pochette.
 **Lots** : `PAYOUT_LADDER` (catégories et valeur marché de chaque lot), `OUTCOME_COST`,
 `TIER_LEVEL` (intensité de la célébration), `LOT_IMAGE_URLS`, `CATEGORY_MESSAGES`.
 Catégories : `jackpot300` (ETB 30 ans), `etb` (coffret ex), `booster50` (tripack),
-`gradee` (duopack), `booster8` (booster), `alternative` (lot mystère : booster ou carte),
+`gradee` (duopack), `booster8` (booster), `alternative` (lot mystère : booster ou carte ; cases 2, 12 et 21 — la 21 remplace une commune depuis le 23/09),
 `commune`, `parc` (Parc gratuit, case 28 : les cartes promo ouvertes), `prison` (hors pochette), plus `chance` et `chest` (Caisse Communautaire) qui sont des détours, pas des lots.
 
 **Pochette de 245 coups** (depuis le 23/09, décision de l'hôte) : `POUCH` = 1 ETB, 2 coffrets,
