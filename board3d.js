@@ -2106,7 +2106,11 @@ const RIVET_OFFSETS = [[-1,-1],[1,-1],[-1,1],[1,1]];
 // ça, le moteur peut faire disparaître tout le lot (collerette,
 // liseré, rivets) selon l'angle de caméra, d'où des cases qui
 // "deviennent noires" par intermittence en tournant la vue.
-const tileCollarInst = new THREE.InstancedMesh(tileCollarGeo, tileGoldMat, N_TILES);
+/* Collerette en FEUILLE D'OR, comme les flancs et le socle (23/09) : en or
+   lisse, elle formait entre les cases des bandes jaune uni que l'animateur
+   a entourées sur sa capture — seules pièces dorées qui n'avaient pas la
+   matière du reste du plateau. */
+const tileCollarInst = new THREE.InstancedMesh(tileCollarGeo, goldLeafMat, N_TILES);
 tileCollarInst.castShadow = false; tileCollarInst.receiveShadow = false;
 tileCollarInst.frustumCulled = false;
 boardGroup.add(tileCollarInst);
