@@ -192,6 +192,9 @@ html.storm #bgGlow{ display:none; }
   .coup-count,.coup-count::before,.cc-bar i,.coup-count.tick .cc-n{ animation:none !important; }
 }
 html.eco .coup-count::before,html.eco .cc-bar i{ animation:none; }
+/* Le compteur est désormais SUR le plateau (plaque 3D à droite de PIKAPOLY) :
+   l'enseigne du haut reste dans la page pour la synchro, mais masquée. */
+.coup-count{ display:none !important; }
 .brand{
   font-size:10px;font-weight:900;letter-spacing:.14em;color:var(--gold-bright);
   opacity:.8;

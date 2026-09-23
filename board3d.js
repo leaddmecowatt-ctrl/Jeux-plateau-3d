@@ -2149,6 +2149,89 @@ const centerPlate = new THREE.Mesh(
 centerPlate.position.y = 0.07;
 boardGroup.add(centerPlate);
 
+/* ---------- Compteur de coups SUR le plateau (23/09) ----------
+   L'animateur : « le 0/245, je l'aurais mis sur le plateau, au milieu, à
+   côté de PIKAPOLY, encadré un peu épais ». Plaque posée à plat sur la
+   dalle centrale, à droite du titre : cadre doré épais, rampe d'ampoules,
+   « COUPS JOUÉS », gros chiffres N / 245, barre de la pochette, coups
+   restants. Rouge sous 30 coups restants. Redessinée à chaque coup (sa
+   propre petite texture : la grande plaque centrale n'est pas retouchée). */
+const CC_W = 0.25, CC_H = 0.175;                    // en fraction de la dalle
+const ccCvs = document.createElement('canvas'); ccCvs.width = 640; ccCvs.height = Math.round(640*CC_H/CC_W);
+const ccTex = new THREE.CanvasTexture(ccCvs); ccTex.colorSpace = THREE.SRGBColorSpace;
+ccTex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+const ccMesh = (()=>{
+  const W = (N_SIDE-2)*CELL;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(W*CC_W, W*CC_H),
+    new THREE.MeshBasicMaterial({map:ccTex, transparent:true, depthWrite:false, toneMapped:false}));
+  m.rotation.x = -Math.PI/2;
+  // à droite de « PIKAPOLY » (titre centré à 18,5 % du haut de la dalle)
+  m.position.set((0.86-0.5)*W, 0.145, (0.118-0.5)*W);   // au-dessus du sous-titre
+  m.renderOrder = 3;
+  boardGroup.add(m);
+  return m;
+})();
+let ccPulseAt = 0, ccReste = 245;
+function drawCoupPlate(n, total){
+  const c = ccCvs.getContext('2d'), w = ccCvs.width, h = ccCvs.height;
+  const reste = Math.max(0, total - n), urgent = reste > 0 && reste <= 30;
+  ccReste = reste;
+  const or = urgent ? '#ff5a5a' : '#ffe27a', orFonce = urgent ? '#8a1010' : '#7a5a12';
+  c.clearRect(0,0,w,h);
+  const m = 14, r = 38;
+  // plaque sombre + cadre épais
+  roundRectPath(c, m, m, w-2*m, h-2*m, r);
+  const fond = c.createLinearGradient(0,0,0,h);
+  fond.addColorStop(0, urgent ? '#2a0606' : '#1d1405'); fond.addColorStop(1, urgent ? '#0c0202' : '#070503');
+  c.fillStyle = fond; c.fill();
+  c.lineWidth = 16; c.strokeStyle = orFonce; c.stroke();
+  roundRectPath(c, m, m, w-2*m, h-2*m, r);
+  const cadre = c.createLinearGradient(0,0,w,h);
+  cadre.addColorStop(0, urgent ? '#ffb0b0' : '#fff2b8'); cadre.addColorStop(.5, or); cadre.addColorStop(1, urgent ? '#b01818' : '#c8961e');
+  c.lineWidth = 9; c.strokeStyle = cadre; c.stroke();
+  // rampe d'ampoules sur le cadre
+  c.save(); c.shadowColor = or; c.shadowBlur = 10; c.fillStyle = urgent ? '#ffe0e0' : '#fff6d0';
+  const pas = 34;
+  for(let x = m+r; x <= w-m-r; x += pas){ c.beginPath(); c.arc(x, m, 4.2, 0, 7); c.fill(); c.beginPath(); c.arc(x, h-m, 4.2, 0, 7); c.fill(); }
+  for(let y = m+r; y <= h-m-r; y += pas){ c.beginPath(); c.arc(m, y, 4.2, 0, 7); c.fill(); c.beginPath(); c.arc(w-m, y, 4.2, 0, 7); c.fill(); }
+  c.restore();
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  // libellé
+  c.font = '900 44px Arial,Helvetica,sans-serif'; c.fillStyle = urgent ? '#ffd6d6' : '#f6dc86';
+  c.fillText(urgent ? 'DERNIERS COUPS !' : 'COUPS JOUÉS', w/2, h*0.18);
+  // gros chiffre + total
+  const big = 150;
+  c.font = '900 '+big+'px "Arial Black",Impact,Arial,sans-serif';
+  const tn = String(n); const wn = c.measureText(tn).width;
+  c.font = '900 72px "Arial Black",Impact,Arial,sans-serif';
+  const tt = ' / '+total; const wt = c.measureText(tt).width;
+  const x0 = w/2 - (wn+wt)/2, yb = h*0.54;
+  c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+  c.save();
+  c.font = '900 '+big+'px "Arial Black",Impact,Arial,sans-serif';
+  const g = c.createLinearGradient(0, yb-big*0.8, 0, yb);
+  g.addColorStop(0, urgent ? '#fff0f0' : '#fffbe6'); g.addColorStop(.45, urgent ? '#ff8a8a' : '#ffe07a');
+  g.addColorStop(.55, urgent ? '#c01818' : '#d69a17'); g.addColorStop(1, urgent ? '#ffc0c0' : '#ffe8a0');
+  c.shadowColor = or; c.shadowBlur = 22; c.fillStyle = g;
+  c.fillText(tn, x0, yb + big*0.34);
+  c.restore();
+  c.font = '900 72px "Arial Black",Impact,Arial,sans-serif'; c.fillStyle = or;
+  c.fillText(tt, x0 + wn, yb + big*0.34);
+  // barre de la pochette
+  const bx = w*0.14, bw = w*0.72, by = h*0.80, bh = 16;
+  roundRectPath(c, bx, by, bw, bh, 8); c.fillStyle = urgent ? '#3a0a0a' : '#2a1d05'; c.fill();
+  if(total > 0 && n > 0){
+    roundRectPath(c, bx, by, Math.max(bh, bw*n/total), bh, 8);
+    c.save(); c.shadowColor = or; c.shadowBlur = 12; c.fillStyle = or; c.fill(); c.restore();
+  }
+  // coups restants
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.font = '900 40px Arial,Helvetica,sans-serif'; c.fillStyle = urgent ? '#ffd6d6' : '#ffe9a8';
+  c.fillText(reste === 0 ? 'POCHETTE TERMINÉE' : reste === 1 ? 'DERNIER COUP !' : reste + ' COUPS RESTANTS', w/2, h*0.905);
+  ccTex.needsUpdate = true;
+}
+drawCoupPlate(0, 245);
+
 /* ---------- Intégration du plateau dans le décor (polish final) ----------
    Deux voiles posés SOUS la dalle, dans la scène 3D : la photo de fond de la
    page n'est pas touchée, elle est seulement vue au travers.
@@ -6908,6 +6991,15 @@ function animate(){
   _lastRenderAt = nowMs;
   const realDt = _lastFrameAt ? (nowMs - _lastFrameAt)/1000 : 0;
   _lastFrameAt = nowMs;
+  // compteur sur le plateau : il « saute » à chaque coup joué, et respire
+  // doucement quand il ne reste que les derniers coups
+  if(ccMesh){
+    const u = (nowMs - ccPulseAt)/700;
+    let k = u >= 0 && u < 1 ? 1 + 0.22*Math.sin(Math.PI*u)*(1-u) : 1;
+    const o = ccReste;   // tenu par drawCoupPlate (outcomeState n'existe pas encore à la 1re image)
+    if(o > 0 && o <= 30 && !reduceMotion) k *= 1 + 0.03*Math.sin(nowMs/(o <= 10 ? 90 : 160));
+    ccMesh.scale.setScalar(k);
+  }
   // au repos plafonné, la cadence ne dit rien de la santé de l'appareil
   if(!document.hidden && realDt > 0 && realDt < 1 && !(auRepos && !ecoMode)) qualityTick(realDt, nowMs/1000);
   /* getDelta() AVANT getElapsedTime() — l'ordre est vital. Dans three.js,
@@ -7336,6 +7428,7 @@ function updateCoupCount(n, total){
     total = outcomeState.batch.length;
     broadcastSync({type:'coups', n, total});
   }
+  drawCoupPlate(n, total);
   const reste = Math.max(0, total - n);
   const nEl = document.getElementById('ccN'), tEl = document.getElementById('ccT');
   const restEl = document.getElementById('ccRest'), fillEl = document.getElementById('ccFill');
@@ -7352,6 +7445,7 @@ function updateCoupCount(n, total){
   // un coup de plus : le chiffre saute (pas au chargement ni en reculant)
   if(coupCountEl.dataset.pret && !isNaN(avant) && n > avant){
     coupCountEl.classList.remove('tick'); void coupCountEl.offsetWidth; coupCountEl.classList.add('tick');
+    ccPulseAt = performance.now();
   }
   coupCountEl.dataset.pret = '1';
 }

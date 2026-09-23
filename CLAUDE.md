@@ -92,8 +92,9 @@ bonne case (`EARLY_LANDING_P`) ; au même lancer, jamais le total de la partie p
 **Lots forcés** : supprimés (touches et code). Seul `forcedGame` reste, pour la page de
 démonstration du jackpot (partie hors pochette et hors comptabilité).
 
-**Compteur de coups** (`updateCoupCount`, `#coupCount`) : enseigne façon casino sous le titre
-(« COUPS JOUÉS N / 245 », barre de progression, « X coups restants », rouge sous 30 restants),
+**Compteur de coups** (`updateCoupCount`, `drawCoupPlate`, `ccMesh`) : plaque encadrée posée SUR le
+plateau, à droite de « PIKAPOLY » (« COUPS JOUÉS N / 245 », barre, « X coups restants », rouge sous
+30 restants, saute à chaque coup) ; l'enseigne HTML `#coupCount` reste pour la synchro mais masquée,
 = position dans la pochette moins le coup en cours ; relayé à l'écran public. « Recommencer »
 avant le gain recule la position (le lot retourne en tête, rien n'est dupliqué).
 
