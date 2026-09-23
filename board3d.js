@@ -981,6 +981,18 @@ function getGlyphTexture(kind, accentColor){
   if(kind==='visite'){
     ctx.shadowColor = 'rgba(255,255,255,.6)'; ctx.shadowBlur = size*0.12;
     drawVectorIcon(ctx, 'unlock', cx, cy+size*0.02, size*0.22, '#fff9e6');
+  } else if(kind==='chance' || kind==='chest' || kind==='prison'){
+    /* Fond d'ombre doux + halo clair derrière le picto : sans bulle, il se
+       perdait sur la case colorée juste en dessous. */
+    const ombre = ctx.createRadialGradient(cx, cy, size*0.05, cx, cy, size*0.5);
+    ombre.addColorStop(0, 'rgba(10,6,20,.72)'); ombre.addColorStop(0.6, 'rgba(10,6,20,.45)'); ombre.addColorStop(1, 'rgba(10,6,20,0)');
+    ctx.fillStyle = ombre; ctx.fillRect(0, 0, size, size);
+    const halo = ctx.createRadialGradient(cx, cy, size*0.05, cx, cy, size*0.34);
+    halo.addColorStop(0, 'rgba(255,236,170,.35)'); halo.addColorStop(1, 'rgba(255,236,170,0)');
+    ctx.fillStyle = halo; ctx.fillRect(0, 0, size, size);
+    if(kind==='chance') drawGoldQuestion(ctx, cx, cy, size*0.74);
+    else if(kind==='chest') drawChestIcon(ctx, cx, cy + size*0.06, size*0.66, false);
+    else drawPadlock(ctx, cx, cy - size*0.10, size*0.56);
   } else if(kind==='chance'){
     drawGoldQuestion(ctx, cx, cy, size*0.80);          // plus de bulle : le « ? » seul, doré
   } else if(kind==='chest'){
@@ -2637,8 +2649,9 @@ for(let i=0;i<N_TILES;i++){
     holoShine = { tex:shineTex, speed:0.16+Math.random()*0.1, phase:Math.random() };
   } else if(i !== 0 && catDef.tier === 'glyph'){
     const glyphKind = data.isVisite ? 'visite' : catKey;
-    floatObj = makeSprite(getGlyphTexture(glyphKind, accentColor), data.isVisite ? 0.3 : 0.6);
-    floatObj.position.y = tileTopY + 0.3;
+    // plus grandes et plus hautes : l'animateur ne les voyait pas bien
+    floatObj = makeSprite(getGlyphTexture(glyphKind, accentColor), data.isVisite ? 0.3 : 0.82);
+    floatObj.position.y = tileTopY + 0.38;
     topGroup.add(floatObj);
   }
   if(floatObj){
@@ -5209,7 +5222,11 @@ function tileSurfOffset(tile){
   return CARD_FACE_LIFT + ((tile && tile.topGroup) ? tile.topGroup.position.y : 0);
 }
 
-function setActive(index){
+/* pop = rebond « ressort » de la case (0,16 d'amplitude, 3 Hz). Seulement
+   à l'ARRIVÉE : pendant la marche, le pion suit la hauteur de la case sous
+   ses pieds, et ce rebond sur chaque case traversée le faisait sautiller
+   — la marche « pas fluide » constatée par l'animateur. */
+function setActive(index, pop = true){
   tiles.forEach((t,i)=>{
     const wasActive = t.isActive;
     t.isActive = (i===index);
@@ -5217,7 +5234,7 @@ function setActive(index){
     // d'opacité nulle est quand même trié et dessiné à chaque image.
     // 39 halos sur 40 étaient ainsi rendus pour rien.
     if(!t.isActive){ t.halo.material.opacity = 0; t.halo.visible = false; }
-    else if(!wasActive){ t.popT0 = clock.getElapsedTime(); }
+    else if(!wasActive && pop){ t.popT0 = clock.getElapsedTime(); }
   });
 }
 setActive(-1);
@@ -5336,8 +5353,8 @@ function startWalk(fromIdx, count, stepDuration){
   const vCruise = steps>0 ? 1/stepDuration : 0;
   // rampes courtes : 0,3 case au départ et à l'arrivée, sinon les premiers
   // et derniers pas s'étirent et la cadence paraît irrégulière
-  // rampes (démarrage et ralentissement final) variables : 0,22 à 0,45 case
-  const rampUnits = Math.min(forcedFast ? 0.3 : 0.22 + Math.random()*0.23, steps/2);
+  // rampes (démarrage et ralentissement final) variables : 0,30 à 0,45 case
+  const rampUnits = Math.min(forcedFast ? 0.3 : 0.30 + Math.random()*0.15, steps/2);
   const accelTime = rampUnits>0 ? (2*rampUnits)/vCruise : 0;
   const cruiseUnits = steps - 2*rampUnits;
   const cruiseTime = vCruise>0 ? cruiseUnits/vCruise : 0;
@@ -6284,7 +6301,7 @@ function frameStep(dt, t){
       }
       walk.lastSeg = segIdx;
       currentIndex = walk.indices[segIdx];
-      setActive(currentIndex);
+      setActive(currentIndex, false);   // case traversée : pas de rebond
     }
 
     if(!reduceMotion){
@@ -7983,9 +8000,10 @@ const NEUTRAL_FORBIDDEN = new Set(['chance','prison']);
 // des arrivées qui passent par un détour quand c'est possible
 const CARD_DELTAS = [1,2,3,4,5,6,-1,-2,-3];
 const INTERMEDIATE_MAX_COST = 17;  // booster (17 €) au maximum en cours de route
-let CARD_ROUTE_P = 0.18;
+let CARD_ROUTE_P = 0.40;   // dernier lancer : détour par Chance quand il est possible
 const EARLY_LANDING_P = 0.30;
-const TEMPTING_P = 0.35;        // part des lancers intermédiaires posés sur une case tentante   // part des lancers intermédiaires qui posent déjà sur le lot prévu
+const TEMPTING_P = 0.45;
+const CHANCE_MID_P = 0.55;      // lancer intermédiaire : passage par Chance quand il est possible        // part des lancers intermédiaires posés sur une case tentante   // part des lancers intermédiaires qui posent déjà sur le lot prévu
 const DICE_W = {2:1,3:2,4:3,5:4,6:5,7:6,8:5,9:4,10:3,11:2,12:1};
 function landable(idx, targetCat){
   if(idx===0) return false;                 // Départ : jamais de lot
@@ -8077,7 +8095,7 @@ function planTotal(pos, rollsLeft, targetCat){
     // Un double (lancer bonus) est décidé ICI, une fois sur trois sur un
     // total pair comme avec deux vrais dés, et le plan compte alors un
     // lancer de plus — sinon le lancer bonus faisait rater la case.
-    const single = [], double = [], early = [];
+    const single = [], double = [], early = [], viaChance = [];
     for(let t=3;t<=11;t++){
       const idx = landingIndex(pos, t);
       /* Arrivée anticipée : le pion peut se poser TÔT sur une case du lot
@@ -8085,9 +8103,23 @@ function planTotal(pos, rollsLeft, targetCat){
          garder (le résultat est le même) ou relancer : le nombre de
          lancers et de cases parcourues varie d'une partie à l'autre. */
       if(idx!==0 && tiles[idx].catKey===targetCat && t%2===1 && canReachTarget(idx, rollsLeft-1, targetCat, memo)) early.push(t);
+      /* Chance EN COURS DE ROUTE : la carte (déplacement pipé) pose le pion
+         sur une case de passage d'où le lot prévu reste atteignable. Avant,
+         Chance n'était possible qu'au tout dernier lancer : on ne la voyait
+         presque jamais. */
+      if(tiles[idx].catKey==='chance' && t%2===1){
+        for(const d of CARD_DELTAS){
+          const j = landingIndex(idx, d);
+          if(j>0 && tiles[j].catKey!==targetCat && tiles[j].catKey!=='chance' && landable(j, targetCat) && canReachTarget(j, rollsLeft-1, targetCat, memo)) viaChance.push({ t, d });
+        }
+      }
       if(tiles[idx].catKey===targetCat || !landable(idx, targetCat)) continue;
       if(canReachTarget(idx, rollsLeft-1, targetCat, memo)) single.push(t);
       if(t%2===0 && canReachTarget(idx, rollsLeft, targetCat, memo)) double.push(t);
+    }
+    if(viaChance.length && Math.random() < CHANCE_MID_P){
+      const pick = viaChance[Math.floor(Math.random()*viaChance.length)];
+      return { total: pick.t, onTarget: false, wantDouble: false, cardDelta: pick.d };
     }
     if(early.length && Math.random() < EARLY_LANDING_P) return { total: pickWeightedTotal(early), onTarget: true, wantDouble: false };
     if(double.length && (!single.length || Math.random() < 1/3)) return { total: pickWeightedTotal(double), onTarget: false, wantDouble: true };
@@ -8097,7 +8129,9 @@ function planTotal(pos, rollsLeft, targetCat){
          environ, quand il y en a une sur le chemin, le pion s'y arrête : le
          joueur hésite, relance pour tenter mieux… et le tirage continue. */
       const tempting = single.filter(t=>{ const c = tiles[landingIndex(pos,t)].catKey; return c!=='commune' && c!==targetCat; });
-      const pool = (tempting.length && Math.random() < TEMPTING_P) ? tempting : single;
+      const caisses = tempting.filter(t=>tiles[landingIndex(pos,t)].catKey==='chest');
+      let pool = (tempting.length && Math.random() < TEMPTING_P) ? tempting : single;
+      if(pool === tempting && caisses.length && Math.random() < 0.5) pool = caisses;   // la Caisse se voit plus souvent
       return { total: pickWeightedTotal(pool), onTarget: false, wantDouble: false };
     }
   }
