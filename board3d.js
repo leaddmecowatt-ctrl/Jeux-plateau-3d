@@ -3720,7 +3720,8 @@ function updateReaction(t){
                   pendant que la droite tombait à l'aplomb — les deux
                   épaules n'ont pas la même orientation de liaison. */
 const RIG = { ankle:-1.0, hipsZ:0.022, clear:-0.002, toeIn:0.12,
-              symL:0.135, symR:0.09, restLX:0.10, restRX:-1.14 };
+              symL:0.135, symR:0.09, restLX:0.10, restRX:-1.14,
+              abd:0.26 };
 const GAIT = {
   thigh: 0.1509, shin: 0.1746, hipY: 0.3668, footY: 0.0492,
   reach: (0.1509 + 0.1746) * 0.995,
@@ -3960,6 +3961,16 @@ function buildBodyLayer(bones, blink, model){
        dont on a vérifié qu'il fait bien avancer la main. */
     add('LeftArm','x',  RIG.symL);
     add('RightArm','x', RIG.symR);
+    /* Bras écartés du buste (abduction). L'épaule du squelette est à 9,6 cm
+       de l'axe, DANS le buste de Luffy (10,7 cm de demi-largeur à cette
+       hauteur) : bras pendants, ils y étaient enfoncés — de face on ne
+       voyait que les manches, et à la marche les bras « se baladaient dans
+       le buste » (constaté par l'animateur). Mesuré : sur ce rig, +z écarte
+       les DEUX bras vers l'extérieur (coude +5 cm pour 0,3 rad) sans les
+       pousser en avant ni en arrière. 0,26 : bras le long du corps, mains
+       bien visibles. */
+    add('LeftArm','z',  RIG.abd);
+    add('RightArm','z', RIG.abd);
 
     /* ---- 2. Report du poids d'un pied sur l'autre ----
        Au repos, personne ne tient son poids réparti également très
