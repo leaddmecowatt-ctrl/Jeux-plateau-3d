@@ -1235,7 +1235,7 @@ renderer.domElement.addEventListener('webglcontextlost', (e)=>{
   e.preventDefault();
   // horodaté : le mode éco imposé expire (voir QSTICK_TTL), il ne reste
   // plus figé à vie après UNE surchauffe
-  try{ localStorage.setItem(QSTICK_KEY, String(Date.now())); }catch(err){}
+  if(!isDisplay){ try{ localStorage.setItem(QSTICK_KEY, String(Date.now())); }catch(err){} }
   const warn = document.createElement('div');
   warn.className = 'gl-fallback';
   warn.textContent = 'Affichage relancé en mode économie…';
@@ -2884,6 +2884,9 @@ const LIGHT_BASE = { key: key.intensity, hemi: hemiLight.intensity, fill: fill.i
 let storm = null;
 const stormWaves = [];
 let beamMesh = null, beamCore = null, beamHalo = null, beamDisc = null, beamSource = null, beamLight = null;
+/* Lumière du faisceau présente DÈS le chargement (intensité 0) : l'ajouter
+   au premier jackpot recompilait tous les matériaux en pleine finale. */
+beamLight = new THREE.PointLight(0xd7ebff, 0, 12, 2); scene.add(beamLight);
 /* Faisceau : cône ouvert, du ciel vers la case, en matière additive. Le
    shader fait défiler des stries verticales (rayons) et des anneaux qui
    descendent, plus clair au centre du cône qu'à ses bords. */
@@ -6197,7 +6200,7 @@ function frameStep(dt, t){
      garde-fou élargit le champ pour garder les 4 coins visibles, ce qui
      n'a aucun sens en gros plan sur le pion. */
   if(!updateCineCam(dt)){
-    controls.update();
+    controls.update(dt);   // en secondes : la rotation auto garde sa vitesse à 30 i/s
     updateCornerSafety(dt);
   }
   updateSparkles(dt);
@@ -6724,7 +6727,7 @@ function applyQuality(level){
      la creation de l'horloge : melanger les deux rendrait la grace
      inoperante. */
   QUALITY.armedAt = performance.now()/1000 + 1.8;
-  QUALITY.samples = 0; QUALITY.slow = 0; QUALITY.fast = 0;
+  QUALITY.samples = 0; QUALITY.slow = 0; QUALITY.fast = 0; QUALITY.tenu = 0;
   /* La resolution de rendu est de LOIN le changement le plus visible :
      elle ne bouge donc plus qu'a partir du cran 3. Les crans 1 et 2 ne
      touchent que des choses imperceptibles (resolution du bloom, type
@@ -6814,12 +6817,16 @@ function qualityTick(realDt, now){
      saut de victoire) ne comptent pas — ils faisaient descendre l'échelle
      pour un à-coup de quelques secondes. */
   if(celebRAF || storm || victoire) return;
-  // un cran repris et tenu 10 s est confirmé : il ne deviendra plus plancher
-  if(QUALITY.triedUp !== null && now - QUALITY.last > 10) QUALITY.triedUp = null;
+  // un cran repris et tenu ~600 images MESURÉES est confirmé (et non 10 s
+  // d'horloge, qui passaient au repos sans aucune mesure — audit 2)
+  QUALITY.tenu = (QUALITY.tenu||0) + 1;
+  if(QUALITY.triedUp !== null && QUALITY.tenu > 600) QUALITY.triedUp = null;
   /* En mode éco la boucle est plafonnée à 30 i/s : les seuils normaux
      (lent > 1/30, fluide < 1/50) y rendaient la remontée IMPOSSIBLE et
      comptaient une image sur deux comme lente. */
-  const seuilLent = ecoMode ? 1/22 : Q_LENT, seuilFluide = ecoMode ? 1/26 : Q_FLUIDE;
+  // plafond éco ≈ 30 i/s (33 ms à 60 Hz, 40 ms à 50/75/100 Hz) : fluide
+  // sous 45 ms, lent au-delà de 58 ms (une image sautée)
+  const seuilLent = ecoMode ? 1/17 : Q_LENT, seuilFluide = ecoMode ? 1/22 : Q_FLUIDE;
 
   QUALITY.samples++;
   if(realDt > seuilLent) QUALITY.slow++;
@@ -6916,7 +6923,7 @@ function animate(){
      aussi. Les cases ondulent doucement, 30 images suffisent, et l'appareil
      chauffe deux fois moins entre les parties — c'est la chauffe qui, au
      bout de quelques coups, faisait ralentir puis baisser la qualité. */
-  const auRepos = !walk && !moving && !drawInProgress && !storm && !victoire && !celebRAF && cineMode === null;
+  const auRepos = !walk && !moving && !drawInProgress && !storm && !victoire && !celebRAF && cineMode === null && cineBlend <= 0.001;   // pas pendant le retour de la caméra
   if((ecoMode || auRepos) && nowMs - _lastRenderAt < 31) return;
   _lastRenderAt = nowMs;
   const realDt = _lastFrameAt ? (nowMs - _lastFrameAt)/1000 : 0;
@@ -8152,7 +8159,7 @@ async function drawAndMove(){
   curGameTotals.push(draw.total);
   curPath.push(landingIndex(currentIndex, draw.total));
   if(draw.isDouble) rollsAllowed++;
-  broadcastSync({type:'draw', draw});
+  broadcastSync({type:'draw', draw, rollsUsed, rollsAllowed});
   topNum.textContent = draw.total;
   const genTirage = generation;
   try{ await playCardDrawAnimation(draw); } finally { drawInProgress = false; }
@@ -8482,7 +8489,7 @@ async function claimCurrentLot(){
   const mystery = realCat === 'alternative' ? (forced ? (Math.random() < 0.5 ? 'booster' : 'carte') : drawMysterySub()) : null;
   celebrate(realCat, null, {locked:true, mystery});
   broadcastSync({type:'celebrate', catKey:realCat, mystery});
-  lastWinUndo = { amountAdded: totalPaid - paidBefore, rollsUsedBefore, swap, pending: pendingBefore, mystery, forced };
+  lastWinUndo = { amountAdded: totalPaid - paidBefore, rollsUsedBefore, swap, pending: pendingBefore, mystery, forced, pushAt: pushCount };
   if(undoBtn) undoBtn.hidden = false;
   // Un lot gardé épuise le tour : plus aucun lancer sur cette mise.
   rollsUsed = rollsAllowed;
@@ -8495,10 +8502,12 @@ if(winBtn) winBtn.addEventListener('click', claimCurrentLot);
 if(undoBtn) undoBtn.addEventListener('click', ()=>{
   if(!lastWinUndo) return;
   stopStorm();                          // annuler pendant la finale : plus de foudre sur l'aperçu
-  broadcastSync({type:'undo'});
+  broadcastSync({type:'undo', retirer: pushCount > lastWinUndo.pushAt});
   totalPaid = Math.max(0, totalPaid - lastWinUndo.amountAdded);
   saveTotals();
-  if(lastResults.length){ lastResults.shift(); renderResultsTicker(); }
+  // seulement si le résultat de CE lot a déjà été affiché (pas pendant le
+  // tirage du Lot Mystère ni l'orage : on retirait le gain précédent)
+  if(pushCount > lastWinUndo.pushAt && lastResults.length){ lastResults.shift(); renderResultsTicker(); }
   clearCelebration();
   celebLocked = false;
   // Annuler un lot validé par erreur redonne aussi le tour : sinon le
@@ -8564,7 +8573,7 @@ function applyRotation(deg){
   root.classList.toggle('rotated', uiRotation !== 0);
   root.classList.toggle('rot90', uiRotation === 90);
   root.classList.toggle('rot270', uiRotation === 270);
-  try{ localStorage.setItem(ROT_KEY, String(uiRotation)); }catch(e){}
+  if(!isDisplay){ try{ localStorage.setItem(ROT_KEY, String(uiRotation)); }catch(e){} }
   setTimeout(()=>{ resize(); resizeCelebCanvas(); }, 30);
 }
 {
@@ -8717,8 +8726,16 @@ if(window.PIKA_DEMO_JACKPOT){
 if(syncChannel && isDisplay){
   syncChannel.onmessage = (e)=>{
     const m = e.data || {};
-    if(m.type==='draw'){ topNum.textContent = m.draw.total; clearCelebration(); playCardDrawAnimation(m.draw); }
-    else if(m.type==='undo'){ clearCelebration(); stopStorm(); }
+    if(m.type==='draw'){
+      topNum.textContent = m.draw.total; clearCelebration();
+      if(typeof m.rollsUsed === 'number'){ rollsUsed = m.rollsUsed; rollsAllowed = m.rollsAllowed; }   // « Lancer N / 3 » à jour
+      playCardDrawAnimation(m.draw);
+    }
+    else if(m.type==='undo'){
+      clearCelebration(); stopStorm();
+      if(m.retirer && lastResults.length){ lastResults.shift(); renderResultsTicker(); }
+      updateWinButton();   // l'aperçu de la case revient, comme sur la régie
+    }
     else if(m.type==='move'){
       /* Les allures de marche sont tirées au hasard dans chaque fenêtre :
          si le pion public n'a pas fini ou n'est pas sur la même case, on le
@@ -8808,9 +8825,11 @@ function renderResultsTicker(){
     resultsTicker.appendChild(item);
   });
 }
+let pushCount = 0;   // nombre de résultats ajoutés (Annuler ne retire que le sien)
 function pushResult(catKey){
   const url = LOT_IMAGE_URLS[catKey];
   if(!url || !resultsTicker) return;
+  pushCount++;
   lastResults = [{catKey,url}, ...lastResults].slice(0,5);
   renderResultsTicker();
 }
@@ -9268,7 +9287,7 @@ async function playMysteryReveal(sub){
   const tok = ++mysteryToken;
   const wait = async ms => { await new Promise(r=>setTimeout(r, ms)); if(tok !== mysteryToken) throw 'mystere-interrompu'; };
   try{ await playMysteryRevealInner(sub, wait); }
-  catch(e){ if(e !== 'mystere-interrompu') throw e; mysteryOverlay.classList.remove('show'); }
+  catch(e){ if(e !== 'mystere-interrompu') throw e; }   // clearCelebration a déjà masqué ; ne pas masquer un NOUVEAU tirage
 }
 async function playMysteryRevealInner(sub, wait){
   const winIdx = sub === 'booster' ? 0 : 1;
