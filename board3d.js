@@ -4590,7 +4590,7 @@ function buildLuffy(model, pivot){
           diffuseColor.rgb *= 0.90 + 0.07*smoothstep(-0.3, 0.9, rang) + 0.04*brin;`);
       };
       o.material = hm; o.visible = true;
-      /* Chapeau d'origine, enfoncé sur la tête et repoussé de 10° (réduit de 12 %) : sur un plateau vu en
+      /* Chapeau d'origine, retaillé à la tête (voir ci-dessous) : sur un plateau vu en
          plongée, l'aile à plat recouvrait tout le personnage — on ne voyait
          qu'un disque de paille. Incliné comme Luffy le porte souvent, il
          dégage le visage. Rotation appliquée à la géométrie (100 % liée à
@@ -4599,16 +4599,33 @@ function buildLuffy(model, pivot){
         const g = o.geometry.clone();
         // pivot = centre de la tête : le chapeau glisse vers l'arrière sur
         // le crâne, comme un vrai chapeau repoussé, au lieu de flotter
-        /* Enfoncé sur la tête comme sur la référence : la calotte coiffe le
-           crâne, l'aile passe juste au-dessus des sourcils à l'avant, la
-           frange et les mèches dépassent dessous. Légèrement repoussé en
-           arrière (10°) : assez pour dégager le visage vu en plongée, pas
-           au point de le faire tenir sur la nuque. */
-        const piv = new THREE.Vector3(0, 3.2, -0.07);   // centre de la tête
-        g.applyMatrix4(new THREE.Matrix4().makeTranslation(-piv.x, -piv.y, -piv.z));
-        g.applyMatrix4(new THREE.Matrix4().makeScale(0.88, 0.88, 0.88));
-        g.applyMatrix4(new THREE.Matrix4().makeRotationX(-0.18));
-        g.applyMatrix4(new THREE.Matrix4().makeTranslation(piv.x, piv.y - 0.36, piv.z - 0.04));
+        /* AJUSTÉ À LA TÊTE. Le chapeau d'origine était taillé pour la tête
+           cube du pion Kenney : calotte de 31,7 cm de rayon pour un crâne de
+           25,6, sommet 5 cm au-dessus des cheveux. Il flottait. On le
+           retaille, sommet par sommet, dans le repère de mesure :
+             - calotte resserrée (x 0,855) au tour de tête, cheveux compris ;
+             - aile raccordée à la calotte, bord extérieur conservé (42 cm) ;
+             - calotte moins haute (x 0,82), posée SUR le crâne ;
+             - penché de 10° en arrière autour du centre du crâne, ce qui le
+               garde au contact en dégageant le front. */
+        const Sd = LUFFY_DESIGN.scale, Oy = LUFFY_DESIGN.offY;
+        const Cc = new THREE.Vector3(0, 0.737, -0.032);        // centre de la calotte de cheveux
+        const rot = new THREE.Matrix4().makeRotationX(-0.18);
+        const pa = g.attributes.position, v = new THREE.Vector3();
+        for(let k=0;k<pa.count;k++){
+          v.set(pa.getX(k)*Sd, pa.getY(k)*Sd + Oy, pa.getZ(k)*Sd);
+          const r = Math.hypot(v.x, v.z);
+          const r2 = r <= 0.33 ? r*0.855 : 0.282 + (r - 0.33)*1.44;
+          const q = r > 1e-6 ? r2/r : 0.855;
+          v.x *= q; v.z *= q;
+          if(v.y >= 0.93) v.y = 0.93 + (v.y - 0.93)*0.82;
+          v.y -= 0.150; v.z += Cc.z + 0.012;
+          v.sub(Cc).applyMatrix4(rot).add(Cc);
+          pa.setXYZ(k, v.x/Sd, (v.y - Oy)/Sd, v.z/Sd);
+        }
+        pa.needsUpdate = true;
+        g.computeVertexNormals();
+        g.computeBoundingBox(); g.computeBoundingSphere();
         g.userData.penche = true;
         o.geometry = g;
       }
