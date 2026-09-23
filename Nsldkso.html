@@ -53,19 +53,6 @@ html.storm #bgGlow{ display:none; }
    calque en dessous remplit les côtés avec la même image floutée et
    assombrie, pour ne jamais laisser de zone vide. Invisible en portrait
    (les bandes couvrent tout). */
-/* Diorama : l'illustration pliée à 90° (voir DIORAMA dans board3d.js). Les
-   deux calques remplacent les bandes animées ; #bgFill (flouté, sombre)
-   reste dessous en secours, pour le cas où une vue très rapprochée
-   dépasserait les bords de la feuille. */
-#diorama{ position:absolute; inset:0; overflow:hidden; z-index:0; pointer-events:none; transition:filter .5s ease; }
-#diorama > div{ position:absolute; left:0; top:0; transform-origin:0 0; background-repeat:no-repeat; backface-visibility:hidden; will-change:transform; }
-html.diorama #bgBands, html.diorama #bgGlow{ visibility:hidden; }
-/* bord avant du sol : il se fond dans la même image floutée (#bgFill),
-   comme un premier plan hors mise au point */
-#diorama .dio-sol{ -webkit-mask-image:linear-gradient(to bottom,#000 0,#000 82%,transparent 100%); mask-image:linear-gradient(to bottom,#000 0,#000 82%,transparent 100%); }
-html.diorama #bgFill{ display:block; }
-html.diorama .board-wrap::before{ display:none; }
-html.storm #diorama{ filter:brightness(.22) saturate(.6); }
 #bgFill{
   position:absolute; inset:-6%; z-index:0; pointer-events:none; display:none;
   background-image:url("./assets/bg/dragon_sky.jpg");

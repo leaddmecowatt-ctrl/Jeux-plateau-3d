@@ -106,15 +106,6 @@ inversée). Les meshes Kenney du corps sont masqués ; le chapeau d'origine est 
 **Finale du jackpot** (`startJackpotStorm`, `updateStorm`, `ABD`) : silhouette noire,
 foudre fractale, faisceau du ciel, enlèvement puis retour sur la case (`STORM_MS` = 6,8 s).
 
-**Diorama — fond plié à 90°** (`dioSolve`, `dioUpdate`, `DIO_SRC`, `#diorama` dans la page) :
-l'illustration de fond est UNE feuille pliée sur l'horizon : partie haute = mur derrière
-le plateau (ciel, serpent), partie basse = sol sous le plateau. Deux calques de la page
-(pas de la scène 3D) transformés par homographie `matrix3d` depuis la caméra, à chaque
-image ; la feuille suit l'azimut de la caméra (le plateau tourne dessus). Le placement
-(ligne de pli, distance du mur, largeur) est recalculé à chaque changement de cadrage.
-Les anciennes bandes animées (`#bgBands`) sont masquées quand le diorama est actif ;
-`#bgFill` (même image floutée) reste dessous en secours et sous le bord avant estompé du sol.
-
 **Qualité** : `applyQuality()`, `setEcoMode()` (mode éco : plus de flou, d'ombres ni de
 décoration). Le contexte WebGL perdu est rattrapé (`webglcontextlost`).
 
