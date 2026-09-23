@@ -1761,6 +1761,53 @@ const centerPlate = new THREE.Mesh(
 centerPlate.position.y = 0.07;
 boardGroup.add(centerPlate);
 
+/* ---------- Intégration du plateau dans le décor (polish final) ----------
+   Deux voiles posés SOUS la dalle, dans la scène 3D : la photo de fond de la
+   page n'est pas touchée, elle est seulement vue au travers.
+     - Ombre portée : diffuse, un peu en arrière (la lumière principale vient
+       de l'avant), avec une seconde couche large et pâle qui
+       assombrit localement le décor juste autour du plateau, pour que
+       l'or s'en détache. Pas de vignette : au-delà de ~1 unité du bord,
+       le fond est intact. Resserrée à dessein : la zone 3D ne couvre pas
+       tout l'écran, et une ombre qui en atteindrait le bord y serait coupée
+       net — une ligne droite, l'effet « collé » garanti.
+     - Liseré de lumière dorée le long du bord extérieur, en additif, très
+       faible (sous le seuil du flou lumineux : il ne « bave » pas).
+   Le plateau les masque là où il est posé : seules leurs franges se voient. */
+{
+  const BORD = (N_SIDE*CELL)/2 + 0.10;          // bord extérieur de la dalle d'or
+  /* Voile LARGE (20 unités) et flou mesuré en unités : l'ombre doit être
+     retombée à zéro bien avant le bord du voile. À 14,4 unités, le flou
+     débordait jusqu'au bord et y laissait une marche — un rectangle à peine
+     plus sombre, exactement l'effet « collé » qu'on veut éviter. */
+  const HALF = 10, N = 1024, k = N/(2*HALF);       // demi-taille du voile, en unités
+  const rrect = (ctx, half, rad)=>{ const a = N/2 - half*k, b = half*2*k; roundRectPath(ctx, a, a, b, b, rad*k); };
+  // ombre
+  const sc = document.createElement('canvas'); sc.width = sc.height = N;
+  const sx = sc.getContext('2d');
+  sx.filter = 'blur(' + (0.22*k) + 'px)'; rrect(sx, BORD + 0.04, 0.5); sx.fillStyle = 'rgba(0,0,0,0.26)'; sx.fill();
+  sx.filter = 'blur(' + (0.12*k) + 'px)'; rrect(sx, BORD + 0.02, 0.3); sx.fillStyle = 'rgba(0,0,0,0.34)'; sx.fill();
+  const st = new THREE.CanvasTexture(sc);
+  const ombre = new THREE.Mesh(new THREE.PlaneGeometry(HALF*2, HALF*2),
+    new THREE.MeshBasicMaterial({ map:st, transparent:true, depthWrite:false, toneMapped:false }));
+  ombre.rotation.x = -Math.PI/2;
+  ombre.position.set(0, -0.30, -0.10);            // un peu en arrière, à l'opposé de la lumière (pas vers les bords de la vue)
+  ombre.renderOrder = -2;
+  boardGroup.add(ombre);
+  // liseré de lumière
+  const hc = document.createElement('canvas'); hc.width = hc.height = N;
+  const hx = hc.getContext('2d');
+  hx.filter = 'blur(' + (0.22*k) + 'px)'; rrect(hx, BORD + 0.04, 0.22);
+  hx.lineWidth = 0.16*k; hx.strokeStyle = 'rgba(255,214,130,1)'; hx.stroke();
+  const ht = new THREE.CanvasTexture(hc); ht.colorSpace = THREE.SRGBColorSpace;
+  const lisere = new THREE.Mesh(new THREE.PlaneGeometry(HALF*2, HALF*2),
+    new THREE.MeshBasicMaterial({ map:ht, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:0.22, toneMapped:false }));
+  lisere.rotation.x = -Math.PI/2;
+  lisere.position.y = -0.10;                      // à mi-épaisseur de la dalle
+  lisere.renderOrder = -1;
+  boardGroup.add(lisere);
+}
+
 /* ---------- Ornements dorés dans les 4 angles du plateau ----------
    Petites "boucles" en volutes façon gravure, comme sur le visuel
    promotionnel du jeu : un médaillon en losange d'où partent deux
