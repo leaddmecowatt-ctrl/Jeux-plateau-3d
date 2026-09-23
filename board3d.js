@@ -4974,7 +4974,13 @@ const FORCE_DIGITS = [
   {cat:'booster8',    name:'Booster'},
   {cat:'alternative', name:'Lot Mystère'},
 ];
+/* Touches programmées (Z, 1 à 6) RETIRÉES à la demande de l'animateur
+   (23/09) : plus aucun lot ne peut être forcé au clavier, tout sort de la
+   pochette. Le code des parties-bonus reste en place mais n'est plus
+   joignable (forceKeyFor ne reconnaît plus aucune touche). */
+const FORCE_KEYS_ON = false;
 function forceKeyFor(e){
+  if(!FORCE_KEYS_ON) return null;
   const m = /^(?:Digit|Numpad)([1-6])$/.exec(e.code || '');
   if(m) return Object.assign({key:m[1]}, FORCE_DIGITS[+m[1]-1]);
   const k = e.key.toLowerCase();
@@ -6937,8 +6943,22 @@ function peekNextOutcome(){
    public (isDisplay). */
 const brandStarL = document.getElementById('brandStarL');
 const brandStarR = document.getElementById('brandStarR');
+/* Compteur « N coups sur 245 » en haut de l'écran : coups (parties) déjà
+   joués dans la pochette. Le coup en cours ne compte qu'une fois son lot
+   gagné ; il repart de 0 avec une nouvelle pochette. */
+const coupCountEl = document.getElementById('coupCount');
+function updateCoupCount(n, total){
+  if(!coupCountEl) return;
+  if(n == null){
+    n = Math.max(0, outcomeState.pos - ((pendingOutcome && !forcedGame) ? 1 : 0));
+    total = outcomeState.batch.length;
+    broadcastSync({type:'coups', n, total});
+  }
+  coupCountEl.textContent = n + (n > 1 ? ' coups' : ' coup') + ' sur ' + total;
+}
 function updateCue(){
   if(isDisplay) return;
+  updateCoupCount();
   {
     const cat = pendingOutcome || (forcedCat || peekNextOutcome());
     // même forme ★, juste une teinte un peu plus claire (classe .cue)
@@ -7617,6 +7637,7 @@ async function resolveChanceChest(myGen, forcedCard){
 
 function restart(){
   generation++;
+  drawInProgress = false;
   // aucune braise ni étoile de l'arrivée précédente ne doit survivre au C
   clearArrivalFx();
   moving = false;
@@ -7625,8 +7646,12 @@ function restart(){
   rollsAllowed = 3;
   if(pendingOutcome && !forcedGame){
     // partie interrompue avant validation : le lot décidé d'avance n'est
-    // pas perdu, il retourne en tête de file (la mise, elle, reste comptée)
-    outcomeState.batch.splice(outcomeState.pos, 0, pendingOutcome);
+    // pas perdu, il retourne en tête de pochette (la mise reste comptée).
+    // On recule la position plutôt que d'insérer une copie : la pochette
+    // garde ses 245 coups et le compteur reste juste.
+    const st = outcomeState;
+    if(st.pos > 0 && st.batch[st.pos-1] === pendingOutcome) st.pos--;
+    else st.batch.splice(st.pos, 0, pendingOutcome);
     saveOutcomeState();
   }
   pendingOutcome = null;
@@ -7665,8 +7690,11 @@ function startGame(){
   broadcastSync({type:'start'});
 }
 
+let drawInProgress = false;   // du clic « tirer » jusqu'au début du déplacement
 async function drawAndMove(){
-  if(moving || finished || rollsUsed>=rollsAllowed) return;
+  if(moving || finished || rollsUsed>=rollsAllowed || drawInProgress) return;
+  drawInProgress = true;
+  if(winBtn) winBtn.hidden = true;   // plus de « garder » sur la case qu'on quitte
   // Premier lancer d'une partie (le pion est encore sur Départ) : une
   // partie complète = une mise, créditée automatiquement à la
   // cagnotte interne, sans aucune saisie manuelle.
@@ -7703,7 +7731,7 @@ async function drawAndMove(){
   if(draw.isDouble) rollsAllowed++;
   broadcastSync({type:'draw', draw});
   topNum.textContent = draw.total;
-  await playCardDrawAnimation(draw);
+  try{ await playCardDrawAnimation(draw); } finally { drawInProgress = false; }
   await move(draw.total);
 }
 
@@ -7751,8 +7779,8 @@ const NEUTRAL_FORBIDDEN = new Set(['chance','chest','prison']);
 // des arrivées qui passent par un détour quand c'est possible
 const CARD_DELTAS = [1,2,3,4,5,6,-1,-2,-3];
 const INTERMEDIATE_MAX_COST = 17;  // booster (17 €) au maximum en cours de route
-let CARD_ROUTE_P = 0.12;
-const EARLY_LANDING_P = 0.22;   // part des lancers intermédiaires qui posent déjà sur le lot prévu
+let CARD_ROUTE_P = 0.18;
+const EARLY_LANDING_P = 0.30;   // part des lancers intermédiaires qui posent déjà sur le lot prévu
 const DICE_W = {2:1,3:2,4:3,5:4,6:5,7:6,8:5,9:4,10:3,11:2,12:1};
 function landable(idx, targetCat){
   if(idx===0) return false;                 // Départ : jamais de lot
@@ -7874,6 +7902,12 @@ function planTotal(pos, rollsLeft, targetCat){
 
 async function claimCurrentLot(){
   if(currentIndex<0 || (winBtn && winBtn.disabled)) return;
+  /* Jamais pendant un lancer. Trouvé en simulation : D pressé pendant
+     l'animation du tirage (le pion n'a pas encore bougé, `moving` est
+     encore faux) validait le lot de la case QUITTÉE, puis le lancer
+     continuait et un second lot tombait à l'arrivée : deux lots pour une
+     seule partie. */
+  if(moving || (cardDrawOverlay && cardDrawOverlay.classList.contains('show')) || drawInProgress) return;
   if(winBtn) winBtn.disabled = true;
   if(validate) validate.disabled = true;
   // Filet de sécurité EN DIRECT, en plus de la construction du lot déjà
@@ -8162,6 +8196,7 @@ if(syncChannel && isDisplay){
     else if(m.type==='celebrate') celebrate(m.catKey, null, {locked:true, mystery: m.mystery});
     else if(m.type==='restart') restart();
     else if(m.type==='start') startGame();
+    else if(m.type==='coups') updateCoupCount(m.n, m.total);
   };
 }
 

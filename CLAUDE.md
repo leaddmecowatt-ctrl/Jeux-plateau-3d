@@ -51,9 +51,9 @@ les animations, confettis et timings **ne se vérifient pas** — seul un vrai a
 
 **Commandes clavier** (`addEventListener('keydown'`) : A démarrer · B tirer les cartes ·
 D garder le lot · C recommencer · F plein écran · R pivoter l'image ·
-Z / 1–6 = **lot forcé** avant le premier lancer · M affiche la **bulle de règles**
-(M ou Échap pour fermer). M était un doublon exact de la touche 3 — même
-`booster50` — elle a donc été retirée de `FORCE_KEYS` sans rien perdre.
+M affiche la **bulle de règles** (M ou Échap pour fermer). Les touches programmées
+(Z, 1–6 = lot forcé) sont **retirées** depuis le 23/09 (`FORCE_KEYS_ON = false`) : tout
+sort de la pochette.
 
 **Lots** : `PAYOUT_LADDER` (catégories et valeur marché de chaque lot), `OUTCOME_COST`,
 `TIER_LEVEL` (intensité de la célébration), `LOT_IMAGE_URLS`, `CATEGORY_MESSAGES`.
@@ -86,9 +86,12 @@ bonne case (`EARLY_LANDING_P`) ; au même lancer, jamais le total de la partie p
 
 **Recalibrage** (`RECAL`) : historique ; il ne construit plus de file depuis la pochette de 245.
 
-**Lots forcés** (`forcedCat`, `takeForcedLot`) sont **hors comptabilité** : ni la mise ni
-le lot ne comptent. C'est voulu (partie-bonus), et c'est la première cause de dérive
-de la marge en direct.
+**Lots forcés** (`forcedCat`, `takeForcedLot`) : code conservé mais injoignable (touches
+retirées). S'ils revenaient, ils sont hors pochette et hors comptabilité.
+
+**Compteur de coups** (`updateCoupCount`, `#coupCount`) : « N coups sur 245 » sous le titre,
+= position dans la pochette moins le coup en cours ; relayé à l'écran public. « Recommencer »
+avant le gain recule la position (le lot retourne en tête, rien n'est dupliqué).
 
 **Écran public** : `?view=display` ouvre une seconde fenêtre synchronisée par
 `BroadcastChannel('pikajackpot-sync')` — aucun serveur.

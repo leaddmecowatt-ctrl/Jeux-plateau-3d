@@ -113,6 +113,12 @@ html.storm #bgGlow{ display:none; }
   padding:max(10px,calc(env(safe-area-inset-top) + 6px)) 12px 4px;
   position:relative;z-index:5;
 }
+/* Compteur de la pochette : « 12 coups sur 245 », sous le titre. */
+.coup-count{
+  margin-top:3px;font-size:13px;font-weight:900;letter-spacing:.08em;color:var(--gold-bright);
+  text-shadow:0 0 8px rgba(255,226,122,.45),0 1px 3px rgba(0,0,0,.85);pointer-events:none;
+  font-variant-numeric:tabular-nums;
+}
 .brand{
   font-size:10px;font-weight:900;letter-spacing:.14em;color:var(--gold-bright);
   opacity:.8;
@@ -1324,6 +1330,7 @@ if(new URLSearchParams(location.search).get('view')==='display'){
   <div id="bgGlow" aria-hidden="true"></div>
   <div class="top-hud">
     <div class="brand"><span class="brand-star" id="brandStarL">★</span> PIKAPOLY <span class="brand-star" id="brandStarR">★</span></div>
+    <div class="coup-count" id="coupCount">0 coup sur 245</div>
     <div class="place-banner-wrap"><div class="place-banner" id="placeBanner">Départ</div></div>
     <div class="key-hint" id="keyHint" aria-live="polite"></div>
     <div class="cue-dot" id="cueDot" aria-hidden="true"></div>
