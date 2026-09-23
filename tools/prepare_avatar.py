@@ -40,7 +40,8 @@ GARDE_EXPR = ['blink', 'blinkLeft', 'blinkRight', 'happy', 'relaxed', 'surprised
 
 # 1. maillages : bras robot hors scène, primitives du sac à dos retirées
 for n in j['nodes']:
-    if n.get('name') == 'robo_arm':
+    # bras robot, et la longue mèche de nuque (Luffy n'en a pas)
+    if n.get('name') in ('robo_arm', 'hair_tail'):
         n.pop('mesh', None); n.pop('skin', None)
 for m in j['meshes']:
     m['primitives'] = [p for p in m['primitives'] if j['materials'][p['material']]['name'] not in RETIRE_MAT]
@@ -81,7 +82,7 @@ for e in preset.values():
 
 # ressort du câble robot : inutile sans le bras
 sb = j['extensions'].get('VRMC_springBone')
-if sb: sb['springs'] = [s for s in sb['springs'] if s.get('name') != 'RoboWire']
+if sb: sb['springs'] = [s for s in sb['springs'] if s.get('name') not in ('RoboWire', 'TailHair')]
 
 # 2 bis. gadgets des poignets : composantes connexes isolées, loin de l'axe
 # du corps (|x| > 0,38) et sous la hauteur des épaules, dans le maillage
@@ -95,11 +96,12 @@ def read_acc(i):
     a = np.frombuffer(bin0, dtype=dt, count=A['count']*n, offset=o)
     return a.reshape(-1, n) if n > 1 else a
 acc_override = {}
+nouvelles = []
 for n in j['nodes']:
     if n.get('name') != 'wear' or 'mesh' not in n: continue
     for p in j['meshes'][n['mesh']]['primitives']:
         mname = j['materials'][p['material']]['name']
-        if mname not in ('huku_bake', 'wear_metal'): continue
+        if mname not in ('huku_bake', 'wear_metal', 'body_nm'): continue
         P = read_acc(p['attributes']['POSITION']); I = read_acc(p['indices']).reshape(-1, 3)
         UV = read_acc(p['attributes']['TEXCOORD_0'])
         par = np.arange(len(P))
@@ -110,12 +112,38 @@ for n in j['nodes']:
         for t in I:
             r = f(t[0]); par[f(t[1])] = r; par[f(t[2])] = r
         roots = np.array([f(v) for v in range(len(P))])
-        drop = set()
+        drop = set(); gants = set()
         for r in set(roots.tolist()):
             q = P[roots == r]; c = (q.min(0) + q.max(0)) / 2
             sz = q.max(0) - q.min(0)
-            if mname != 'body_bake' and abs(c[0]) > 0.38 and c[1] < 1.05: drop.add(r)
+            if mname == 'body_nm':
+                if abs(c[0]) > 0.45 and c[1] < 0.95: gants.add(r)
+            elif abs(c[0]) > 0.38 and c[1] < 1.05: drop.add(r)
         keepT = np.array([roots[t[0]] not in drop for t in I])
+        if gants:
+            # Gants noirs -> mains nues. Leur texture ne se laisse pas
+            # recolorer (bande partagée avec le reste du corps) : les
+            # triangles des gants passent sur un matériau à part, couleur
+            # peau unie, ombrage anime conservé.
+            gT = np.array([roots[t[0]] in gants for t in I])
+            keepT &= ~gT
+            A0 = j['accessors'][p['indices']]
+            dt0 = {5125:np.uint32,5123:np.uint16,5121:np.uint8}[A0['componentType']]
+            j['accessors'].append({'componentType': A0['componentType'], 'count': int(gT.sum())*3, 'type': 'SCALAR'})
+            gi = len(j['accessors']) - 1
+            acc_override[gi] = I[gT].astype(dt0).tobytes()
+            peau = json.loads(json.dumps(j['materials'][p['material']]))
+            peau['name'] = 'mains_peau'
+            peau['pbrMetallicRoughness'] = {'baseColorFactor': [0.93, 0.74, 0.60, 1], 'metallicFactor': 0, 'roughnessFactor': 1}
+            peau.pop('normalTexture', None)
+            mt = peau['extensions']['VRMC_materials_mtoon']
+            for k in ('shadeMultiplyTexture', 'shadingShiftTexture', 'rimMultiplyTexture', 'outlineWidthMultiplyTexture', 'matcapTexture'):
+                mt.pop(k, None)
+            mt['shadeColorFactor'] = [0.78, 0.52, 0.44]
+            j['materials'].append(peau)
+            np_ = {k: v for k, v in p.items() if k not in ('indices', 'material', 'targets')}
+            np_['attributes'] = dict(p['attributes']); np_['indices'] = gi; np_['material'] = len(j['materials']) - 1
+            nouvelles.append((n['mesh'], np_))
         if mname == 'huku_bake':
             # Le haut devient le GILET DE LUFFY : sans manches, ouvert sur le
             # torse, arrêté à la taille (l'écharpe jaune fait la ceinture).
@@ -151,6 +179,8 @@ for n in j['nodes']:
         A['count'] = int(keepT.sum()) * 3
         A.pop('byteOffset', None)
 
+for mi, prim in nouvelles: j['meshes'][mi]['primitives'].append(prim)
+
 # 3. accessors / textures réellement référencés
 acc_used, tex_used = set(), set()
 for mi in used_meshes:
@@ -178,7 +208,7 @@ meta = vrm['meta']; meta.pop('thumbnailImage', None)
 # cuites restent, seule la teinte change.
 TENUE = [  # (x0, y0, x1, y1, couleur)
     (0.00, 0.00, 0.655, 0.46, (200, 34, 44)),    # haut rouge (et manches courtes)
-    (0.00, 0.46, 0.66, 0.865, (52, 86, 150)),    # short bleu
+    (0.00, 0.46, 0.66, 0.865, (84, 124, 212)),   # short bleu clair (celui de Luffy)
     (0.00, 0.865, 0.40, 0.985, (236, 178, 38)),  # ceinture -> écharpe jaune
 ]
 def cicatrices(img):
@@ -196,7 +226,7 @@ def cicatrices(img):
         for q in (p0, p1):
             x, y = P(*q); r = lw*k/2; d.ellipse([x-r, y-r, x+r, y+r], fill=col)
     # grand X sur la poitrine, croisé au sternum
-    cu, cv, du, dv = 0.660, 0.738, 0.040, 0.040
+    cu, cv, du, dv = 0.6598, 0.708, 0.034, 0.036   # au milieu du torse, sous les pectoraux
     for s_ in (1, -1):
         a0, a1 = (cu - du, cv - s_*dv), (cu + du, cv + s_*dv)
         trait(a0, a1, 7, (196, 134, 122, 255))
@@ -225,13 +255,20 @@ def recolor(name, img):
         h, w = a.shape[:2]
         skin = np.median(a[int(.30*h):int(.45*h), int(.12*w):int(.28*w), :3].reshape(-1, 3), axis=0)
         # manches et gants : tout ce qui est sombre ou bleu dans la colonne de droite
-        reg = a[:, int(0.76*w):, :]
+        reg = a[:, int(0.70*w):, :]
         lum = (0.30*reg[...,0] + 0.59*reg[...,1] + 0.11*reg[...,2]) / 255.0
         blue = (reg[...,2] > reg[...,0] + 40)
         m = ((lum < 0.35) | blue) & (reg[...,3] > 0)
         shade = 0.86 + 0.14*np.clip(lum/0.35, 0, 1)
         for k in range(3): reg[...,k] = np.where(m, skin[k]*shade, reg[...,k])
-        a[:, int(0.76*w):, :] = reg
+        a[:, int(0.70*w):, :] = reg
+        # Le haut d'origine est ajouré d'hexagones (logo de la marque) sur la
+        # poitrine gauche, SOUS le pan du gilet : la peau vue au travers est
+        # teinte du rouge du gilet. Bande u 0,570-0,607 = x 9 à 15 cm, soit
+        # au-delà de l'ouverture du gilet (8,5 cm) : le torse visible reste
+        # couleur peau.
+        ys, xs = slice(int(0.688*h), int(0.792*h)), slice(int(0.570*w), int(0.607*w))
+        for k, c in enumerate((176, 30, 40)): a[ys, xs, k] = c
         return cicatrices(Image.fromarray(a.clip(0, 255).astype(np.uint8), 'RGBA'))
     return img
 

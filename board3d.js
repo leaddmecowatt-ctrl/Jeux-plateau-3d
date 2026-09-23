@@ -3907,10 +3907,13 @@ const AVATAR_URL = './assets/character/avatar.glb';
 /* Hauteur du corps, chapeau non compris. L'ancien pion culminait vers 1,05
    (chapeau compris) : le personnage anime, plus élancé, a la tête bien plus
    petite, il lui faut un peu plus de hauteur pour occuper la même place. */
-const AVATAR_BODY_H = 1.50;
+const AVATAR_BODY_H = 1.80;
 /* Épaisseur de la semelle des sandales (mètres du modèle) : tout le corps
    est remonté d'autant pour que le pied repose dessus, pas dedans. */
 const AVATAR_SOLE = 0.014;
+/* Tête agrandie : Luffy a une grosse tête ronde, et c'est ce qui le rend
+   lisible et « imposant » vu de loin, en plongée sur le plateau. */
+const AVATAR_HEAD = 1.22;
 const AVATAR_MAP = {
   hips:'Hips', spine:'Spine', chest:'Chest', upperChest:'UpperChest', neck:'Neck', head:'Head',
   leftShoulder:'LeftShoulder', rightShoulder:'RightShoulder',
@@ -4093,6 +4096,8 @@ async function loadAvatar(player, kModel, pivot){
        comme le porte le personnage d'origine. */
     hat.position.set(cx - headRest.x, hairBox.max.y - w*0.50 - headRest.y, cz - headRest.z + w*0.03);
     hat.rotation.x = -0.10;
+    hat.position.multiplyScalar(AVATAR_HEAD);
+    hat.scale.setScalar(AVATAR_HEAD);
     N('head').add(hat);
   }
 
@@ -4119,6 +4124,77 @@ async function loadAvatar(player, kModel, pivot){
       foot.add(g);
     }
   }
+
+  // ---- tenue de Luffy : boutons, écharpe, revers du short ----
+  {
+    const toon = (c)=> new THREE.MeshToonMaterial({ color:c });
+    const tag = (m)=>{ m.castShadow = true; m.userData.avatar = true; return m; };
+    pivot.updateMatrixWorld(true);
+    // surface du gilet relevée au repos, par lancer de rayon depuis l'avant
+    const rc = new THREE.Raycaster();
+    const surface = (x, y)=>{
+      const o = holder.localToWorld(new THREE.Vector3(x, y, 0.5));
+      const t = holder.localToWorld(new THREE.Vector3(x, y, 0));
+      rc.set(o, t.sub(o).normalize());
+      const h = rc.intersectObject(vrm.scene, true)[0];
+      return h ? holder.worldToLocal(h.point.clone()) : new THREE.Vector3(x, y, 0.1);
+    };
+    // quatre boutons dorés sur le pan droit du gilet (côté -x du personnage)
+    const chest = N('chest'), chestRest = restWorld('chest');
+    const btnGeo = new THREE.SphereGeometry(0.0115, 14, 10);
+    const btnMat = new THREE.MeshToonMaterial({ color:0xffd23c, emissive:0x6a4c00 });   // or franc, même à l'ombre
+    for(const y of [1.175, 1.115, 1.055, 0.995]){
+      const p = surface(-0.104, y);
+      const b = tag(new THREE.Mesh(btnGeo, btnMat));
+      b.scale.set(1, 1, 0.55);
+      b.position.copy(p).sub(chestRest); b.position.z += 0.004;
+      chest.add(b);
+    }
+    // écharpe jaune nouée à la taille, avec un pan qui retombe à gauche
+    const hipsN = N('hips'), hipsR = restWorld('hips');
+    const sashMat = new THREE.MeshToonMaterial({ color:0xf2bb2a, side:THREE.DoubleSide });
+    const sg = new THREE.CylinderGeometry(1, 1, 0.135, 48, 3, true);
+    { const pa = sg.attributes.position;
+      for(let i=0;i<pa.count;i++){
+        const x = pa.getX(i), z = pa.getZ(i), y = pa.getY(i), a = Math.atan2(z, x);
+        const pli = 1 + 0.035*Math.sin(a*7 + y*40) + 0.02*Math.sin(a*3);
+        pa.setX(i, x*0.178*pli); pa.setZ(i, z*0.152*pli);
+      }
+      sg.computeVertexNormals(); }
+    const sash = tag(new THREE.Mesh(sg, sashMat));
+    sash.position.set(0, 0.895 - hipsR.y, 0.006);   // couvre la ceinture d'origine
+    hipsN.add(sash);
+    const tg = new THREE.PlaneGeometry(0.085, 0.36, 1, 8);
+    { const pa = tg.attributes.position;
+      for(let i=0;i<pa.count;i++){
+        const y = pa.getY(i), k = (0.18 - y)/0.36;                 // 0 en haut, 1 en bas
+        pa.setX(i, pa.getX(i)*(1 - 0.25*k) + 0.02*Math.sin(k*3));
+        pa.setZ(i, 0.018*Math.sin(k*Math.PI) + 0.01*k);
+      }
+      tg.translate(0, -0.18, 0); tg.computeVertexNormals(); }
+    const tail = tag(new THREE.Mesh(tg, sashMat));
+    tail.position.set(0.135, 0.93 - hipsR.y, 0.08);
+    tail.rotation.set(0.10, -0.55, 0.12);
+    hipsN.add(tail);
+    // revers blancs au bas du short, qui suivent la jambe
+    const cuffGeo = new THREE.TorusGeometry(0.068, 0.02, 10, 28);
+    const cuffMat = new THREE.MeshToonMaterial({ color:0xffffff, emissive:0x8a8a86 });   // reste blanc même à l'ombre
+    for(const side of ['left','right']){
+      const lo = N(side+'LowerLeg'); if(!lo) continue;
+      const knee = restWorld(side+'LowerLeg');
+      const cuff = tag(new THREE.Mesh(cuffGeo, cuffMat));
+      cuff.rotation.x = Math.PI/2;
+      cuff.scale.set(1, 1, 0.9);
+      cuff.position.set(0, 0.315 - knee.y, 0.004);   // ourlet d'origine du short
+      lo.add(cuff);
+    }
+  }
+
+  // ---- tête agrandie (os brut : la copie de pose ne touche qu'aux rotations) ----
+  { const rawHead = H.getRawBoneNode('head');
+    if(rawHead){ rawHead.scale.setScalar(AVATAR_HEAD);
+      if(vrm.springBoneManager && vrm.springBoneManager.setInitState){
+        vrm.scene.updateMatrixWorld(true); vrm.springBoneManager.setInitState(); } } }
 
   // ---- expressions : clignement, et joie à la victoire ----
   const EM = vrm.expressionManager;
