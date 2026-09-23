@@ -602,8 +602,10 @@ html.display-mode .display-badge{ display:block; }
 .mini-card.pointe{ z-index:2; transform:translateY(-6px) scale(1.07); transition:transform .07s ease-out; }
 .mini-card.pointe .back{ box-shadow:0 0 0 3px var(--gold-bright),0 0 22px rgba(255,226,122,.9); }
 /* Fin du tirage : le reste du paquet se retourne, sans fanfare */
-.mini-card.dim.montre{ transform:rotateY(180deg) scale(.9); filter:brightness(.62) saturate(.7); opacity:.9;
-  transition:transform .5s ease, filter .5s ease, opacity .5s ease; }
+/* filter et opacity sur la carte 3D l'aplatiraient (preserve-3d) : on
+   verrait le dos en miroir. La pénombre se pose donc sur la face. */
+.mini-card.dim.montre{ transform:rotateY(180deg) scale(.9); filter:none; opacity:1; transition:transform .5s ease; }
+.mini-card.dim.montre .front{ filter:brightness(.62) saturate(.7); opacity:.9; }
 @keyframes cardLift{
   from{ transform:translateY(0) scale(1); }
   to  { transform:translateY(-7px) scale(1.07); }

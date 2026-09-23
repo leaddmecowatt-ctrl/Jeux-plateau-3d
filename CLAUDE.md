@@ -79,8 +79,8 @@ les cases de passage n'offrent que des lots encore en stock (`pouchHas`).
 coffrets et tripacks ouverts (7 coups), remises physiquement ; le jeu n'en affiche pas le contenu.
 Une pochette `v10` en mémoire est convertie au chargement (ses `chest` deviennent `parc`, position
 gardée). **Chance et Caisse Communautaire** sont des détours (carte déplacement pipée,
-`CARD_ROUTE_P` au dernier lancer, `CHANCE_MID_P` en cours de route) ; cases tentantes de passage :
-`TEMPTING_P`. Dessins des cases spéciales : `drawSpecialArt` (Prison, Chance, Caisse, Parc).
+`CARD_ROUTE_P` au dernier lancer ; en cours de route, un seul tirage pondéré avec les bonus
+`CHANCE_MID_W`, `TEMPTING_W` (cases tentantes) et `NEAR_MISS_W` (raté de peu). Dessins des cases spéciales : `drawSpecialArt` (Prison, Chance, Caisse, Parc).
 
 **Chemins variés** : le résultat est décidé avant l'animation. Allure de marche ±15 %, rampes,
 anticipation et stabilisation tirées au sort (`startWalk`) ; arrivée anticipée possible sur la

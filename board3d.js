@@ -7651,8 +7651,13 @@ function computeCardDraw(total, wantDouble){
            hop1: parcours(slotOrder[0], -1), hop2: parcours(slotOrder[1], slotOrder[0]),
            susp: 480 + Math.floor(Math.random()*420) };
 }
+let drawAnimGen = 0;
 async function playCardDrawAnimation(draw){
   if(!cardDrawOverlay || !cardGrid) return;
+  /* Un tirage qui démarre pendant le précédent (écran public mis en
+     arrière-plan : minuteries ralenties) : l'ancien ne doit pas fermer
+     l'overlay au milieu du nouveau. */
+  const monTirage = ++drawAnimGen;
 
   /* Même mise en scène quel que soit le lot (audit 23/09) : avant, le titre
      (« TOUT SE JOUE MAINTENANT », « Les cartes tombent… »), la grille qui
@@ -7802,6 +7807,7 @@ async function playCardDrawAnimation(draw){
      necessaire pour lire le total. Le double garde sa pause longue,
      l'animateur doit avoir le temps d'annoncer la relance. */
   await wait(reduceMotion ? 200 : (draw.isDouble ? 1500 : 900));
+  if(monTirage !== drawAnimGen) return;
   cardDrawOverlay.classList.remove('show');
   // laisse le fondu de sortie se jouer avant que le pion ne parte
   if(!reduceMotion) await wait(320);
@@ -8124,7 +8130,11 @@ async function drawAndMove(){
 }
 
 validate.addEventListener('click', drawAndMove);
-resetBtn.addEventListener('click', restart);
+// souris comme clavier : jamais pendant le tirage des cartes (audit 3)
+resetBtn.addEventListener('click', ()=>{
+  if(drawInProgress){ showKeyHint('⏳ Attendez la fin du tirage avant de recommencer (C)'); return; }
+  restart();
+});
 if(startBtn) startBtn.addEventListener('click', startGame);
 /* "Annuler le dernier lot" : filet de sécurité pour un mauvais clic
    sur LOT REMPORTÉ pendant un direct. Reste disponible jusqu'au
@@ -8316,6 +8326,13 @@ function planTotal(pos, rollsLeft, targetCat){
       if(tiles[idx].catKey===targetCat || !landable(idx, targetCat)) continue;
       if(canReachTarget(idx, rollsLeft-1, targetCat, memo)) single.push(t);
       if(t%2===0 && canReachTarget(idx, rollsLeft, targetCat, memo)) double.push(t);
+    }
+    /* 2 et 12 (double 1 ou double 6) : jamais sortis jusqu'ici, alors que de
+       vrais dés les donnent 1 fois sur 36 chacun (audit 3). Possibles en
+       cours de route, comme double : le lancer bonus est compté. */
+    for(const t of [2, 12]){
+      const idx = landingIndex(pos, t);
+      if(landable(idx, targetCat) && tiles[idx].catKey!==targetCat && canReachTarget(idx, rollsLeft, targetCat, memo)) double.push(t);
     }
     /* Cases de passage : d'abord celles dont le lot est encore EN STOCK. Une
        commune épuisée n'est prise que s'il n'y a pas d'autre chemin (fin de

@@ -37,8 +37,8 @@ fonctionnent pas ouvertes directement.
 
 **Commandes** : A démarrer · B tirer · D garder le lot · C recommencer ·
 F plein écran · R pivoter · **M** affiche les règles en grand au milieu de l'écran
-(M ou Échap pour refermer). **Z / 1 à 6** avant le premier lancer = forcer un lot —
-le Tripack, qui était sur M, reste sur la touche **3**.
+(M ou Échap pour refermer). Les touches qui forçaient un lot (Z, 1 à 6) sont
+**supprimées** depuis le 23/09 : tous les lots sortent de la pochette de 245 coups.
 
 **Écran public** : bouton « ouvrir l'écran public » (ou `?view=display` dans l'adresse)
 ouvre une deuxième fenêtre sans les commandes, synchronisée avec la première.
@@ -58,12 +58,15 @@ Tout est dans `board3d.js`, section « Règle métier de rentabilité ».
 | `PAYOUT_LADDER` | ETB 190, coffret 85, tripack 58, duopack 30, booster 17, mystère 7,2, commune 0,68 | valeur comptée de chaque lot |
 | `OUTCOME_RECIPE` | 5 ETB, 2 coffrets, 3 tripacks, 3 duopacks, 51 boosters, 116 mystères, 20 prison / 500 parties | combien de chaque lot par cycle |
 
-Règle tenue à chaque partie : **lots distribués ≤ 74 % de ce qui est encaissé**. Si un
-lot n'est pas couvert, il redescend d'un cran (ETB → coffret → tripack…).
+**Depuis le 23/09, ce tableau est historique** : le jeu tire ses lots d'une pochette de
+**245 coups aux quantités exactes** (1 ETB 30 ans, 2 coffrets, 2 tripacks, 1 duopack,
+42 boosters, 90 Lots Mystère, 7 Parc gratuit, 100 communes ; voir `POUCH`), sans plafond
+de reversement : aucun lot n'est retiré ni rétrogradé. L'hôte calcule sa rentabilité sur
+ses coûts réels.
 
-**Le piège : les touches forcées.** Un lot forcé (Z, M, 1–6) ne compte **ni la mise ni
-le lot**. C'est voulu (partie-bonus offerte), mais chaque lot forcé sort de la marge sans
-que le jeu le sache. Sur le direct du 17/09, c'est ce qui a fait déraper le résultat.
+**Historique : les touches forcées.** Un lot forcé (Z, M, 1–6) ne comptait ni la mise ni
+le lot ; sur le direct du 17/09, c'est ce qui a fait déraper le résultat. Ces touches sont
+supprimées depuis le 23/09.
 
 ## 5. Le recalibrage en place (18/09)
 
