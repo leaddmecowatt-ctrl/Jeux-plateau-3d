@@ -162,8 +162,10 @@ const BOARD_DATA = [
   'booster8','alternative','chest','commune','commune','commune','chance','commune','commune*',
   'gradee','booster8','alternative','gradee','commune','commune','chest','commune','commune',
   'commune','chance','commune','commune','commune','gradee','commune','booster50','prison',
-  'commune','commune','commune','booster8','booster8','chance','commune','etb','jackpot300',
+  'chest','commune','commune','booster8','booster8','chance','commune','etb','jackpot300',
 ].map(tok=>({ cat: tok.replace('*',''), isVisite: tok.endsWith('*') }));
+// Case 28 (angle, à côté de la Prison) : Caisse Communautaire au lieu d'une
+// commune, demande de l'animateur (23/09). Trois cases Caisse en tout.
 if(BOARD_DATA.length !== N_TILES) throw new Error('BOARD_DATA: '+BOARD_DATA.length+' cases pour N_TILES='+N_TILES);
 // NB : cases 5 et 22 remises en commune/chance (au lieu de gradée) car
 // ça cassait la rentabilité même à risque maximal (marge 20%). En
