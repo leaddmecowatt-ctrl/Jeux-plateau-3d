@@ -1877,6 +1877,75 @@ function bevelledBox(w, h, d, bevel){
   return geo;
 }
 
+/* ---------- Feuille d'or ----------
+   D'après la photo de référence de l'animateur : une feuille d'or froissée,
+   faite de facettes, de plis nets et d'arêtes qui accrochent la lumière.
+   Hauteur = bruit « ridgé » (1 - |2n-1|) sur un domaine déformé : les
+   crêtes forment des plis fins et cassés, pas des bosses rondes. La couleur
+   suit la hauteur (creux ocre, crêtes paille presque blanches) et la carte
+   de normales, tirée de la même hauteur, fait scintiller chaque facette. */
+function makeGoldLeafMaps(size){
+  let seed = 1337;
+  const rnd = ()=>{ seed = (seed*16807) % 2147483647; return seed/2147483647; };
+  const grid = (n)=>{ const g = new Float32Array(n*n); for(let i=0;i<n*n;i++) g[i] = rnd(); return g; };
+  const sample = (g, n, x, y)=>{
+    x = ((x % n) + n) % n; y = ((y % n) + n) % n;
+    const x0 = Math.floor(x), y0 = Math.floor(y), fx = x-x0, fy = y-y0;
+    const x1 = (x0+1)%n, y1 = (y0+1)%n;
+    const sx = fx*fx*(3-2*fx), sy = fy*fy*(3-2*fy);
+    const a = g[y0*n+x0], b = g[y0*n+x1], c = g[y1*n+x0], d = g[y1*n+x1];
+    return (a + (b-a)*sx) + ((c + (d-c)*sx) - (a + (b-a)*sx))*sy;
+  };
+  const oct = [4, 8, 16, 32, 64].map(n=>({ n, g:grid(n) }));
+  const warp = [grid(6), grid(6)];
+  const H = new Float32Array(size*size);
+  for(let y=0;y<size;y++) for(let x=0;x<size;x++){
+    const u = x/size, v = y/size;
+    const wx = u + 0.08*(sample(warp[0], 6, u*6, v*6) - 0.5);
+    const wy = v + 0.08*(sample(warp[1], 6, u*6, v*6) - 0.5);
+    let h = 0, amp = 1, tot = 0;
+    for(const o of oct){
+      const r = 1 - Math.abs(2*sample(o.g, o.n, wx*o.n, wy*o.n) - 1);
+      h += Math.pow(r, 3.2) * amp; tot += amp; amp *= 0.55;
+    }
+    H[y*size+x] = h/tot;
+  }
+  let mn = 1, mx = 0; for(const h of H){ if(h<mn) mn=h; if(h>mx) mx=h; }
+  for(let i=0;i<H.length;i++) H[i] = (H[i]-mn)/(mx-mn);
+  const at = (x,y)=> H[(((y+size)%size)*size + ((x+size)%size))];
+  const cc = document.createElement('canvas'); cc.width = cc.height = size;
+  const nc = document.createElement('canvas'); nc.width = nc.height = size;
+  const ci = cc.getContext('2d').createImageData(size, size), ni = nc.getContext('2d').createImageData(size, size);
+  const bas = [150, 108, 38], mid = [214, 170, 82], haut = [252, 236, 178];
+  for(let y=0;y<size;y++) for(let x=0;x<size;x++){
+    const h = at(x,y), i = (y*size+x)*4;
+    const k = h < 0.5 ? h/0.5 : (h-0.5)/0.5, A = h < 0.5 ? bas : mid, B = h < 0.5 ? mid : haut;
+    const sp = Math.pow(Math.max(0, h-0.82)/0.18, 2)*40;         // paillettes sur les crêtes
+    for(let c=0;c<3;c++) ci.data[i+c] = Math.min(255, A[c] + (B[c]-A[c])*k + sp);
+    ci.data[i+3] = 255;
+    const dx = (at(x+1,y) - at(x-1,y))*9, dy = (at(x,y+1) - at(x,y-1))*9;
+    const len = Math.hypot(dx, dy, 1);
+    ni.data[i] = (-dx/len*0.5+0.5)*255; ni.data[i+1] = (-dy/len*0.5+0.5)*255; ni.data[i+2] = (1/len*0.5+0.5)*255; ni.data[i+3] = 255;
+  }
+  cc.getContext('2d').putImageData(ci, 0, 0); nc.getContext('2d').putImageData(ni, 0, 0);
+  const mk = (cvs, srgb)=>{ const t = new THREE.CanvasTexture(cvs); t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(1.6, 1.6); t.anisotropy = getMaxAniso(); if(srgb) t.colorSpace = THREE.SRGBColorSpace; return t; };
+  return { map: mk(cc, true), normalMap: mk(nc, false) };
+}
+const GOLD_LEAF = makeGoldLeafMaps(512);
+/* Flancs des cases et socle : feuille d'or. Métal franc, normales fortes
+   (c'est ici qu'on VEUT l'accroche facette par facette, contrairement à la
+   collerette polie), et un léger émissif pris dans la couleur elle-même
+   pour que l'or reste doré face au fond sombre, même sans bloom. */
+const goldLeafMat = new THREE.MeshStandardMaterial({
+  map: GOLD_LEAF.map, normalMap: GOLD_LEAF.normalMap, normalScale: new THREE.Vector2(1.1, 1.1),
+  color: 0xffffff, metalness: 0.92, roughness: 0.34, envMapIntensity: 1.35,
+  emissive: 0xffffff, emissiveMap: GOLD_LEAF.map, emissiveIntensity: 0.26,
+});
+const goldLeafDarkMat = goldLeafMat.clone();
+goldLeafDarkMat.color = new THREE.Color(0x9a7a44);
+goldLeafDarkMat.emissiveIntensity = 0.14;
+
 const tileGoldMat = new THREE.MeshStandardMaterial({
   /* roughness .28 et non .2 : la roughnessMap MULTIPLIE cette valeur, et
      la carte procedurale a une moyenne de 0.72 — la rugosite effective
@@ -1962,7 +2031,8 @@ for(let i=0;i<N_TILES;i++){
   group.rotation.y = outwardYaw(r,c);
   boardGroup.add(group);
 
-  const baseTile = new THREE.Mesh(tileBaseGeo, baseTileMat);
+  // socle : feuille d'or patinée, un ton sous les flancs, qui asseoit la case
+  const baseTile = new THREE.Mesh(tileBaseGeo, goldLeafDarkMat);
   baseTile.position.y = 0.04;
   baseTile.receiveShadow = true;
   group.add(baseTile);
@@ -1984,20 +2054,6 @@ for(let i=0;i<N_TILES;i++){
   tileCollarInst.setMatrixAt(i, _instDummy.matrix);
 
   const accentColor = SWATCH_COLORS[catDef.swatch];
-  const sideMat = new THREE.MeshStandardMaterial({
-    color:new THREE.Color(accentColor),roughness:.7,metalness:.12,
-    // emissiveIntensity retombe de .32 a .20 : a .32 les 40 corps de case
-    // emettaient en permanence, donc plus rien ne ressortait — un reflet ne
-    // se remarque que par contraste avec ce qui ne brille pas. La case
-    // active, elle, monte toujours via son halo. (.10 au premier essai
-    // eteignait completement les couleurs : trop.)
-    emissive:new THREE.Color(accentColor),emissiveIntensity:.20,
-    normalMap: TILE_MAPS.normalMap, roughnessMap: TILE_MAPS.roughnessMap,
-  });
-  // Relief tres discret sur le corps : a pleine echelle, le bruit inclinait
-  // assez les normales pour assombrir les flancs et virer les couleurs de
-  // categorie au brun (vu en capture). On veut du grain, pas du martelage.
-  sideMat.normalScale.set(0.35, 0.35);
   // Corps de la case légèrement épaissi (0.14 au lieu de 0.08 à
   // l'origine) : un vrai relief avec des flancs colorés visibles,
   // façon jeton de casino, sans pour autant faire une case si haute
@@ -2006,7 +2062,12 @@ for(let i=0;i<N_TILES;i++){
   // masque celle qui la suit — testé à 0.30, beaucoup trop).
   // Posé directement sur la collerette (qui culmine à 0.135).
   const BODY_H = 0.14, BODY_BOTTOM = 0.135;
-  const bodyTile = new THREE.Mesh(tileBodyGeo, sideMat);
+  /* Flancs en FEUILLE D'OR (demande de l'animateur, photo à l'appui) : les
+     couleurs de catégorie empilées sur la tranche faisaient bariolé et
+     bon marché. La couleur de chaque lot reste sur le dessus de la case
+     (liseré et bandeau), où on la lit ; la tranche, elle, devient la
+     matière noble du plateau. */
+  const bodyTile = new THREE.Mesh(tileBodyGeo, goldLeafMat);
   bodyTile.position.y = BODY_BOTTOM + BODY_H/2;
   bodyTile.castShadow = true;
   bodyTile.receiveShadow = true;
@@ -4129,49 +4190,56 @@ function drawLuffyFace(mode){
   const ink = '#1b1414';
   // joues légèrement rosées
   for(const s of [-1, 1]){
-    const g = x.createRadialGradient(U(s*0.083), Y(0.585), 5, U(s*0.083), Y(0.585), 70);
+    const g = x.createRadialGradient(U(s*0.075), Y(0.575), 5, U(s*0.075), Y(0.575), 60);
     g.addColorStop(0, 'rgba(240,140,120,.28)'); g.addColorStop(1, 'rgba(240,140,120,0)');
-    x.fillStyle = g; x.fillRect(U(s*0.083)-80, Y(0.585)-80, 160, 160);
+    x.fillStyle = g; x.fillRect(U(s*0.075)-70, Y(0.575)-70, 140, 140);
   }
+  /* Regard de Luffy d'après la référence : yeux RAPPROCHÉS, ronds, grosse
+     pupille noire et deux reflets. Première version : yeux écartés, blanc
+     immense, pupille minuscule — un regard fixe qui faisait peur. */
   const eye = (s)=>{
-    const cx = U(s*0.052), cy = Y(0.475);
+    const cx = U(s*0.041), cy = Y(0.482);
     if(mode === 'ouvert'){
-      x.fillStyle = '#ffffff'; x.strokeStyle = ink; x.lineWidth = 11;
-      x.beginPath(); x.ellipse(cx, cy, 58, 66, 0, 0, Math.PI*2); x.fill(); x.stroke();
-      x.fillStyle = ink; x.beginPath(); x.ellipse(cx + s*4, cy + 6, 25, 29, 0, 0, Math.PI*2); x.fill();
-      x.fillStyle = '#ffffff'; x.beginPath(); x.ellipse(cx + s*4 - 9, cy - 5, 8, 9, 0, 0, Math.PI*2); x.fill();
+      x.fillStyle = '#ffffff'; x.strokeStyle = ink; x.lineWidth = 9;
+      x.beginPath(); x.ellipse(cx, cy, 44, 52, 0, 0, Math.PI*2); x.fill(); x.stroke();
+      x.fillStyle = ink; x.beginPath(); x.ellipse(cx - s*3, cy + 6, 27, 33, 0, 0, Math.PI*2); x.fill();
+      x.fillStyle = '#ffffff';
+      x.beginPath(); x.ellipse(cx - s*3 - 10, cy - 6, 10, 11, 0, 0, Math.PI*2); x.fill();
+      x.beginPath(); x.ellipse(cx - s*3 + 9, cy + 17, 4.5, 5, 0, 0, Math.PI*2); x.fill();
+      // paupière du haut, trait épais qui déborde vers l'extérieur
+      x.lineWidth = 14;
+      x.beginPath(); x.ellipse(cx, cy, 44, 52, 0, Math.PI*1.08, Math.PI*1.92); x.stroke();
     } else if(mode === 'ferme'){
       x.strokeStyle = ink; x.lineWidth = 12;
-      x.beginPath(); x.moveTo(cx-54, cy+8); x.quadraticCurveTo(cx, cy+26, cx+54, cy+8); x.stroke();
-    } else { // rire : yeux en accent circonflexe
-      x.strokeStyle = ink; x.lineWidth = 14;
-      x.beginPath(); x.moveTo(cx-52, cy+18); x.lineTo(cx, cy-22); x.lineTo(cx+52, cy+18); x.stroke();
+      x.beginPath(); x.moveTo(cx-44, cy+6); x.quadraticCurveTo(cx, cy+24, cx+44, cy+6); x.stroke();
+    } else { // rire : yeux fermés en arc, heureux
+      x.strokeStyle = ink; x.lineWidth = 13;
+      x.beginPath(); x.moveTo(cx-44, cy+14); x.quadraticCurveTo(cx, cy-30, cx+44, cy+14); x.stroke();
     }
-    // sourcil épais, remonté vers l'extérieur
+    // sourcil : court, épais, légèrement relevé — décidé, pas menaçant
     x.fillStyle = ink;
     x.beginPath();
-    x.moveTo(cx - s*62, cy - 78); x.quadraticCurveTo(cx, cy - 112, cx + s*66, cy - 104);
-    x.lineTo(cx + s*64, cy - 88); x.quadraticCurveTo(cx, cy - 92, cx - s*60, cy - 64); x.closePath(); x.fill();
+    x.moveTo(cx - s*44, cy - 72); x.quadraticCurveTo(cx - s*4, cy - 96, cx + s*42, cy - 84);
+    x.lineTo(cx + s*40, cy - 72); x.quadraticCurveTo(cx - s*4, cy - 80, cx - s*42, cy - 60); x.closePath(); x.fill();
   };
   eye(-1); eye(1);
   // nez : petit trait
-  x.strokeStyle = '#b77d62'; x.lineWidth = 7;
-  x.beginPath(); x.moveTo(U(0.002), Y(0.535)); x.lineTo(U(-0.004), Y(0.562)); x.stroke();
-  // grand sourire ouvert (D couché), dents du haut, langue
-  const mx = U(0), my = Y(0.615), mw = mode === 'rire' ? 118 : 104, mh = mode === 'rire' ? 96 : 80;
-  x.save();
-  x.beginPath(); x.moveTo(mx - mw, my); x.quadraticCurveTo(mx, my - 14, mx + mw, my);
-  x.quadraticCurveTo(mx + mw*0.9, my + mh, mx, my + mh); x.quadraticCurveTo(mx - mw*0.9, my + mh, mx - mw, my); x.closePath();
-  x.fillStyle = '#6e1f25'; x.fill();
-  x.clip();
-  x.fillStyle = '#ffffff'; x.fillRect(mx - mw, my - 20, mw*2, 34);
-  x.fillStyle = '#f08a92'; x.beginPath(); x.ellipse(mx, my + mh*0.95, mw*0.62, mh*0.5, 0, 0, Math.PI*2); x.fill();
+  x.strokeStyle = '#c08a6c'; x.lineWidth = 6;
+  x.beginPath(); x.moveTo(U(0.003), Y(0.54)); x.lineTo(U(-0.002), Y(0.562)); x.stroke();
+  // grand sourire ouvert (D couché), rangée de dents, langue rose
+  const mx = U(0), my = Y(0.598), mw = mode === 'rire' ? 94 : 82, mh = mode === 'rire' ? 80 : 66;
+  const bouche = ()=>{ x.beginPath(); x.moveTo(mx - mw, my); x.quadraticCurveTo(mx, my - 10, mx + mw, my);
+    x.quadraticCurveTo(mx + mw*0.86, my + mh, mx, my + mh); x.quadraticCurveTo(mx - mw*0.86, my + mh, mx - mw, my); x.closePath(); };
+  x.save(); bouche(); x.fillStyle = '#8c2a33'; x.fill(); x.clip();
+  x.fillStyle = '#ffffff'; x.fillRect(mx - mw, my - 14, mw*2, 30);
+  x.fillStyle = '#f59aa3'; x.beginPath(); x.ellipse(mx, my + mh*0.98, mw*0.66, mh*0.52, 0, 0, Math.PI*2); x.fill();
   x.restore();
-  x.strokeStyle = ink; x.lineWidth = 10;
-  x.beginPath(); x.moveTo(mx - mw, my); x.quadraticCurveTo(mx, my - 14, mx + mw, my);
-  x.quadraticCurveTo(mx + mw*0.9, my + mh, mx, my + mh); x.quadraticCurveTo(mx - mw*0.9, my + mh, mx - mw, my); x.closePath(); x.stroke();
+  x.strokeStyle = ink; x.lineWidth = 9; bouche(); x.stroke();
+  // fossettes au coin de la bouche
+  x.lineWidth = 6;
+  for(const sgn of [-1,1]){ x.beginPath(); x.moveTo(mx + sgn*(mw+4), my - 12); x.quadraticCurveTo(mx + sgn*(mw+14), my, mx + sgn*(mw+6), my + 12); x.stroke(); }
   // cicatrice sous l'œil gauche : trait arqué et deux points de couture
-  const sx = U(0.062), sy = Y(0.545);
+  const sx = U(0.049), sy = Y(0.548);
   x.strokeStyle = '#8c3b35'; x.lineWidth = 7;
   x.beginPath(); x.moveTo(sx - 34, sy - 6); x.quadraticCurveTo(sx, sy + 10, sx + 34, sy - 8); x.stroke();
   x.lineWidth = 6;
@@ -4267,7 +4335,7 @@ function buildLuffy(model, pivot){
   // mèches de côté et de nuque, sous l'aile du chapeau
   for(let i=0;i<34;i++){
     const a = Math.PI*0.28 + (i/34)*Math.PI*1.44 + (rnd()-0.5)*0.12;       // du côté gauche au côté droit, par l'arrière
-    const dir = v3(Math.sin(a), 0.05 + rnd()*0.35, Math.cos(a));
+    const dir = v3(Math.sin(a), -0.08 + rnd()*0.2, Math.cos(a));   // sous l'aile du chapeau
     spike(dir, 0.055 + rnd()*0.05, 0.03 + rnd()*0.012, v3(0,-1,0), 0.02 + rnd()*0.02);
   }
   // nuque : mèches en désordre qui pointent vers le bas et l'extérieur
@@ -4279,12 +4347,12 @@ function buildLuffy(model, pivot){
   // frange : mèches épaisses qui tombent sur le front
   const bangs = [[-0.13,0.090],[-0.075,0.105],[-0.02,0.11],[0.035,0.108],[0.09,0.10],[0.14,0.085],[-0.17,0.07],[0.18,0.07]];
   for(const [bx, bl] of bangs){
-    const dir = v3(bx/0.24, 0.62, 0.72);
+    const dir = v3(bx/0.24, 0.40, 0.85);   // la frange sort de sous l'aile
     spike(dir, bl, 0.034, v3(bx*0.8, -1.2, 0.25).normalize(), 0.075);
   }
   // mèches qui dépassent au-dessus des oreilles
   for(const s of [-1,1]) for(let k=0;k<3;k++)
-    spike(v3(s*0.95, 0.1 + k*0.12, -0.1 + k*0.12), 0.06, 0.028, v3(s*0.4,-1,0), 0.03);
+    spike(v3(s*0.95, -0.12 + k*0.07, -0.1 + k*0.12), 0.06, 0.028, v3(s*0.4,-1,0), 0.03);
 
   // ---------------- cou et tronc ----------------
   const neck = P('peau', ['Neck','Head','UpperChest']);
@@ -4301,7 +4369,7 @@ function buildLuffy(model, pivot){
     const e = k[k.length-1]; return {rx:e[1], rz:e[2], zc:e[3]};
   };
   const torso = P('peau', ['Hips','Spine','Chest','UpperChest','Neck']);
-  const tys = []; for(let y=0.07; y<=0.545; y+=0.0125) tys.push(y);
+  const tys = []; for(let y=0.125; y<=0.545; y+=0.0125) tys.push(y);   // le bas reste caché dans le short
   luffyShell(torso, tys, y=>TORSE(y), 48, white);
   // clavicules et plis de ventre : légers creux d'ombre peints en couleur de sommet
   // cicatrice en croix : deux bandes en relief posées sur la surface du torse
@@ -4522,7 +4590,7 @@ function buildLuffy(model, pivot){
           diffuseColor.rgb *= 0.90 + 0.07*smoothstep(-0.3, 0.9, rang) + 0.04*brin;`);
       };
       o.material = hm; o.visible = true;
-      /* Chapeau d'origine, repoussé en arrière de 26° (et réduit de 10 %) : sur un plateau vu en
+      /* Chapeau d'origine, enfoncé sur la tête et repoussé de 10° (réduit de 12 %) : sur un plateau vu en
          plongée, l'aile à plat recouvrait tout le personnage — on ne voyait
          qu'un disque de paille. Incliné comme Luffy le porte souvent, il
          dégage le visage. Rotation appliquée à la géométrie (100 % liée à
@@ -4531,11 +4599,16 @@ function buildLuffy(model, pivot){
         const g = o.geometry.clone();
         // pivot = centre de la tête : le chapeau glisse vers l'arrière sur
         // le crâne, comme un vrai chapeau repoussé, au lieu de flotter
-        const piv = new THREE.Vector3(0, 3.2, -0.07);
+        /* Enfoncé sur la tête comme sur la référence : la calotte coiffe le
+           crâne, l'aile passe juste au-dessus des sourcils à l'avant, la
+           frange et les mèches dépassent dessous. Légèrement repoussé en
+           arrière (10°) : assez pour dégager le visage vu en plongée, pas
+           au point de le faire tenir sur la nuque. */
+        const piv = new THREE.Vector3(0, 3.2, -0.07);   // centre de la tête
         g.applyMatrix4(new THREE.Matrix4().makeTranslation(-piv.x, -piv.y, -piv.z));
-        g.applyMatrix4(new THREE.Matrix4().makeScale(0.9, 0.9, 0.9));
-        g.applyMatrix4(new THREE.Matrix4().makeRotationX(-0.46));
-        g.applyMatrix4(new THREE.Matrix4().makeTranslation(piv.x, piv.y, piv.z));
+        g.applyMatrix4(new THREE.Matrix4().makeScale(0.88, 0.88, 0.88));
+        g.applyMatrix4(new THREE.Matrix4().makeRotationX(-0.18));
+        g.applyMatrix4(new THREE.Matrix4().makeTranslation(piv.x, piv.y - 0.36, piv.z - 0.04));
         g.userData.penche = true;
         o.geometry = g;
       }
