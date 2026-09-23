@@ -7189,7 +7189,7 @@ const POUCH = [
   { cat:'gradee',      n:1   },   // Duopack 30 ans (gagné fermé)
   { cat:'booster8',    n:42  },   // Booster 30 ans
   { cat:'alternative', n:90  },   // Lot Mystère
-  { cat:'parc',        n:7   },   // Parc gratuit : cartes promo des produits ouverts
+  { cat:'parc',        n:7   },   // Carte gratuite (gagnée sur la case Parc gratuit) : promos des produits ouverts
   { cat:'commune',     n:100 },   // Carte commune
 ];
 const POUCH_SIZE = POUCH.reduce((s,r)=>s+r.n, 0);
@@ -9237,7 +9237,7 @@ const CATEGORY_MESSAGES = {
   etb:         '🎁 COFFRET 30 ANS GAGNÉ ! 🎁',
   jackpot300:  '👑 ETB 30 ANS GAGNÉ ! 👑',
   // contenu inconnu du jeu : les promos sont remises par l'animateur
-  parc:        '🅿️ PARC GRATUIT : LES PROMOS SONT À TOI ! 🅿️',
+  parc:        '🎁 CARTE GRATUITE GAGNÉE ! 🎁',
 };
 
 /* ---------- Animation du lot mystère ----------
