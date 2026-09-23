@@ -2199,34 +2199,42 @@ const shatterFlash = new THREE.Sprite(new THREE.SpriteMaterial({
 shatterFlash.position.set(0, 0.4, 0);
 scene.add(shatterFlash);
 
-/* ---------- Orage du champion (jackpot ETB) ----------
-   Remplace le plateau qui volait en éclats : le décor s'assombrit, la
-   caméra se met à tourner autour du pion, la foudre frappe sa case en
-   rafale (éclairs 3D ramifiés, flash des lumières de la scène, onde qui
-   parcourt les cases depuis l'impact, étincelles, tonnerre, coups de
-   caméra), puis une colonne de lumière dorée monte de la case avec une
-   pluie d'or, jusqu'au flash blanc final qui révèle le lot. */
-const STORM_MS = 4300;
-const STORM_STRIKES = [0.45, 0.95, 1.35, 1.68, 1.95, 2.18];   // secondes après le départ
+/* ---------- Finale du jackpot (ETB) : l'enlèvement ----------
+   Le ciel s'éteint, Luffy devient une silhouette noire cernée de lumière,
+   la foudre frappe sa case en rafale (vrais éclairs ramifiés : cœur blanc,
+   halo bleuté, scintillement, flash qui illumine la scène), puis un
+   faisceau descend du ciel comme celui d'un vaisseau : le personnage y est
+   soulevé en tournant lentement, tout là-haut un flash blanc éclate, il
+   redescend sur sa case et le lot apparaît. Chronologie en secondes : */
+const STORM_MS = 6800;
+const STORM_STRIKES = [0.30, 0.72, 1.05, 1.34, 1.58, 1.80, 1.98, 2.12];
+const ABD = { beam:2.20, levee:2.55, haut:4.75, flash:5.25, descente:5.30, pose:5.95, fin:6.8, hauteur:2.35 };
 const LIGHT_BASE = { key: key.intensity, hemi: hemiLight.intensity, fill: fill.intensity, rim: rim.intensity, spot: centerSpot.intensity, expo: renderer.toneMappingExposure };
 let storm = null;
 const stormWaves = [];
-let beamMesh = null, beamLight = null;
-const beamTex = (function(){
-  const c = document.createElement('canvas'); c.width = 64; c.height = 256;
-  const g = c.getContext('2d');
-  const grad = g.createLinearGradient(0, 0, 0, 256);
-  grad.addColorStop(0.00, 'rgba(255,240,190,0)');
-  grad.addColorStop(0.45, 'rgba(255,224,130,0.35)');
-  grad.addColorStop(0.85, 'rgba(255,236,170,0.85)');
-  grad.addColorStop(1.00, 'rgba(255,248,220,0.95)');
-  g.fillStyle = grad; g.fillRect(0,0,64,256);
-  // liseré vertical plus clair au centre : la colonne paraît cylindrique
-  const side = g.createLinearGradient(0,0,64,0);
-  side.addColorStop(0,'rgba(0,0,0,0.35)'); side.addColorStop(0.5,'rgba(255,255,255,0)'); side.addColorStop(1,'rgba(0,0,0,0.35)');
-  g.globalCompositeOperation = 'multiply'; g.fillStyle = side; g.fillRect(0,0,64,256);
-  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; return tex;
-})();
+let beamMesh = null, beamCore = null, beamHalo = null, beamDisc = null, beamSource = null, beamLight = null;
+/* Faisceau : cône ouvert, du ciel vers la case, en matière additive. Le
+   shader fait défiler des stries verticales (rayons) et des anneaux qui
+   descendent, plus clair au centre du cône qu'à ses bords. */
+function makeBeamMat(color, strength){
+  return new THREE.ShaderMaterial({
+    uniforms: { uT:{value:0}, uOp:{value:0}, uCol:{value:new THREE.Color(color)}, uK:{value:strength} },
+    vertexShader: `varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+      void main(){ vUv = uv; vec4 mv = modelViewMatrix*vec4(position,1.0);
+        vN = normalize(normalMatrix*normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix*mv; }`,
+    fragmentShader: `uniform float uT; uniform float uOp; uniform vec3 uCol; uniform float uK;
+      varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+      void main(){
+        float face = pow(abs(dot(normalize(vN), normalize(vV))), 1.6);
+        float stries = 0.55 + 0.45*sin(vUv.x*62.83 + uT*1.7)*sin(vUv.x*25.13 - uT*1.1);
+        float anneaux = 0.70 + 0.30*sin(vUv.y*46.0 + uT*7.0);
+        float haut = smoothstep(1.0, 0.72, vUv.y) * smoothstep(0.0, 0.08, vUv.y);
+        float a = uOp * uK * face * stries * anneaux * (0.35 + 0.65*haut);
+        gl_FragColor = vec4(uCol * a, a);
+      }`,
+    transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide,
+  });
+}
 /* Onde de choc qui parcourt les cases depuis le point d'impact : une
    bosse qui s'éloigne à 7,5 unités/s, suivie d'un léger creux, et qui
    s'amortit avec la distance et le temps. */
@@ -2244,43 +2252,60 @@ function stormWaveOffset(tile, t){
   }
   return y;
 }
-function boltPath(from, to, jitter){
-  const pts = [from.clone()]; const n = 9;
-  for(let i=1;i<n;i++){
-    const p = from.clone().lerp(to, i/n);
-    const k = jitter*(1 - (i/n)*0.6);
-    p.x += (Math.random()-0.5)*k; p.z += (Math.random()-0.5)*k;
-    pts.push(p);
+/* Éclair : déplacement de points médians (fractal), 64 segments, un vrai
+   zigzag à toutes les échelles au lieu de 10 segments réguliers. */
+function boltPoints(from, to, rough, depth){
+  let pts = [from.clone(), to.clone()];
+  let amp = from.distanceTo(to) * rough;
+  for(let d=0; d<depth; d++){
+    const nx = [];
+    for(let i=0;i<pts.length-1;i++){
+      const a = pts[i], b = pts[i+1];
+      const m = a.clone().lerp(b, 0.42 + Math.random()*0.16);
+      const dir = b.clone().sub(a).normalize();
+      const side = new THREE.Vector3(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).cross(dir).normalize();
+      m.addScaledVector(side, (Math.random()-0.5)*2*amp);
+      nx.push(a, m);
+    }
+    nx.push(pts[pts.length-1]);
+    pts = nx; amp *= 0.52;
   }
-  pts.push(to.clone());
-  const path = new THREE.CurvePath();
-  for(let i=0;i<pts.length-1;i++) path.add(new THREE.LineCurve3(pts[i], pts[i+1]));
-  return { path, pts };
+  return pts;
 }
-function boltMat(color, opacity){
-  const m = new THREE.MeshBasicMaterial({ color, transparent:true, opacity, blending:THREE.AdditiveBlending, depthWrite:false });
+function boltMesh(pts, r, color, op){
+  const path = new THREE.CatmullRomCurve3(pts, false, 'chordal', 0);
+  const m = new THREE.Mesh(new THREE.TubeGeometry(path, pts.length*2, r, 5, false),
+    new THREE.MeshBasicMaterial({ color, transparent:true, opacity:op, blending:THREE.AdditiveBlending, depthWrite:false, toneMapped:false }));
+  m.userData.op = op;
   return m;
 }
-function spawnBolt(tx, ty, tz){
+function spawnBolt(tx, ty, tz, puissance){
   if(!storm) return;
   const g = new THREE.Group();
-  const from = new THREE.Vector3(tx + (Math.random()-0.5)*5, 8.5, tz + (Math.random()-0.5)*5);
-  const to = new THREE.Vector3(tx, ty, tz);
-  const main = boltPath(from, to, 1.7);
-  const add = (path, segs, r, color, op)=>{
-    const m = new THREE.Mesh(new THREE.TubeGeometry(path, segs, r, 5, false), boltMat(color, op));
-    m.userData.op = op; g.add(m);
-  };
-  add(main.path, 72, 0.06, 0xfff9ec, 1);
-  add(main.path, 72, 0.27, 0xffd36a, 0.4);
-  for(let b=0;b<3;b++){
-    const i = 2 + Math.floor(Math.random()*5);
-    const start = main.pts[i];
-    const end = start.clone().add(new THREE.Vector3((Math.random()-0.5)*3.2, -(1+Math.random()*2.4), (Math.random()-0.5)*3.2));
-    add(boltPath(start, end, 0.8).path, 24, 0.03, 0xfff9ec, 0.95);
+  const from = new THREE.Vector3(tx + (Math.random()-0.5)*6, 10, tz + (Math.random()-0.5)*6);
+  const to = new THREE.Vector3(tx + (Math.random()-0.5)*0.3, ty, tz + (Math.random()-0.5)*0.3);
+  const main = boltPoints(from, to, 0.22, 6);
+  const k = puissance || 1;
+  g.add(boltMesh(main, 0.022*k, 0xffffff, 1));          // cœur blanc
+  g.add(boltMesh(main, 0.07*k, 0xb9c6ff, 0.55));        // halo proche
+  g.add(boltMesh(main, 0.20*k, 0x6f72ff, 0.16));        // halo large
+  // ramifications, elles-mêmes ramifiées
+  const nb = 3 + Math.floor(Math.random()*3);
+  for(let b=0;b<nb;b++){
+    const i = 8 + Math.floor(Math.random()*(main.length*0.6));
+    const st = main[Math.min(main.length-2, i)];
+    const end = st.clone().add(new THREE.Vector3((Math.random()-0.5)*3.4, -(0.9 + Math.random()*2.6), (Math.random()-0.5)*3.4));
+    const br = boltPoints(st, end, 0.28, 4);
+    g.add(boltMesh(br, 0.012*k, 0xffffff, 0.9));
+    g.add(boltMesh(br, 0.045*k, 0xa9b6ff, 0.35));
+    if(Math.random() < 0.6){
+      const j = Math.floor(br.length*0.5), e2 = br[j].clone().add(new THREE.Vector3((Math.random()-0.5)*1.4, -(0.4+Math.random()*1.0), (Math.random()-0.5)*1.4));
+      g.add(boltMesh(boltPoints(br[j], e2, 0.3, 3), 0.008*k, 0xe8ecff, 0.8));
+    }
   }
   scene.add(g);
-  storm.bolts.push({ g, born: clock.getElapsedTime(), life: 0.24 + Math.random()*0.1 });
+  // scintillement : allumé, éteint, rallumé (le « re-strike » d'un vrai éclair), puis fondu
+  storm.bolts.push({ g, born: clock.getElapsedTime(), life: 0.34 + Math.random()*0.12 });
 }
 function disposeBolt(b){
   scene.remove(b.g);
@@ -2310,114 +2335,178 @@ function triggerImpactBlast(){
   impactFlash.classList.add('blast');
   setTimeout(()=>impactFlash.classList.remove('blast'), 260);
 }
+/* Silhouette : toutes les matières du pion virent au noir, les contours
+   s'élargissent et s'allument — un personnage à contre-jour devant le ciel. */
+let _silMats = null;
+function setSilhouette(k){
+  if(!_silMats){
+    _silMats = [];
+    player.root.traverse(o=>{
+      if(!o.isMesh || !o.material) return;
+      const m = o.material;
+      if(_silMats.some(e=>e.m===m)) return;
+      _silMats.push({ m, col: m.color ? m.color.clone() : null, emi: m.emissive ? m.emissive.clone() : null });
+    });
+  }
+  const noir = new THREE.Color(0x040406), lueur = new THREE.Color(0xfff1c8);
+  for(const e of _silMats){
+    if(e.m.userData.contour){
+      e.m.color.copy(e.col).lerp(lueur, k);
+      e.m.userData.largeur.value = e.m.userData.base * (1 + 1.9*k);
+    } else {
+      if(e.col) e.m.color.copy(e.col).lerp(noir, k);
+      if(e.emi) e.m.emissive.copy(e.emi).lerp(noir, k);
+    }
+  }
+}
 function startJackpotStorm(){
   if(reduceMotion) return false;
   stopStorm();
   const P = player.root.position;
   const tile = currentIndex >= 0 ? tiles[currentIndex] : null;
   const x = tile ? tile.world.x : P.x, z = tile ? tile.world.z : P.z, y = P.y;
-  storm = { t0: clock.getElapsedTime(), x, y, z, strike:0, flashT:-9, bolts:[], dim:0, beamOn:false, blast:false, released:false, endT:0 };
+  storm = { t0: clock.getElapsedTime(), x, y, z, strike:0, flashT:-9, bolts:[], dim:0, beamOn:false, blast:false,
+            released:false, endT:0, lift:0, sil:0, finalBolt:false };
   document.documentElement.classList.add('storm');
-  cineSpin = 0.5;
+  cineSpin = 0.45;
   cineBegin('orbit');
-  const geo = new THREE.CylinderGeometry(0.44, 0.26, 7.5, 28, 1, true);
-  const mat = new THREE.MeshBasicMaterial({ map: beamTex, color:0xffd27a, transparent:true, opacity:0, blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide });
-  beamMesh = new THREE.Mesh(geo, mat);
-  beamMesh.position.set(x, y + 3.75, z);
-  beamMesh.scale.set(1, 0.01, 1);
-  scene.add(beamMesh);
-  beamLight = new THREE.PointLight(0xffd88a, 0, 11, 2);
-  beamLight.position.set(x, y + 1.3, z);
+  const H = 11;
+  beamMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.95, H, 48, 1, true), makeBeamMat(0xcfe6ff, 3.2));
+  beamMesh.position.set(x, y + H/2, z);
+  beamCore = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.46, H, 32, 1, true), makeBeamMat(0xffffff, 3.6));
+  beamHalo = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 1.75, H, 48, 1, true), makeBeamMat(0x8fb8ff, 1.3));
+  beamHalo.position.set(x, y + H/2, z);
+  beamCore.position.copy(beamMesh.position);
+  beamDisc = new THREE.Mesh(new THREE.CircleGeometry(1.05, 48), new THREE.MeshBasicMaterial({ map:goldDotTex, color:0xd8ecff, transparent:true, opacity:0, blending:THREE.AdditiveBlending, depthWrite:false, toneMapped:false }));
+  beamDisc.rotation.x = -Math.PI/2; beamDisc.position.set(x, y + 0.035, z);
+  beamSource = new THREE.Sprite(new THREE.SpriteMaterial({ map:brightGoldTex, color:0xe6f2ff, transparent:true, opacity:0, blending:THREE.AdditiveBlending, depthWrite:false }));
+  beamSource.position.set(x, y + H - 0.4, z); beamSource.scale.set(3.2, 3.2, 1);
+  for(const m of [beamMesh, beamCore, beamHalo, beamDisc, beamSource]){ m.scale.y = m === beamDisc || m === beamSource ? m.scale.y : 0.001; m.renderOrder = 5; scene.add(m); }
+  beamLight = new THREE.PointLight(0xd7ebff, 0, 12, 2);
+  beamLight.position.set(x, y + 2.2, z);
   scene.add(beamLight);
   return true;
 }
 function stopStorm(){
   if(!storm) return;
   storm.bolts.forEach(disposeBolt);
-  if(beamMesh){ scene.remove(beamMesh); beamMesh.geometry.dispose(); beamMesh.material.dispose(); beamMesh = null; }
+  for(const m of [beamMesh, beamCore, beamHalo, beamDisc, beamSource]){ if(m){ scene.remove(m); if(m.geometry) m.geometry.dispose(); m.material.dispose(); } }
+  beamMesh = beamCore = beamHalo = beamDisc = beamSource = null;
   if(beamLight){ scene.remove(beamLight); beamLight = null; }
   key.intensity = LIGHT_BASE.key; hemiLight.intensity = LIGHT_BASE.hemi; fill.intensity = LIGHT_BASE.fill;
   rim.intensity = LIGHT_BASE.rim; centerSpot.intensity = LIGHT_BASE.spot;
   renderer.toneMappingExposure = LIGHT_BASE.expo;
   shatterFlash.material.opacity = 0;
+  setSilhouette(0);
   document.documentElement.classList.remove('storm');
   if(cineMode === 'orbit') cineEnd();
   stormWaves.length = 0;
   storm = null;
 }
+const _ease = u=> u<=0 ? 0 : u>=1 ? 1 : u*u*(3-2*u);
 function updateStorm(t, dt){
   if(!storm) return;
   const age = t - storm.t0;
-  // assombrissement : monte en 0,5 s, revient en 1,2 s après la révélation
-  if(!storm.released) storm.dim = Math.min(1, storm.dim + dt/0.5);
-  else storm.dim = Math.max(0, storm.dim - dt/1.2);
-  const flash = Math.max(0, 1 - (t - storm.flashT)/0.13);
-  key.intensity   = LIGHT_BASE.key *(1 - 0.82*storm.dim) + flash*1.6;
-  hemiLight.intensity = LIGHT_BASE.hemi*(1 - 0.75*storm.dim) + flash*0.8;
-  renderer.toneMappingExposure = LIGHT_BASE.expo*(1 - 0.55*storm.dim) + flash*0.7;
-  fill.intensity  = LIGHT_BASE.fill*(1 - 0.80*storm.dim);
-  rim.intensity   = LIGHT_BASE.rim *(1 - 0.60*storm.dim) + flash*0.8;
-  centerSpot.intensity = LIGHT_BASE.spot*(1 - 0.70*storm.dim);
+  // nuit : monte en 0,6 s, revient en 1,1 s une fois Luffy reposé
+  if(age < ABD.pose) storm.dim = Math.min(1, storm.dim + dt/0.6);
+  else storm.dim = Math.max(0, storm.dim - dt/1.1);
+  const flash = Math.max(0, 1 - (t - storm.flashT)/0.16);
+  key.intensity   = LIGHT_BASE.key *(1 - 0.90*storm.dim) + flash*2.0;
+  hemiLight.intensity = LIGHT_BASE.hemi*(1 - 0.85*storm.dim) + flash*1.0;
+  renderer.toneMappingExposure = LIGHT_BASE.expo*(1 - 0.60*storm.dim) + flash*0.8;
+  fill.intensity  = LIGHT_BASE.fill*(1 - 0.90*storm.dim);
+  rim.intensity   = LIGHT_BASE.rim *(1 - 0.50*storm.dim) + flash*1.0;
+  centerSpot.intensity = LIGHT_BASE.spot*(1 - 0.80*storm.dim);
+  // silhouette : noir complet pendant la foudre et l'enlèvement
+  const silT = age < ABD.pose ? _ease(age/0.7) : 1 - _ease((age - ABD.pose)/0.6);
+  if(Math.abs(silT - storm.sil) > 0.004){ storm.sil = silT; setSilhouette(silT); }
 
-  // rafale de foudre sur la case du pion
-  while(!storm.released && storm.strike < STORM_STRIKES.length && age >= STORM_STRIKES[storm.strike]){
+  // rafale de foudre sur la case
+  while(storm.strike < STORM_STRIKES.length && age >= STORM_STRIKES[storm.strike]){
     const i = storm.strike++;
     storm.flashT = t;
-    spawnBolt(storm.x, storm.y, storm.z);
-    if(i >= 2) spawnBolt(storm.x, storm.y, storm.z);
+    spawnBolt(storm.x, storm.y, storm.z, 1 + i*0.06);
+    if(i >= 3) spawnBolt(storm.x + (Math.random()-0.5)*2.5, storm.y, storm.z + (Math.random()-0.5)*2.5, 0.8);
     stormWaves.push({ t0: t, x: storm.x, z: storm.z });
-    spawnSparkles(storm.x, storm.y + 0.1, storm.z, 16, 2.4, 3.4, 0.5, 0.9);
+    spawnSparkles(storm.x, storm.y + 0.1, storm.z, 18, 2.4, 3.6, 0.5, 0.9);
     shatterFlash.position.set(storm.x, storm.y + 0.35, storm.z);
-    shatterFlash.scale.set(1.6, 1.6, 1.6);
+    shatterFlash.scale.set(1.8, 1.8, 1.8);
     shatterFlash.material.opacity = 1;
     cameraPunch(i%2 ? 1.2 : 2.0);
-    playThunder(0.7 + i*0.06);
+    playThunder(0.7 + i*0.05);
     if(i === 0 || i === STORM_STRIKES.length-1) triggerImpactFlash();
-    cineSpin += 0.24;
+    cineSpin += 0.2;
   }
-  // colonne de lumière après la dernière frappe
-  if(!storm.beamOn && age >= 2.45){
+  // le faisceau descend du ciel
+  if(!storm.beamOn && age >= ABD.beam){
     storm.beamOn = true;
-    startGoldRain(2.4);
-    playRiser(1500);
-    triggerCheer(1.8);
+    playRiser(2600);
+    triggerCheer(1.2);
   }
   if(beamMesh){
-    let sc = 0, op = 0;
+    let op = 0, desc = 0;
     if(storm.beamOn){
-      const u = Math.min(1, (age - 2.45)/0.45);
-      sc = u < 1 ? 1.25*Math.sin(u*Math.PI/2) - 0.25*u : 1;
-      op = 0.55;
+      const u = Math.min(1, (age - ABD.beam)/0.35);
+      desc = _ease(u);                       // le cône « tombe » du ciel jusqu'à la case
+      op = age < ABD.flash ? 1 : Math.max(0, 1 - (age - ABD.flash)/0.9);
+      op *= 0.85 + 0.15*Math.sin(t*23)*Math.sin(t*7);   // léger bourdonnement lumineux
     }
-    if(storm.released) op *= Math.max(0, 1 - (t - storm.endT)/0.9);
-    beamMesh.scale.set(1 + 0.06*Math.sin(t*9), Math.max(0.01, sc), 1 + 0.06*Math.cos(t*7));
-    beamMesh.rotation.y += dt*1.6;
-    beamMesh.material.opacity = op;
-    if(beamLight) beamLight.intensity = 3.4*op;
-    if(op > 0.3 && !storm.released) spawnSparkles(storm.x, storm.y + 0.05, storm.z, 2, 0.9, 2.8, 0.7, 1.2);
+    const H = 11;
+    for(const m of [beamMesh, beamCore, beamHalo]){
+      m.scale.y = Math.max(0.001, desc);
+      m.position.y = storm.y + H - H*desc/2;
+      m.material.uniforms.uT.value = t;
+      m.material.uniforms.uOp.value = op * (m === beamCore ? 0.55 : m === beamHalo ? 0.35 : 0.42);
+      m.rotation.y += dt*(m === beamCore ? -0.9 : 0.6);
+    }
+    beamDisc.material.opacity = Math.min(1, op * desc * 1.4);
+    beamDisc.scale.setScalar(1 + 0.05*Math.sin(t*9));
+    beamSource.material.opacity = op * 0.9;
+    beamLight.intensity = 4.2 * op * desc;
+    if(op > 0.3 && age < ABD.flash && Math.random() < 0.8){
+      // poussière de lumière qui MONTE dans le faisceau, aspirée avec lui
+      spawnSparkles(storm.x + (Math.random()-0.5)*0.7, storm.y + 0.1 + Math.random()*storm.lift, storm.z + (Math.random()-0.5)*0.7, 2, 0.35, 3.6, 0.8, 1.4);
+    }
   }
+  // enlèvement : levée lente, rotation, flottement ; puis redescente
+  let lift = 0;
+  if(age >= ABD.levee && age < ABD.descente){
+    const u = Math.min(1, (age - ABD.levee)/(ABD.haut - ABD.levee));
+    lift = ABD.hauteur * (u*u*(3 - 2*u)) + (u >= 1 ? 0.06*Math.sin((age - ABD.haut)*6) : 0.03*Math.sin(age*5)*u);
+    player.root.rotation.y += dt * (0.8 + 2.6*u);
+  } else if(age >= ABD.descente && age < ABD.pose){
+    const u = (age - ABD.descente)/(ABD.pose - ABD.descente);
+    lift = ABD.hauteur * (1 - u*u);        // chute accélérée, réception au sol
+  }
+  storm.lift = lift;
+  if(!storm.finalBolt && age >= ABD.pose){ storm.finalBolt = true; winShock(tiles[currentIndex] || {world:{x:storm.x,z:storm.z}, tileTopY:storm.y}, 5); cameraPunch(2.2); playImpact(); }
   // flash au sol de chaque impact
   if(shatterFlash.material.opacity > 0){
     shatterFlash.scale.multiplyScalar(1 + dt*7);
     shatterFlash.material.opacity = Math.max(0, shatterFlash.material.opacity - dt*4);
   }
-  // éclairs : scintillent puis s'éteignent
+  // éclairs : allumé / éteint / rallumé, puis fondu
   for(const b of storm.bolts){
     const a = (t - b.born)/b.life;
-    const o = a >= 1 ? 0 : (Math.random() < 0.3 ? 0.35 : 1)*(1 - a*0.6);
+    const o = a >= 1 ? 0 : (a < 0.18 ? 1 : a < 0.28 ? 0.12 : a < 0.45 ? 1 : (1 - (a-0.45)/0.55)) * (Math.random() < 0.15 ? 0.6 : 1);
     b.g.children.forEach(m=>{ m.material.opacity = m.userData.op*o; });
   }
   for(let i=storm.bolts.length-1;i>=0;i--){
     if(t - storm.bolts[i].born >= storm.bolts[i].life){ disposeBolt(storm.bolts[i]); storm.bolts.splice(i,1); }
   }
-  // flash blanc final puis révélation
-  if(!storm.blast && age >= STORM_MS/1000 - 0.18){ storm.blast = true; triggerImpactBlast(); playThunder(1.1); cameraPunch(2.4); }
-  if(!storm.released && age >= STORM_MS/1000){
+  // flash blanc au sommet de l'enlèvement
+  if(!storm.blast && age >= ABD.flash){
+    storm.blast = true; storm.flashT = t;
+    triggerImpactBlast(); playThunder(1.15); cameraPunch(2.6);
+    spawnBolt(storm.x, storm.y + storm.lift + 0.6, storm.z, 1.5);
+    startGoldRain(2.6);
+  }
+  if(!storm.released && age >= ABD.fin){
     storm.released = true; storm.endT = t;
     document.documentElement.classList.remove('storm');
     cineEnd();
   }
-  if(storm.released && storm.dim <= 0 && t - storm.endT > 1.3) stopStorm();
+  if(storm.released && storm.dim <= 0 && storm.sil <= 0.01 && t - storm.endT > 0.8) stopStorm();
 }
 
 /* ---------- Impact à l'arrivée sur une case ----------
@@ -4056,10 +4145,15 @@ function drawLuffyFace(mode){
 /* ---- matériau de contour : coque inversée poussée le long des normales ---- */
 function luffyOutlineMat(width){
   const m = new THREE.MeshBasicMaterial({ color:0x140d0d, side:THREE.BackSide });
+  // largeur en uniforme : la finale l'élargit pour faire un liseré de lumière
+  m.userData.contour = true;
+  m.userData.largeur = { value: width };
   m.onBeforeCompile = sh=>{
-    sh.vertexShader = sh.vertexShader.replace('#include <skinning_vertex>',
-      '#include <skinning_vertex>\n  transformed += normalize(objectNormal) * ' + width.toFixed(5) + ';');
+    sh.uniforms.uContour = m.userData.largeur;
+    sh.vertexShader = 'uniform float uContour;\n' + sh.vertexShader.replace('#include <skinning_vertex>',
+      '#include <skinning_vertex>\n  transformed += normalize(objectNormal) * uContour;');
   };
+  m.userData.base = width;
   return m;
 }
 
@@ -5619,7 +5713,8 @@ function frameStep(dt, t){
         /* À partir du palier 3 (Tripack et au-dessus), il ne se contente
            plus d'arriver : il saute, fait un salto et s'envole dans une
            colonne de feu. Deux saltos sur le jackpot. */
-        if(lvl >= 3) startVictoryJump(lvl);
+        // (sur le jackpot, c'est l'enlèvement dans le faisceau qui fait le spectacle)
+        if(lvl >= 3 && landedTile.catKey !== 'jackpot300') startVictoryJump(lvl);
         cameraPunch(0.65 + lvl*0.28);
         // la réaction arrive APRÈS la stabilisation : il regarde, il
         // comprend, puis il réagit
@@ -5769,6 +5864,8 @@ function frameStep(dt, t){
      marche écrit player.root.position à chaque image ; toute élévation
      posée plus haut dans frameStep serait donc écrasée avant l'affichage. */
   updateVictory(t, dt);
+  // enlèvement dans le faisceau (finale) : appliqué en dernier, comme le saut
+  if(storm && storm.lift) player.root.position.y += storm.lift;
 
   composer.render();
 }
