@@ -7766,41 +7766,43 @@ function clearWinUndo(){
    Désormais ce sont les DÉS qui amènent le pion sur une case du lot décidé
    d'avance, et le lot remporté est TOUJOURS celui de la case où il est.
      • si une case du lot visé est atteignable (total 2 à 12) : on y va ;
-     • sinon on pose le pion sur une case « neutre » (commune, ou un lot
-       moins cher que le lot visé — jamais Chance, Caisse, Prison ni
-       Départ) d'où le lot visé reste atteignable avec les lancers qu'il
-       reste ;
+     • sinon on pose le pion sur une case de passage (un petit lot encore
+       en stock : commune, Caisse, Lot Mystère, booster — jamais Chance,
+       Prison, Départ ni produit scellé) d'où le lot visé reste atteignable
+       avec les lancers qu'il reste ; parfois exprès sur une case tentante ;
      • les totaux sont tirés au sort parmi les candidats avec les poids
        réels de deux dés (7 plus fréquent que 2 ou 12), rien ne trahit.
    Si l'hôte valide le lot AVANT que les dés aient amené le pion sur la
    case prévue, le joueur gagne le lot de sa case (moins cher, par
    construction) et le lot décidé d'avance retourne en tête de file : la
    rentabilité est préservée, le pion ne bouge jamais après un lancer. */
-const NEUTRAL_FORBIDDEN = new Set(['chance','chest','prison']);
+const NEUTRAL_FORBIDDEN = new Set(['chance','prison']);
 // Détours par Chance/Caisse : déplacements possibles de la carte, et part
 // des arrivées qui passent par un détour quand c'est possible
 const CARD_DELTAS = [1,2,3,4,5,6,-1,-2,-3];
 const INTERMEDIATE_MAX_COST = 17;  // booster (17 €) au maximum en cours de route
 let CARD_ROUTE_P = 0.18;
-const EARLY_LANDING_P = 0.30;   // part des lancers intermédiaires qui posent déjà sur le lot prévu
+const EARLY_LANDING_P = 0.30;
+const TEMPTING_P = 0.35;        // part des lancers intermédiaires posés sur une case tentante   // part des lancers intermédiaires qui posent déjà sur le lot prévu
 const DICE_W = {2:1,3:2,4:3,5:4,6:5,7:6,8:5,9:4,10:3,11:2,12:1};
 function landable(idx, targetCat){
   if(idx===0) return false;                 // Départ : jamais de lot
   const cat = tiles[idx].catKey;
-  // Prison, Chance et Caisse finissent la partie : jamais en cours de route
-  if(cat==='prison' || cat==='chance' || cat==='chest') return false;
+  // Prison (fin de partie) et Chance (détour) : jamais en cours de route
+  if(cat==='prison' || cat==='chance') return false;
   if(cat===targetCat) return true;
-  if(NEUTRAL_FORBIDDEN.has(cat)) return false;
   // pochette exacte : s'arrêter ici doit correspondre à un lot encore en stock
   if(!pouchHas(cat)) return false;
-  const c = OUTCOME_COST[cat], t = OUTCOME_COST[targetCat];
-  if(c===undefined || t===undefined) return false;
-  // En cours de route, seulement des petits lots (commune, alternative,
-  // booster 8 €), et jamais plus cher que le lot visé : le joueur peut
-  // choisir de s'arrêter dessus (règle « je garde ou je relance »), ça ne
-  // doit jamais lui donner un gros lot qui n'était pas prévu.
-  // (une commune reste toujours possible : la Caisse, visée, ne coûte rien)
-  return c <= Math.max(t, OUTCOME_COST.commune) && c <= INTERMEDIATE_MAX_COST;
+  const c = OUTCOME_COST[cat];
+  if(c===undefined) return false;
+  /* En cours de route : tous les PETITS lots (commune, Caisse, Lot
+     Mystère, booster), qu'ils valent plus ou moins que le lot prévu. Le
+     pion peut ainsi passer par un Lot Mystère que le joueur refuse pour
+     tenter mieux, puis finir sur une Caisse. S'il le garde, l'échange dans
+     la pochette (claimCurrentLot) tient les quantités. Jamais un produit
+     scellé (duopack et au-dessus) en passage : ceux-là ne tombent que
+     quand la pochette les a prévus. */
+  return c <= INTERMEDIATE_MAX_COST;
 }
 /* Peut-on poser le pion sur une case du lot visé EXACTEMENT au dernier
    des k lancers restants, en ne posant que des cases neutres avant ?
@@ -7887,9 +7889,17 @@ function planTotal(pos, rollsLeft, targetCat){
     }
     if(early.length && Math.random() < EARLY_LANDING_P) return { total: pickWeightedTotal(early), onTarget: true, wantDouble: false };
     if(double.length && (!single.length || Math.random() < 1/3)) return { total: pickWeightedTotal(double), onTarget: false, wantDouble: true };
-    if(single.length) return { total: pickWeightedTotal(single), onTarget: false, wantDouble: false };
+    if(single.length){
+      /* Case « tentante » : un lot de passage qui n'est ni une commune ni
+         le lot prévu (Lot Mystère, booster, Caisse). Une fois sur trois
+         environ, quand il y en a une sur le chemin, le pion s'y arrête : le
+         joueur hésite, relance pour tenter mieux… et le tirage continue. */
+      const tempting = single.filter(t=>{ const c = tiles[landingIndex(pos,t)].catKey; return c!=='commune' && c!==targetCat; });
+      const pool = (tempting.length && Math.random() < TEMPTING_P) ? tempting : single;
+      return { total: pickWeightedTotal(pool), onTarget: false, wantDouble: false };
+    }
   }
-  // repli : une commune (jamais Chance, Caisse, Prison ni Départ)
+  // repli : une commune (jamais Chance, Prison ni Départ)
   const neutral = [];
   for(let t=2;t<=12;t++){ const idx = landingIndex(pos,t); if(idx!==0 && tiles[idx].catKey==='commune') neutral.push(t); }
   if(!pouchHas('commune')){
