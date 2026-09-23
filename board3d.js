@@ -8330,6 +8330,10 @@ const DICE_W = {2:1,3:2,4:3,5:4,6:5,7:6,8:5,9:4,10:3,11:2,12:1};
    en rester au moins autant que la part prévue pour les coups restants
    (marge d'un lot). Les communes restent toujours possibles. */
 function passageAuRythme(cat){
+  /* Booster : JAMAIS en passage (23/09, en direct). Un joueur qui s'arrête
+     sur un booster le garde toujours, et le stock réel de boosters est
+     compté : un booster ne tombe que quand la pochette l'a prévu. */
+  if(cat === 'booster8') return false;
   const b = outcomeState.batch, pos = outcomeState.pos;
   let reste = 0;
   for(let j=pos;j<b.length;j++) if(b[j]===cat) reste++;
