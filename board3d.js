@@ -1483,6 +1483,20 @@ const CENTER_LEGEND_ROWS = [
   {swatch:'red',     catKey:'alternative'},
   {swatch:'bronze',  catKey:'commune'},
 ];
+/* Finition des sept barres de la plaque centrale (et d'elles seules : les
+   cases gardent SWATCH_COLORS). Les trois premiers lots sont en MÉTAL —
+   or, argent, bronze : bandes claires/sombres qui imitent un reflet — les
+   quatre suivants en néon vif. `bord` = dégradé vertical du contour épais,
+   `halo` = lueur autour du bord, `vif` = teinte de la barre d'accent. */
+const LEGEND_FINISH = {
+  jackpot300:  { metal:true, bord:['#fff7cf','#ffd54a','#a8740a','#ffe27a','#7a4d00'], halo:'#ffc83a', vif:'#ffd54a' },
+  etb:         { metal:true, bord:['#ffffff','#e3e9f1','#8792a3','#f5f8ff','#566273'], halo:'#e4eeff', vif:'#dfe6ee' },
+  booster50:   { metal:true, bord:['#ffd9ae','#e58f4a','#7e421a','#f3ad6c','#57290c'], halo:'#ff8f3c', vif:'#e58f4a' },
+  gradee:      { bord:['#c9fffa','#22f0de','#0aa99c'], halo:'#14e6d4', vif:'#22f0de' },
+  booster8:    { bord:['#c2ddff','#2a8bff','#0d4fc4'], halo:'#2a86ff', vif:'#2a8bff' },
+  alternative: { bord:['#ffc2c8','#ff2a40','#b0101f'], halo:'#ff1f36', vif:'#ff2a40' },
+  commune:     { bord:['#f6d2ff','#c04cff','#7a1fc4'], halo:'#b847ff', vif:'#c04cff' },
+};
 // Chance / Caisse Communautaire : pas des lots, juste deux petits
 // badges compacts (icône + nom) sous l'en-tête, bien visibles sans
 // prendre la place d'une ligne de lot.
@@ -1653,16 +1667,43 @@ function makeCenterPlateTexture(){
     rg.addColorStop(1,    'rgba(4,6,12,.42)');
     ctx.fillStyle = rg; ctx.fill();
     ctx.restore();
+    // intérieur : léger reflet en haut, comme une plaque vernie
+    ctx.save();
+    roundRectPath(ctx, rowX, y, rowW, rh, rh*0.22); ctx.clip();
+    const gloss = ctx.createLinearGradient(0, y, 0, y+rh*0.5);
+    gloss.addColorStop(0, 'rgba(255,255,255,.10)'); gloss.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = gloss; ctx.fillRect(rowX, y, rowW, rh*0.5);
+    ctx.restore();
+    /* Contour épais et net + lueur contrôlée : deux passes d'ombre colorée
+       (une serrée, très vive au ras du bord, une large et douce) sous un
+       trait plein en dégradé. Le bord reste net, la lueur s'estompe. */
+    const fin = LEGEND_FINISH[r.catKey] || { bord:[color, color], halo:color, vif:color };
+    const bordGrad = ctx.createLinearGradient(0, y, 0, y+rh);
+    fin.bord.forEach((c, k)=> bordGrad.addColorStop(k/(fin.bord.length-1), c));
+    const bw = size*0.0085;
+    for(const [blur, alpha] of [[size*0.030, 0.55], [size*0.012, 0.95]]){
+      ctx.save();
+      roundRectPath(ctx, rowX, y, rowW, rh, rh*0.22);
+      ctx.shadowColor = fin.halo; ctx.shadowBlur = blur;
+      ctx.globalAlpha = alpha; ctx.lineWidth = bw; ctx.strokeStyle = fin.halo;
+      ctx.stroke();
+      ctx.restore();
+    }
     ctx.save();
     roundRectPath(ctx, rowX, y, rowW, rh, rh*0.22);
-    ctx.shadowColor = 'rgba(0,0,0,.8)'; ctx.shadowBlur = size*0.014;
-    ctx.lineWidth = size*0.004; ctx.strokeStyle = color;
-    ctx.stroke();
+    ctx.lineWidth = bw; ctx.strokeStyle = bordGrad; ctx.stroke();
+    // relief : filet clair sur l'arête haute, filet sombre à l'intérieur
+    ctx.lineWidth = size*0.0018;
+    ctx.strokeStyle = 'rgba(0,0,0,.55)';
+    roundRectPath(ctx, rowX+bw*0.62, y+bw*0.62, rowW-bw*1.24, rh-bw*1.24, rh*0.22-bw*0.62); ctx.stroke();
+    ctx.beginPath(); ctx.rect(rowX, y-bw, rowW, rh*0.42); ctx.clip();
+    ctx.strokeStyle = fin.metal ? 'rgba(255,255,255,.85)' : 'rgba(255,255,255,.6)';
+    roundRectPath(ctx, rowX+bw*0.18, y+bw*0.18, rowW-bw*0.36, rh-bw*0.36, rh*0.22); ctx.stroke();
     ctx.restore();
     ctx.save();
     roundRectPath(ctx, rowX, y, rowW, rh, rh*0.22);
     ctx.clip();
-    ctx.fillStyle = color;
+    ctx.fillStyle = bordGrad;
     ctx.fillRect(rowX, y, rh*0.14, rh);
     ctx.restore();
 
@@ -1670,7 +1711,7 @@ function makeCenterPlateTexture(){
     // rond de la couleur de la catégorie — avec halo lumineux
     const dotR = rh*0.38, dotX = rowX + rh*0.66, dotY = y + rh*0.5;
     ctx.save();
-    ctx.shadowColor = color; ctx.shadowBlur = size*0.022;
+    ctx.shadowColor = fin.halo; ctx.shadowBlur = size*0.022;
     ctx.beginPath(); ctx.arc(dotX,dotY,dotR,0,Math.PI*2);
     ctx.fillStyle = '#0c0f16'; ctx.fill();
     ctx.restore();
@@ -1686,8 +1727,13 @@ function makeCenterPlateTexture(){
       // plutôt qu'un médaillon vide
       drawVectorIcon(ctx, 'star', dotX, dotY, dotR*0.85, '#fff9e6');
     }
-    ctx.lineWidth = size*0.0055; ctx.strokeStyle = color;
+    const ringGrad = ctx.createLinearGradient(0, dotY-dotR, 0, dotY+dotR);
+    fin.bord.forEach((c, k)=> ringGrad.addColorStop(k/(fin.bord.length-1), c));
+    ctx.save();
+    ctx.shadowColor = fin.halo; ctx.shadowBlur = size*0.012;
+    ctx.lineWidth = size*0.0065; ctx.strokeStyle = ringGrad;
     ctx.beginPath(); ctx.arc(dotX,dotY,dotR,0,Math.PI*2); ctx.stroke();
+    ctx.restore();
 
     // titre du lot à droite du médaillon (pas de prix affiché : le
     // plateau doit rester une carte "quoi gagner", pas un tarif) —
