@@ -75,6 +75,8 @@ const CATS = {
   chance:      { label:'Chance',                     value:'tirage',  tier:'glyph', swatch:'purple' },
   chest:       { label:'Caisse Communautaire',       value:'tirage',  tier:'glyph', swatch:'green'  },
   prison:      { label:'Prison',                     value:'0€',      tier:'glyph', swatch:'danger' },
+  // Parc gratuit (23/09) : le lot des cartes promo ouvertes par l'hôte
+  parc:        { label:'Parc gratuit',               value:'promos',  tier:'glyph', swatch:'green'  },
 };
 
 /* Pioches Chance / Caisse Communautaire (mêmes decks que le modèle
@@ -162,10 +164,10 @@ const BOARD_DATA = [
   'booster8','alternative','chest','commune','commune','commune','chance','commune','commune*',
   'gradee','booster8','alternative','gradee','commune','commune','chest','commune','commune',
   'commune','chance','commune','commune','commune','gradee','commune','booster50','prison',
-  'chest','commune','commune','booster8','booster8','chance','commune','etb','jackpot300',
+  'parc','commune','commune','booster8','booster8','chance','commune','etb','jackpot300',
 ].map(tok=>({ cat: tok.replace('*',''), isVisite: tok.endsWith('*') }));
-// Case 28 (angle, à côté de la Prison) : Caisse Communautaire au lieu d'une
-// commune, demande de l'animateur (23/09). Trois cases Caisse en tout.
+// Case 28 (angle, à côté de la Prison) : Parc gratuit, où tombent les cartes
+// promo (demande de l'animateur, 23/09 ; c'était une commune).
 if(BOARD_DATA.length !== N_TILES) throw new Error('BOARD_DATA: '+BOARD_DATA.length+' cases pour N_TILES='+N_TILES);
 // NB : cases 5 et 22 remises en commune/chance (au lieu de gradée) car
 // ça cassait la rentabilité même à risque maximal (marge 20%). En
@@ -363,7 +365,7 @@ const CASE_IVOIRE = '#f6efdc', CASE_TEXTE = '#f7e6b2';
    cases spéciales = bleu, événements = rouge. */
 const CASE_ACCENT = {
   jackpot300:'#e9c34a', etb:'#e9c34a', booster50:'#e9c34a', gradee:'#e9c34a', booster8:'#e9c34a',
-  chance:'#a46cf0', chest:'#36bf70', commune:'#4a8cf0', alternative:'#4a8cf0', depart:'#4a8cf0', prison:'#e0413f',
+  chance:'#a46cf0', chest:'#36bf70', parc:'#f08a24', commune:'#4a8cf0', alternative:'#4a8cf0', depart:'#4a8cf0', prison:'#e0413f',
 };
 function caseAccent(catKey){ return CASE_ACCENT[catKey] || GOLD; }
 function goldLeafStroke(ctx, x0, y0, x1, y1){
@@ -673,6 +675,92 @@ function drawChestArt(ctx, x, y, w, h){
   for(const [fx, fy, fr] of [[0.2,0.2,0.045],[0.8,0.24,0.04],[0.5,0.1,0.035],[0.14,0.62,0.03],[0.87,0.6,0.035]])
     etincelle(ctx, x + w*fx, y + h*fy, Math.min(w,h)*fr);
 }
+/* Parc gratuit : une scène de parc (pelouse, arbres), la petite voiture
+   rouge du Monopoly, un panneau « P » et un éventail de cartes promo. */
+function drawCarIcon(ctx, cx, cy, W){
+  const H = W*0.42, x0 = cx - W/2, y0 = cy - H/2;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = W*0.06; ctx.shadowOffsetY = W*0.03;
+  const rouge = ctx.createLinearGradient(0, y0, 0, y0 + H);
+  rouge.addColorStop(0, '#ff6b5e'); rouge.addColorStop(0.55, '#d7261e'); rouge.addColorStop(1, '#8e0f0b');
+  // habitacle
+  ctx.beginPath();
+  ctx.moveTo(x0 + W*0.26, y0 + H*0.42);
+  ctx.quadraticCurveTo(x0 + W*0.34, y0 - H*0.12, x0 + W*0.52, y0 - H*0.10);
+  ctx.quadraticCurveTo(x0 + W*0.68, y0 - H*0.08, x0 + W*0.74, y0 + H*0.42);
+  ctx.closePath(); ctx.fillStyle = rouge; ctx.fill();
+  // carrosserie
+  roundRectPath(ctx, x0, y0 + H*0.38, W, H*0.44, H*0.18); ctx.fillStyle = rouge; ctx.fill();
+  ctx.shadowColor = 'transparent';
+  // vitres
+  ctx.fillStyle = '#bfe6ff';
+  ctx.beginPath(); ctx.moveTo(x0 + W*0.33, y0 + H*0.38); ctx.quadraticCurveTo(x0 + W*0.38, y0 + H*0.02, x0 + W*0.48, y0 + H*0.0);
+  ctx.lineTo(x0 + W*0.48, y0 + H*0.38); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x0 + W*0.52, y0 + H*0.0); ctx.quadraticCurveTo(x0 + W*0.63, y0 + H*0.02, x0 + W*0.67, y0 + H*0.38);
+  ctx.lineTo(x0 + W*0.52, y0 + H*0.38); ctx.closePath(); ctx.fill();
+  // phares, pare-chocs
+  ctx.fillStyle = '#fff4b0'; ctx.beginPath(); ctx.arc(x0 + W*0.95, y0 + H*0.55, H*0.07, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#d9d9df'; ctx.fillRect(x0 - W*0.01, y0 + H*0.74, W*0.14, H*0.07); ctx.fillRect(x0 + W*0.87, y0 + H*0.74, W*0.14, H*0.07);
+  // roues
+  for(const fx of [0.24, 0.76]){
+    const wx = x0 + W*fx, wy = y0 + H*0.84, r = H*0.2;
+    ctx.fillStyle = '#1b1b20'; ctx.beginPath(); ctx.arc(wx, wy, r, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#c9c9d1'; ctx.beginPath(); ctx.arc(wx, wy, r*0.45, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.lineWidth = Math.max(1.5, W*0.012); ctx.strokeStyle = 'rgba(60,4,2,.85)';
+  roundRectPath(ctx, x0, y0 + H*0.38, W, H*0.44, H*0.18); ctx.stroke();
+  ctx.restore();
+}
+function drawParkSign(ctx, x, y, S){
+  ctx.save();
+  ctx.fillStyle = '#8a8a92'; ctx.fillRect(x - S*0.05, y, S*0.1, S*1.5);
+  ctx.shadowColor = 'rgba(0,0,0,.45)'; ctx.shadowBlur = S*0.15;
+  roundRectPath(ctx, x - S/2, y - S*0.5, S, S, S*0.16);
+  const bleu = ctx.createLinearGradient(0, y - S*0.5, 0, y + S*0.5);
+  bleu.addColorStop(0, '#3d8cff'); bleu.addColorStop(1, '#1447b8'); ctx.fillStyle = bleu; ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.lineWidth = S*0.07; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+  ctx.fillStyle = '#ffffff'; ctx.font = '900 '+(S*0.78)+'px Arial,Helvetica,sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('P', x, y + S*0.04);
+  ctx.restore();
+}
+function drawPromoFan(ctx, cx, cy, W){
+  const cw = W*0.42, ch = cw*1.4;
+  for(const [a, dx, c0, c1] of [[-0.35, -0.24, '#6fd0ff', '#2a62d8'], [0, 0, '#ffe27a', '#e08a12'], [0.35, 0.24, '#ff9ad2', '#c0307a']]){
+    ctx.save(); ctx.translate(cx + W*dx, cy); ctx.rotate(a);
+    ctx.shadowColor = 'rgba(0,0,0,.45)'; ctx.shadowBlur = W*0.06;
+    roundRectPath(ctx, -cw/2, -ch/2, cw, ch, cw*0.1);
+    const g = ctx.createLinearGradient(-cw/2, -ch/2, cw/2, ch/2);
+    g.addColorStop(0, c0); g.addColorStop(1, c1); ctx.fillStyle = g; ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.lineWidth = cw*0.07; ctx.strokeStyle = '#ffe9a0'; ctx.stroke();
+    // reflet holographique et étoile de promo
+    ctx.globalAlpha = 0.45; ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.moveTo(-cw/2, ch*0.1); ctx.lineTo(cw/2, -ch*0.25); ctx.lineTo(cw/2, -ch*0.1); ctx.lineTo(-cw/2, ch*0.25); ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 1;
+    etincelle(ctx, 0, 0, cw*0.28, '#fffbe6');
+    ctx.restore();
+  }
+}
+function drawParcArt(ctx, x, y, w, h){
+  // ciel et pelouse
+  const ciel = ctx.createLinearGradient(0, y, 0, y + h);
+  ciel.addColorStop(0, '#7cc8ff'); ciel.addColorStop(0.55, '#c9ecff'); ciel.addColorStop(0.56, '#62c46a'); ciel.addColorStop(1, '#1f7a36');
+  ctx.fillStyle = ciel; ctx.fillRect(x, y, w, h);
+  // arbres
+  for(const [fx, fs] of [[0.10, 0.9], [0.24, 0.7], [0.88, 0.85]]){
+    const tx = x + w*fx, ty = y + h*0.56, r = h*0.11*fs;
+    ctx.fillStyle = '#6b3d1a'; ctx.fillRect(tx - r*0.18, ty - r*0.6, r*0.36, r*1.2);
+    const g = ctx.createRadialGradient(tx - r*0.3, ty - r*1.5, r*0.2, tx, ty - r*1.2, r*1.3);
+    g.addColorStop(0, '#7fe07a'); g.addColorStop(1, '#1f7a2e');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(tx, ty - r*1.2, r, 0, Math.PI*2); ctx.fill();
+  }
+  drawParkSign(ctx, x + w*0.80, y + h*0.30, Math.min(w, h)*0.20);
+  drawPromoFan(ctx, x + w*0.42, y + h*0.30, Math.min(w, h)*0.42);
+  drawCarIcon(ctx, x + w*0.46, y + h*0.76, w*0.46);
+  for(const [fx, fy, fr] of [[0.62,0.12,0.03],[0.2,0.16,0.035],[0.68,0.46,0.028]])
+    etincelle(ctx, x + w*fx, y + h*fy, Math.min(w,h)*fr);
+}
 function drawSpecialArt(ctx, x, y, w, h, rad, kind){
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 22; ctx.shadowOffsetY = 6;
@@ -681,13 +769,14 @@ function drawSpecialArt(ctx, x, y, w, h, rad, kind){
   ctx.save(); roundRectPath(ctx, x, y, w, h, rad); ctx.clip();
   if(kind === 'prison') drawPrisonArt(ctx, x, y, w, h);
   else if(kind === 'chance') drawChanceArt(ctx, x, y, w, h);
+  else if(kind === 'parc') drawParcArt(ctx, x, y, w, h);
   else drawChestArt(ctx, x, y, w, h);
   ctx.restore();
   roundRectPath(ctx, x, y, w, h, rad);
   ctx.lineWidth = 5; ctx.strokeStyle = goldLeafStroke(ctx, x, y, x+w, y+h); ctx.stroke();
 }
 function drawMedallion(ctx, x, y, w, h, rad, kind, accent){
-  if(kind === 'chance' || kind === 'chest' || kind === 'prison'){ drawSpecialArt(ctx, x, y, w, h, rad, kind); return; }
+  if(kind === 'chance' || kind === 'chest' || kind === 'prison' || kind === 'parc'){ drawSpecialArt(ctx, x, y, w, h, rad, kind); return; }
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 22; ctx.shadowOffsetY = 6;
   roundRectPath(ctx, x, y, w, h, rad); ctx.fillStyle = '#0b1334'; ctx.fill();
@@ -981,7 +1070,7 @@ function getGlyphTexture(kind, accentColor){
   if(kind==='visite'){
     ctx.shadowColor = 'rgba(255,255,255,.6)'; ctx.shadowBlur = size*0.12;
     drawVectorIcon(ctx, 'unlock', cx, cy+size*0.02, size*0.22, '#fff9e6');
-  } else if(kind==='chance' || kind==='chest' || kind==='prison'){
+  } else if(kind==='chance' || kind==='chest' || kind==='prison' || kind==='parc'){
     /* Fond d'ombre doux + halo clair derrière le picto : sans bulle, il se
        perdait sur la case colorée juste en dessous. */
     const ombre = ctx.createRadialGradient(cx, cy, size*0.05, cx, cy, size*0.5);
@@ -992,6 +1081,7 @@ function getGlyphTexture(kind, accentColor){
     ctx.fillStyle = halo; ctx.fillRect(0, 0, size, size);
     if(kind==='chance') drawGoldQuestion(ctx, cx, cy, size*0.74);
     else if(kind==='chest') drawChestIcon(ctx, cx, cy + size*0.06, size*0.66, false);
+    else if(kind==='parc') drawCarIcon(ctx, cx, cy + size*0.02, size*0.74);
     else drawPadlock(ctx, cx, cy - size*0.10, size*0.56);
   } else if(kind==='chance'){
     drawGoldQuestion(ctx, cx, cy, size*0.80);          // plus de bulle : le « ? » seul, doré
@@ -2577,7 +2667,9 @@ for(let i=0;i<N_TILES;i++){
      franchir le seuil. */
   /* Cases d'angle (sauf Départ) en BILLET incliné à 45°, talon vers
      l'angle extérieur, comme au Monopoly : voir getTicketFace. */
-  if(i % SIDE === 0 && i !== 0){
+  /* Désactivé le 23/09 : l'animateur veut l'image en plein sur les coins,
+     comme sur les autres cases. */
+  if(false && i % SIDE === 0 && i !== 0){
     const yaw = outwardYaw(r, c);
     const lx = Math.sign(world.x)*Math.cos(yaw) - Math.sign(world.z)*Math.sin(yaw);
     const lz = Math.sign(world.x)*Math.sin(yaw) + Math.sign(world.z)*Math.cos(yaw);
@@ -7003,10 +7095,12 @@ const OUTCOME_BATCH_KEY = 'pika_outcome_batch';
    l'épuisement de la précédente et à chaque « Démarrage cagnotte ».
      • Lot Mystère : 60 « EX » + 30 « booster japonais », ordre tiré au
        sort à chaque pochette (voir MYSTERY_MIX) ;
-     • Caisse Communautaire : 7 coups pris sur les communes (le total
-       reste 245) ; le jeu n'en connaît pas le contenu, remis
-       physiquement par l'hôte (promos des coffrets et tripacks ouverts).
-   Chance n'est pas un lot : c'est un détour qui amène sur la case du lot. */
+     • Parc gratuit : 7 coups pris sur les communes (le total reste 245) ;
+       le joueur y récupère les cartes promo des coffrets et tripacks
+       ouverts, remises physiquement par l'hôte (le jeu n'en affiche pas le
+       contenu). Jusqu'au 23/09 au soir, c'était la Caisse Communautaire.
+   Chance et Caisse Communautaire ne sont pas des lots : ce sont des
+   détours (une carte pipée) qui amènent sur la case du lot. */
 const POUCH = [
   { cat:'jackpot300',  n:1   },   // ETB 30 ans (gagnée fermée)
   { cat:'etb',         n:2   },   // Coffret 30 ans (gagné fermé)
@@ -7014,7 +7108,7 @@ const POUCH = [
   { cat:'gradee',      n:1   },   // Duopack 30 ans (gagné fermé)
   { cat:'booster8',    n:42  },   // Booster 30 ans
   { cat:'alternative', n:90  },   // Lot Mystère
-  { cat:'chest',       n:7   },   // Caisse Communautaire
+  { cat:'parc',        n:7   },   // Parc gratuit : cartes promo des produits ouverts
   { cat:'commune',     n:100 },   // Carte commune
 ];
 const POUCH_SIZE = POUCH.reduce((s,r)=>s+r.n, 0);
@@ -7039,7 +7133,7 @@ const OUTCOME_BATCH_SIZE = POUCH_SIZE;
   centerPlate.material.needsUpdate = true;
   if(old) old.dispose();
 }
-const OUTCOME_COST = { prison: 0.68, chest: 0 };   // Caisse : promos issues des produits ouverts, déjà payées
+const OUTCOME_COST = { prison: 0.68, parc: 0 };   // Parc gratuit : promos issues des produits ouverts, déjà payées
 PAYOUT_LADDER.forEach(t=>{ OUTCOME_COST[t.cat] = t.cost; });
 
 
@@ -7088,12 +7182,19 @@ function buildMysteryQueue(){
 /* Version de la file. Une file laissée en mémoire du navigateur par une
    version précédente du jeu (autre recette, autre ordonnancement) n'a
    pas les mêmes garanties : elle est reconstruite. */
-const OUTCOME_BATCH_VERSION = 'v10-pochette-245';
+const OUTCOME_BATCH_VERSION = 'v11-parc-gratuit';
 function loadOutcomeState(){
   try{
     const raw = safeGetItem(OUTCOME_BATCH_KEY);
     if(raw){
       const parsed = JSON.parse(raw);
+      /* Pochette commencée avant le 23/09 au soir : ses 7 coups « Caisse »
+         deviennent des « Parc gratuit » (même lot : les promos). La position,
+         donc le compteur de coups, est conservée. */
+      if(parsed && parsed.version === 'v10-pochette-245' && Array.isArray(parsed.batch)){
+        parsed.batch = parsed.batch.map(c => c === 'chest' ? 'parc' : c);
+        parsed.version = OUTCOME_BATCH_VERSION;
+      }
       if(parsed && parsed.version===OUTCOME_BATCH_VERSION && Array.isArray(parsed.batch)
          && typeof parsed.pos==='number' && parsed.pos < parsed.batch.length
          && Array.isArray(parsed.myst) && typeof parsed.mystPos==='number'){
@@ -7654,10 +7755,9 @@ function updateWinButton(){
   // Chance) y ramène le joueur plus tard en cours de partie.
   const onPrize = currentIndex>0 && !moving;
   const cat = onPrize ? tiles[currentIndex].catKey : null;
-  // Chance se révèle toute seule (pas de bouton à cliquer, la partie
-  // continue automatiquement après). La Caisse Communautaire, elle, est
-  // un LOT de la pochette depuis le 23/09 : elle se garde comme les autres.
-  const autoResolved = cat==='chance';
+  // Chance et Caisse se révèlent toutes seules (pas de bouton à cliquer, la
+  // partie continue automatiquement après) : ce sont des détours.
+  const autoResolved = cat==='chance' || cat==='chest';
   winBtn.hidden = !onPrize || autoResolved;
   if(onPrize && !autoResolved){
     winBtn.disabled = false;
@@ -7712,7 +7812,7 @@ async function move(forcedCount, forcedCard){
   // SUITE (avant l'animation) pour pouvoir l'envoyer d'un coup à
   // l'écran public : les deux écrans doivent afficher la même carte.
   let card = forcedCard || null;
-  if(!card && destCat==='chance'){
+  if(!card && (destCat==='chance' || destCat==='chest')){
     card = drawCard(destCat==='chance' ? CHANCE_DECK : CHEST_DECK);
   }
   broadcastSync({type:'move', count, card});
@@ -7743,7 +7843,7 @@ async function move(forcedCount, forcedCard){
   updatePlaceBanner(currentIndex, false);
 
   const arrivedCat = currentIndex>=0 ? tiles[currentIndex].catKey : null;
-  if(!finished && arrivedCat==='chance'){
+  if(!finished && (arrivedCat==='chance' || arrivedCat==='chest')){
     await resolveChanceChest(myGen, card);
     if(myGen!==generation) return;
   }
@@ -7775,7 +7875,7 @@ async function move(forcedCount, forcedCard){
   }
   const rollsExhausted = rollsUsed>=rollsAllowed;
   const finalCat = currentIndex>=0 ? tiles[currentIndex].catKey : null;
-  const canClaim = currentIndex>0 && finalCat!=='chance';
+  const canClaim = currentIndex>0 && finalCat!=='chance' && finalCat!=='chest';
   if(finalCat==='jackpot300' && finished && canClaim && !(winBtn && winBtn.disabled)){
     // jackpot final : validé automatiquement, comme la fin des lancers
     rollsUsed = rollsAllowed;
@@ -7995,7 +8095,7 @@ function clearWinUndo(){
    case prévue, le joueur gagne le lot de sa case (moins cher, par
    construction) et le lot décidé d'avance retourne en tête de file : la
    rentabilité est préservée, le pion ne bouge jamais après un lancer. */
-const NEUTRAL_FORBIDDEN = new Set(['chance','prison']);
+const NEUTRAL_FORBIDDEN = new Set(['chance','chest','prison']);
 // Détours par Chance/Caisse : déplacements possibles de la carte, et part
 // des arrivées qui passent par un détour quand c'est possible
 const CARD_DELTAS = [1,2,3,4,5,6,-1,-2,-3];
@@ -8008,8 +8108,9 @@ const DICE_W = {2:1,3:2,4:3,5:4,6:5,7:6,8:5,9:4,10:3,11:2,12:1};
 function landable(idx, targetCat){
   if(idx===0) return false;                 // Départ : jamais de lot
   const cat = tiles[idx].catKey;
-  // Prison (fin de partie) et Chance (détour) : jamais en cours de route
-  if(cat==='prison' || cat==='chance') return false;
+  // Prison (fin de partie), Chance et Caisse (détours) : jamais comme arrêt
+  // de passage (elles passent par leur carte, voir viaChance)
+  if(cat==='prison' || cat==='chance' || cat==='chest') return false;
   if(cat===targetCat) return true;
   // pochette exacte : s'arrêter ici doit correspondre à un lot encore en stock
   if(!pouchHas(cat)) return false;
@@ -8069,7 +8170,7 @@ function planTotal(pos, rollsLeft, targetCat){
       const idx = landingIndex(pos,t);
       if(idx!==0 && tiles[idx].catKey===targetCat){ now.push(t); continue; }
       const c = tiles[idx].catKey;
-      if(c==='chance'){   // la Caisse est un lot, plus un détour
+      if(c==='chance' || c==='chest'){   // détours par carte
         for(const d of CARD_DELTAS){
           const j = landingIndex(idx, d);
           if(j>0 && tiles[j].catKey===targetCat) via.push({ t, d });
@@ -8107,10 +8208,10 @@ function planTotal(pos, rollsLeft, targetCat){
          sur une case de passage d'où le lot prévu reste atteignable. Avant,
          Chance n'était possible qu'au tout dernier lancer : on ne la voyait
          presque jamais. */
-      if(tiles[idx].catKey==='chance' && t%2===1){
+      if((tiles[idx].catKey==='chance' || tiles[idx].catKey==='chest') && t%2===1){
         for(const d of CARD_DELTAS){
           const j = landingIndex(idx, d);
-          if(j>0 && tiles[j].catKey!==targetCat && tiles[j].catKey!=='chance' && landable(j, targetCat) && canReachTarget(j, rollsLeft-1, targetCat, memo)) viaChance.push({ t, d });
+          if(j>0 && tiles[j].catKey!==targetCat && tiles[j].catKey!=='chance' && tiles[j].catKey!=='chest' && landable(j, targetCat) && canReachTarget(j, rollsLeft-1, targetCat, memo)) viaChance.push({ t, d });
         }
       }
       if(tiles[idx].catKey===targetCat || !landable(idx, targetCat)) continue;
@@ -8125,13 +8226,11 @@ function planTotal(pos, rollsLeft, targetCat){
     if(double.length && (!single.length || Math.random() < 1/3)) return { total: pickWeightedTotal(double), onTarget: false, wantDouble: true };
     if(single.length){
       /* Case « tentante » : un lot de passage qui n'est ni une commune ni
-         le lot prévu (Lot Mystère, booster, Caisse). Une fois sur trois
+         le lot prévu (Lot Mystère, booster, Parc gratuit). Une fois sur trois
          environ, quand il y en a une sur le chemin, le pion s'y arrête : le
          joueur hésite, relance pour tenter mieux… et le tirage continue. */
       const tempting = single.filter(t=>{ const c = tiles[landingIndex(pos,t)].catKey; return c!=='commune' && c!==targetCat; });
-      const caisses = tempting.filter(t=>tiles[landingIndex(pos,t)].catKey==='chest');
-      let pool = (tempting.length && Math.random() < TEMPTING_P) ? tempting : single;
-      if(pool === tempting && caisses.length && Math.random() < 0.5) pool = caisses;   // la Caisse se voit plus souvent
+      const pool = (tempting.length && Math.random() < TEMPTING_P) ? tempting : single;
       return { total: pickWeightedTotal(pool), onTarget: false, wantDouble: false };
     }
   }
@@ -8466,6 +8565,7 @@ if(openDisplayBtn){
   btn.addEventListener('touchend', e=>{ e.preventDefault(); btn.click(); }, {passive:false});
 });
 updatePlaceBanner(-1, false);
+updateCoupCount();   // compteur juste dès le chargement (pochette déjà entamée)
 
 /* ==========================================================================
    Célébration "Lot remporté" — intensité croissante selon le lot :
@@ -8475,7 +8575,7 @@ updatePlaceBanner(-1, false);
    dorée pour le jackpot.
    ========================================================================= */
 const TIER_LEVEL = {
-  commune:1, booster8:1, alternative:1, chance:1, chest:1,
+  commune:1, booster8:1, alternative:1, chance:1, chest:1, parc:2,
   gradee:2, booster50:3, etb:4, jackpot300:5, prison:0,
 };
 const celeb = document.getElementById('celebration');
@@ -8950,8 +9050,8 @@ const CATEGORY_MESSAGES = {
   booster50:   '🎁 TRIPACK 30 ANS GAGNÉ ! 🎁',
   etb:         '🎁 COFFRET 30 ANS GAGNÉ ! 🎁',
   jackpot300:  '👑 ETB 30 ANS GAGNÉ ! 👑',
-  // contenu inconnu du jeu : remis physiquement par l'animateur
-  chest:       '🗃️ CAISSE COMMUNAUTAIRE GAGNÉE ! 🗃️',
+  // contenu inconnu du jeu : les promos sont remises par l'animateur
+  parc:        '🅿️ PARC GRATUIT : LES PROMOS SONT À TOI ! 🅿️',
 };
 
 /* ---------- Animation du lot mystère ----------
@@ -9113,8 +9213,8 @@ function revealCelebration(catKey, forcedCard, level, extra){
   if(level>=4) celeb.classList.add('shake');
 
   let rareCardDrawn = false;
-  if(catKey==='chance'){
-    const deck = CHANCE_DECK;
+  if(catKey==='chance' || catKey==='chest'){
+    const deck = catKey==='chance' ? CHANCE_DECK : CHEST_DECK;
     const card = forcedCard || drawCard(deck);
     rareCardDrawn = !!card.rare;
     if(celebMain) celebMain.textContent = rareCardDrawn

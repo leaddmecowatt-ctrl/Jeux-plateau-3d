@@ -59,10 +59,10 @@ sort de la pochette.
 `TIER_LEVEL` (intensité de la célébration), `LOT_IMAGE_URLS`, `CATEGORY_MESSAGES`.
 Catégories : `jackpot300` (ETB 30 ans), `etb` (coffret ex), `booster50` (tripack),
 `gradee` (duopack), `booster8` (booster), `alternative` (lot mystère : booster ou carte),
-`commune`, `chest` (Caisse Communautaire, un lot depuis le 23/09), `prison` (hors pochette), plus `chance` qui est un détour, pas un lot.
+`commune`, `parc` (Parc gratuit, case 28 : les cartes promo ouvertes), `prison` (hors pochette), plus `chance` et `chest` (Caisse Communautaire) qui sont des détours, pas des lots.
 
 **Pochette de 245 coups** (depuis le 23/09, décision de l'hôte) : `POUCH` = 1 ETB, 2 coffrets,
-2 tripacks, 1 duopack, 42 boosters, 90 Lots Mystère, 7 Caisses Communautaires, 100 communes.
+2 tripacks, 1 duopack, 42 boosters, 90 Lots Mystère, 7 Parc gratuit (promos), 100 communes.
 Un coup = une partie (une mise = un lot, même en plusieurs lancers). Quantités **exactes** :
 plus aucun plafond de rentabilité ne retire ni ne décale un lot (`outcomeCovered` renvoie
 toujours vrai ; l'hôte calcule sa rentabilité sur ses coûts réels, `PAYOUT_LADDER` ne sert
@@ -75,9 +75,12 @@ Si l'hôte garde un lot avant la case prévue, `claimCurrentLot` **échange** da
 (le lot gardé est retiré plus loin, le lot prévu réinséré au hasard) : les quantités tiennent ;
 les cases de passage n'offrent que des lots encore en stock (`pouchHas`).
 
-**Caisse Communautaire** : un LOT de la pochette (plus un détour). Le jeu n'en connaît pas le
-contenu (promos des coffrets et tripacks ouverts, remises physiquement). Seule Chance reste un
-détour (carte déplacement pipée, `CARD_ROUTE_P`).
+**Parc gratuit** (case 28, angle, depuis le 23/09 au soir) : le LOT des cartes promo des
+coffrets et tripacks ouverts (7 coups), remises physiquement ; le jeu n'en affiche pas le contenu.
+Une pochette `v10` en mémoire est convertie au chargement (ses `chest` deviennent `parc`, position
+gardée). **Chance et Caisse Communautaire** sont des détours (carte déplacement pipée,
+`CARD_ROUTE_P` au dernier lancer, `CHANCE_MID_P` en cours de route) ; cases tentantes de passage :
+`TEMPTING_P`. Dessins des cases spéciales : `drawSpecialArt` (Prison, Chance, Caisse, Parc).
 
 **Chemins variés** : le résultat est décidé avant l'animation. Allure de marche ±15 %, rampes,
 anticipation et stabilisation tirées au sort (`startWalk`) ; arrivée anticipée possible sur la
@@ -108,8 +111,9 @@ l'overlay sur la zone du plateau et publie `--celeb-box-h` pour que la CSS s'y m
 **Cases « carte collector »** (`getFlatPhotoFace`, `getTicketFace`, `getDepartFace`,
 `CASE_ACCENT`) : même structure pour toutes (socle bleu nuit, bordure feuille d'or,
 fenêtre ivoire avec UNE photo, filet + gemme d'accent, nom en capitales dorées). Accents :
-lots = or, Chance = violet, Caisse = vert, spéciales = bleu, Prison = rouge. Coins 10,
-19, 28 = billets inclinés à 45° (une seule photo, rien dessous). Règle : **jamais deux fois
+lots = or, Chance = violet, Caisse = vert, Parc = orange, spéciales = bleu, Prison = rouge.
+Coins 10, 19, 28 : image en plein comme les autres cases depuis le 23/09 (le billet incliné,
+`getTicketFace`, n'est plus utilisé). Règle : **jamais deux fois
 la même photo sur une case** : les gros lots gardent leur carte photo FLOTTANTE (ce qui les fait reconnaître), leur case montre alors un socle doré (`drawPedestal`) ; pas de carte flottante sur un coin (le billet porte la photo).
 
 **Pion Luffy** (`buildLuffy`, section « LUFFY SCULPTÉ ») : tête, visage dessiné, cheveux,
