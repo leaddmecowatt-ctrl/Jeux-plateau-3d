@@ -8373,6 +8373,10 @@ function passageAuRythme(cat){
      sur un booster le garde toujours, et le stock réel de boosters est
      compté : un booster ne tombe que quand la pochette l'a prévu. */
   if(cat === 'booster8') return false;
+  /* Règle de l'animateur (23/09) : en chemin, SEULEMENT Lot Mystère ou
+     Pioche du Prof. Chen. Tout autre lot serait gardé à coup sûr — la
+     Carte gratuite (Parc, stock limité) non plus. */
+  if(cat !== 'alternative' && cat !== 'commune') return false;
   const b = outcomeState.batch, pos = outcomeState.pos;
   let reste = 0;
   for(let j=pos;j<b.length;j++) if(b[j]===cat) reste++;
