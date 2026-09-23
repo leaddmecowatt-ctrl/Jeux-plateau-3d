@@ -8077,7 +8077,11 @@ async function drawAndMove(){
   clearWinUndo();
   validate.disabled = true;
   // rollsLeft compte le lancer en cours (rollsUsed n'est pas encore incrémenté)
-  if(rollsUsed === 0){ prevGameTotals = curGameTotals; curGameTotals = []; }
+  if(rollsUsed === 0){
+    prevGameTotals = curGameTotals; curGameTotals = [];
+    if(curPath.length){ pathMemory.push(curPath); if(pathMemory.length > RECENT_PATHS) pathMemory.shift(); }
+    curPath = [];
+  }
   const plan = planTotal(currentIndex, rollsAllowed - rollsUsed, pendingOutcome);
   plannedCardDelta = (plan && plan.cardDelta != null) ? plan.cardDelta : null;
   const draw = computeCardDraw(plan ? plan.total : null, plan ? plan.wantDouble : false);
@@ -8087,6 +8091,7 @@ async function drawAndMove(){
   // qu'il ne valide rien.
   rollsUsed++;
   curGameTotals.push(draw.total);
+  curPath.push(landingIndex(currentIndex, draw.total));
   if(draw.isDouble) rollsAllowed++;
   broadcastSync({type:'draw', draw});
   topNum.textContent = draw.total;
@@ -8187,12 +8192,33 @@ function canReachTarget(pos, rollsLeft, targetCat, memo){
    tiré à la partie précédente dès qu'un autre total fait l'affaire. Le
    résultat (la case du lot) n'en dépend pas, seul le chemin change. */
 let prevGameTotals = [], curGameTotals = [];
-function pickWeightedTotal(list){
-  const avoid = prevGameTotals[curGameTotals.length];
+/* Mémoire des derniers chemins (23/09) : pour chaque partie récente, les
+   cases où le pion s'est arrêté à chaque lancer. Constaté par l'animateur :
+   « c'est toujours la même combinaison pour arriver au même endroit ».
+   Toutes les parties partent de Départ, et les poids de vrais dés (7 six fois
+   plus fréquent que 2) faisaient ressortir sans cesse les mêmes totaux.
+   Désormais : poids aplatis (racine des poids de dés), et chaque case déjà
+   utilisée AU MÊME LANCER dans les RECENT_PATHS dernières parties voit son
+   poids divisé (×0,35 par répétition). Le lot, lui, ne change pas. */
+const RECENT_PATHS = 8;
+let pathMemory = [], curPath = [];
+function pickWeightedTotal(list, pos){
+  const k = curGameTotals.length;
+  const avoid = prevGameTotals[k];
   if(list.length > 1 && list.includes(avoid)) list = list.filter(t=>t!==avoid);
-  let sum = 0; list.forEach(t=>{ sum += DICE_W[t]; });
+  const poids = t=>{
+    let x = Math.sqrt(DICE_W[t]);
+    if(pos != null){
+      const j = landingIndex(pos, t);
+      let n = 0;
+      for(const pth of pathMemory) if(pth[k] === j) n++;
+      x *= Math.pow(0.35, n);
+    }
+    return x;
+  };
+  let sum = 0; list.forEach(t=>{ sum += poids(t); });
   let r = Math.random()*sum;
-  for(const t of list){ r -= DICE_W[t]; if(r<=0) return t; }
+  for(const t of list){ r -= poids(t); if(r<=0) return t; }
   return list[list.length-1];
 }
 /* Total à faire sortir pour ce lancer (null = dés honnêtes). rollsLeft
@@ -8228,7 +8254,7 @@ function planTotal(pos, rollsLeft, targetCat){
       // 2 et 12 sont forcément des doubles (lancer bonus) : on les évite
       // pour que le tour puisse finir là
       const nd = now.filter(t=>t!==2 && t!==12);
-      return { total: pickWeightedTotal(nd.length ? nd : now), onTarget: true, wantDouble: false };
+      return { total: pickWeightedTotal(nd.length ? nd : now, pos), onTarget: true, wantDouble: false };
     }
   } else {
     // lancer intermédiaire : case neutre d'où le lot visé tombe pile au
@@ -8262,8 +8288,8 @@ function planTotal(pos, rollsLeft, targetCat){
       const pick = viaChance[Math.floor(Math.random()*viaChance.length)];
       return { total: pick.t, onTarget: false, wantDouble: false, cardDelta: pick.d };
     }
-    if(early.length && Math.random() < EARLY_LANDING_P) return { total: pickWeightedTotal(early), onTarget: true, wantDouble: false };
-    if(double.length && (!single.length || Math.random() < 1/3)) return { total: pickWeightedTotal(double), onTarget: false, wantDouble: true };
+    if(early.length && Math.random() < EARLY_LANDING_P) return { total: pickWeightedTotal(early, pos), onTarget: true, wantDouble: false };
+    if(double.length && (!single.length || Math.random() < 1/3)) return { total: pickWeightedTotal(double, pos), onTarget: false, wantDouble: true };
     if(single.length){
       /* Case « tentante » : un lot de passage qui n'est ni une commune ni
          le lot prévu (Lot Mystère, booster, Parc gratuit). Une fois sur trois
@@ -8280,7 +8306,7 @@ function planTotal(pos, rollsLeft, targetCat){
       const pool = (tempting.length && r < TEMPTING_P) ? tempting
                  : (presque.length && r < TEMPTING_P + NEAR_MISS_P) ? presque
                  : single;
-      return { total: pickWeightedTotal(pool), onTarget: false, wantDouble: false };
+      return { total: pickWeightedTotal(pool, pos), onTarget: false, wantDouble: false };
     }
   }
   // repli : une commune (jamais Chance, Prison ni Départ)
@@ -8290,9 +8316,9 @@ function planTotal(pos, rollsLeft, targetCat){
     // plus de commune en stock : un lot de passage encore disponible, si possible
     const alt = [];
     for(let t=2;t<=12;t++){ const idx = landingIndex(pos,t); if(landable(idx, targetCat) && tiles[idx].catKey!==targetCat) alt.push(t); }
-    if(alt.length) return { total: pickWeightedTotal(alt), onTarget: false, wantDouble: false };
+    if(alt.length) return { total: pickWeightedTotal(alt, pos), onTarget: false, wantDouble: false };
   }
-  if(neutral.length) return { total: pickWeightedTotal(neutral), onTarget: false, wantDouble: false };
+  if(neutral.length) return { total: pickWeightedTotal(neutral, pos), onTarget: false, wantDouble: false };
   return null;
 }
 
