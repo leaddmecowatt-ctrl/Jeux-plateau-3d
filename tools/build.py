@@ -332,6 +332,7 @@ def build(out_path, demo_jackpot=False):
         # Page de démonstration à part : un toucher joue la finale du
         # jackpot (voir PIKA_DEMO_JACKPOT dans board3d.js). Jamais pour le direct.
         out = out.replace('<head>', '<head><script>window.PIKA_DEMO_JACKPOT=1</script>', 1)
+        out = re.sub(r'<title>[^<]*</title>', '<title>Pikapoly — Démo finale jackpot</title>', out, count=1)
     os.makedirs(os.path.dirname(os.path.abspath(out_path)) or '.', exist_ok=True)
     with open(out_path, 'w', encoding='utf-8') as f:
         f.write(out)
