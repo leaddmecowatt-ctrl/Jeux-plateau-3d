@@ -8183,6 +8183,43 @@ window.addEventListener('keydown', (e)=>{
   else if(k==='r'){ cycleRotation(); }
 });
 
+/* Démonstration de la finale du jackpot — UNIQUEMENT sur la page de démo
+   à part (elle pose window.PIKA_DEMO_JACKPOT avant ce script ; le jeu en
+   direct ne la pose jamais). Sans clavier, sur téléphone, c'est la seule
+   façon de voir la finale : un toucher sur l'écran remet le plateau à
+   zéro, pose le pion quatre cases avant l'ETB et le fait avancer. La suite
+   est la vraie séquence du jeu : arrivée, orage, enlèvement dans le
+   faisceau, lot révélé. Les touchers sont ignorés tant qu'elle se joue. */
+if(window.PIKA_DEMO_JACKPOT){
+  let demoBusy = false;
+  const demoHint = document.createElement('div');
+  demoHint.className = 'key-hint show';
+  demoHint.style.bottom = '64px';
+  demoHint.textContent = '👆 Touchez l’écran pour voir la finale du jackpot';
+  document.body.appendChild(demoHint);
+  window.addEventListener('pointerdown', (e)=>{
+    e.stopPropagation(); e.preventDefault();
+    if(demoBusy) return;
+    demoBusy = true;
+    demoHint.classList.remove('show');
+    restart();
+    startGame();
+    const from = LAST - 4;
+    currentIndex = from;
+    placeTokenInstant(from);
+    setActive(from);
+    setTimeout(async ()=>{
+      try{ await move(4); } finally {
+        setTimeout(()=>{
+          demoBusy = false;
+          demoHint.textContent = '👆 Touchez encore pour la revoir';
+          demoHint.classList.add('show');
+        }, STORM_MS + 2500);
+      }
+    }, 500);
+  }, true);
+}
+
 if(syncChannel && isDisplay){
   syncChannel.onmessage = (e)=>{
     const m = e.data || {};

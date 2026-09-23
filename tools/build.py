@@ -148,7 +148,7 @@ def inline_glb_images(raw):
     print('build.py: %d image(s) du modèle 3D converties en data: URI' % n)
     return header + out
 
-def build(out_path):
+def build(out_path, demo_jackpot=False):
     html = load('Nsldkso.html')
     # The previous version of this script kept only the <style> block and
     # hand-reconstructed a Google Fonts <link> separately, silently
@@ -328,6 +328,10 @@ def build(out_path):
     # le loader conclut « non supporté », sans conséquence).
     out, n_strip = re.subn(r'data:image/(?:avif|webp);base64,[A-Za-z0-9+/=]+', 'data:,', out)
     print(f'build.py: {n_strip} image(s) de test AVIF/WebP neutralisée(s)')
+    if demo_jackpot:
+        # Page de démonstration à part : un toucher joue la finale du
+        # jackpot (voir PIKA_DEMO_JACKPOT dans board3d.js). Jamais pour le direct.
+        out = out.replace('<head>', '<head><script>window.PIKA_DEMO_JACKPOT=1</script>', 1)
     os.makedirs(os.path.dirname(os.path.abspath(out_path)) or '.', exist_ok=True)
     with open(out_path, 'w', encoding='utf-8') as f:
         f.write(out)
@@ -338,5 +342,7 @@ def build(out_path):
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
     ap.add_argument('--out', required=True, help='output HTML path')
+    ap.add_argument('--demo-jackpot', action='store_true',
+                    help='page de démo : un toucher sur l’écran joue la finale du jackpot')
     args = ap.parse_args()
-    build(args.out)
+    build(args.out, demo_jackpot=args.demo_jackpot)
