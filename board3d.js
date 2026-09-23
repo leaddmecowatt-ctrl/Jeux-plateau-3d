@@ -876,6 +876,32 @@ function ticketPath(ctx, w, h, rad, ny, nr){
   ctx.lineTo(0, rad); ctx.arcTo(0, 0, rad, 0, rad);
   ctx.closePath();
 }
+/* Coin en DIAGONALE (23/09) : l'image de la case (photo ou dessin, avec son
+   nom) est tournée de 45° vers le centre du plateau, comme les coins du
+   Monopoly ; le haut regarde le milieu, le nom est dans l'angle extérieur.
+   Le socle et sa bordure d'or restent droits ; l'image est réduite juste
+   assez pour tenir dans le carré (les coins du contenu, qui ne sont que du
+   fond bleu nuit, sont rognés par la bordure). */
+const CORNER_DIAG_SCALE = 0.86;
+function diagonalCornerFace(srcTex, ang){
+  const src = srcTex.image;
+  const size = 960;
+  const cvs = document.createElement('canvas'); cvs.width = cvs.height = size;
+  const ctx = cvs.getContext('2d');
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  drawCaseBase(ctx, size);
+  ctx.save();
+  roundRectPath(ctx, 44, 44, size-88, size-88, size*0.08); ctx.clip();
+  ctx.translate(size/2, size/2); ctx.rotate(ang); ctx.scale(CORNER_DIAG_SCALE, CORNER_DIAG_SCALE);
+  const m = 48, w = src.width - 2*m;
+  ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 26;
+  ctx.drawImage(src, m, m, w, w, -w/2, -w/2, w, w);
+  ctx.restore();
+  caseVernis(ctx, size);
+  const tex = new THREE.CanvasTexture(cvs);
+  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = getMaxAniso();
+  return tex;
+}
 function getTicketFace(catKey, ang){
   const size = 960;
   const cvs = document.createElement('canvas'); cvs.width = cvs.height = size;
@@ -2667,13 +2693,14 @@ for(let i=0;i<N_TILES;i++){
      franchir le seuil. */
   /* Cases d'angle (sauf Départ) en BILLET incliné à 45°, talon vers
      l'angle extérieur, comme au Monopoly : voir getTicketFace. */
-  /* Désactivé le 23/09 : l'animateur veut l'image en plein sur les coins,
-     comme sur les autres cases. */
-  if(false && i % SIDE === 0 && i !== 0){
+  /* Les quatre coins (Départ compris) : image entière tournée vers le
+     centre du plateau (voir diagonalCornerFace). Même angle que l'ancien
+     billet incliné. */
+  if(i % SIDE === 0){
     const yaw = outwardYaw(r, c);
     const lx = Math.sign(world.x)*Math.cos(yaw) - Math.sign(world.z)*Math.sin(yaw);
     const lz = Math.sign(world.x)*Math.sin(yaw) + Math.sign(world.z)*Math.cos(yaw);
-    faceTex = getTicketFace(catKey, Math.atan2(-lx, lz));   // remplace la face : une seule photo
+    faceTex = diagonalCornerFace(faceTex, Math.atan2(-lx, lz));
   }
   const faceMat = new THREE.MeshStandardMaterial({
     map: faceTex,
