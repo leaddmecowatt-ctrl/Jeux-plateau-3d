@@ -1233,7 +1233,9 @@ const QSTICK_KEY = 'pika_q_forced';
 renderer.domElement.addEventListener('webglcontextlost', (e)=>{
   // sans preventDefault, le navigateur ne proposera jamais de restaurer
   e.preventDefault();
-  try{ localStorage.setItem(QSTICK_KEY, '5'); }catch(err){}
+  // horodaté : le mode éco imposé expire (voir QSTICK_TTL), il ne reste
+  // plus figé à vie après UNE surchauffe
+  try{ localStorage.setItem(QSTICK_KEY, String(Date.now())); }catch(err){}
   const warn = document.createElement('div');
   warn.className = 'gl-fallback';
   warn.textContent = 'Affichage relancé en mode économie…';
@@ -3051,9 +3053,12 @@ function startJackpotStorm(){
   beamSource = new THREE.Sprite(new THREE.SpriteMaterial({ map:brightGoldTex, color:0xe6f2ff, transparent:true, opacity:0, blending:THREE.AdditiveBlending, depthWrite:false }));
   beamSource.position.set(x, y + H - 0.4, z); beamSource.scale.set(3.2, 3.2, 1);
   for(const m of [beamMesh, beamCore, beamHalo, beamDisc, beamSource]){ m.scale.y = m === beamDisc || m === beamSource ? m.scale.y : 0.001; m.renderOrder = 5; scene.add(m); }
-  beamLight = new THREE.PointLight(0xd7ebff, 0, 12, 2);
+  /* Créée UNE fois et gardée (intensité 0 hors orage) : ajouter puis
+     retirer une lumière change le nombre de lumières de la scène, et
+     three recompilait tous les matériaux éclairés deux fois par jackpot. */
+  if(!beamLight){ beamLight = new THREE.PointLight(0xd7ebff, 0, 12, 2); scene.add(beamLight); }
+  beamLight.intensity = 0;
   beamLight.position.set(x, y + 2.2, z);
-  scene.add(beamLight);
   return true;
 }
 function stopStorm(){
@@ -3061,7 +3066,7 @@ function stopStorm(){
   storm.bolts.forEach(disposeBolt);
   for(const m of [beamMesh, beamCore, beamHalo, beamDisc, beamSource]){ if(m){ scene.remove(m); if(m.geometry) m.geometry.dispose(); m.material.dispose(); } }
   beamMesh = beamCore = beamHalo = beamDisc = beamSource = null;
-  if(beamLight){ scene.remove(beamLight); beamLight = null; }
+  if(beamLight) beamLight.intensity = 0;   // gardée dans la scène (voir startJackpotStorm)
   key.intensity = LIGHT_BASE.key; hemiLight.intensity = LIGHT_BASE.hemi; fill.intensity = LIGHT_BASE.fill;
   rim.intensity = LIGHT_BASE.rim; centerSpot.intensity = LIGHT_BASE.spot;
   renderer.toneMappingExposure = LIGHT_BASE.expo;
@@ -5286,6 +5291,11 @@ loadPlayerModel(player).catch(err=>{
 /* ---------- État de jeu ---------- */
 let currentIndex = -1; // -1 = au départ, pas encore sur le plateau
 let moving = false;
+/* Déclarées ICI (et non près de leur usage) : animate() les lit dès sa
+   première image, qui tourne pendant le chargement du module — une
+   déclaration plus bas lèverait une erreur de zone morte temporelle. */
+let drawInProgress = false;   // du clic « tirer » jusqu'au début du déplacement
+let celebRAF = null;          // boucle de la célébration en cours
 let generation = 0;
 let finished = false;
 // Règle du jeu : 3 lancers par partie, +1 lancer supplémentaire à
@@ -6743,6 +6753,12 @@ function applyQuality(level){
   _qDpr = dpr; _qEco = eco; _qBloom = bs;
 
   if(renderer.getPixelRatio() !== dpr) renderer.setPixelRatio(dpr);
+  /* Audit 23/09 : le composer garde SA densité (fixée à sa création, 2x).
+     Sans cette ligne, baisser la résolution ne soulageait RIEN — la scène
+     restait calculée en 2x puis réduite : image floue, aucun gain, et
+     l'échelle continuait de descendre. C'était « la résolution qui se
+     casse la figure ». */
+  if(composer.setPixelRatio) composer.setPixelRatio(dpr);
   setEcoMode(eco);
   /* setShadowSoft N'EST PLUS APPELE ICI. C'etait le poste le plus cher de
      tout le changement de cran : shadowMapType fait partie de la cle de
@@ -6794,10 +6810,20 @@ function qualityTick(realDt, now){
   if(QUALITY.locked) return;
   if(!QUALITY.armedAt){ QUALITY.armedAt = now + 2.5; return; } // grâce au chargement
   if(now < QUALITY.armedAt) return;
+  /* Audit 23/09 : les moments lourds et passagers (célébration, orage,
+     saut de victoire) ne comptent pas — ils faisaient descendre l'échelle
+     pour un à-coup de quelques secondes. */
+  if(celebRAF || storm || victoire) return;
+  // un cran repris et tenu 10 s est confirmé : il ne deviendra plus plancher
+  if(QUALITY.triedUp !== null && now - QUALITY.last > 10) QUALITY.triedUp = null;
+  /* En mode éco la boucle est plafonnée à 30 i/s : les seuils normaux
+     (lent > 1/30, fluide < 1/50) y rendaient la remontée IMPOSSIBLE et
+     comptaient une image sur deux comme lente. */
+  const seuilLent = ecoMode ? 1/22 : Q_LENT, seuilFluide = ecoMode ? 1/26 : Q_FLUIDE;
 
   QUALITY.samples++;
-  if(realDt > Q_LENT) QUALITY.slow++;
-  else if(realDt < Q_FLUIDE) QUALITY.fast = (QUALITY.fast||0) + 1;
+  if(realDt > seuilLent) QUALITY.slow++;
+  else if(realDt < seuilFluide) QUALITY.fast = (QUALITY.fast||0) + 1;
 
   // --- descendre d'un cran : il faut une lenteur franche et soutenue ---
   if(QUALITY.samples >= Q_N_BAS && QUALITY.level < QUALITY_LEVELS){
@@ -6824,7 +6850,7 @@ function qualityTick(realDt, now){
     const cible = Math.max(QUALITY.base, QUALITY.floor);
     if(QUALITY.level > cible
        && (QUALITY.fast||0) >= QUALITY.samples*Q_RATIO_HAUT
-       && QUALITY.slow === 0
+       && QUALITY.slow <= QUALITY.samples*0.02   // un ramasse-miettes ne bloque plus tout
        && now - QUALITY.last > 4){
       QUALITY.last = now;
       QUALITY.triedUp = QUALITY.level - 1;   // cran tente, a confirmer
@@ -6846,7 +6872,13 @@ function qualityTick(realDt, now){
   const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
   // Cet appareil a déjà fait lâcher le contexte WebGL : on repart
   // directement en mode éco, sinon il relâchera dans la minute.
-  const apresPlantage = parseInt(safeGetItem(QSTICK_KEY), 10);
+  const QSTICK_TTL = 6*3600*1000;   // 6 h
+  let apresPlantage = parseInt(safeGetItem(QSTICK_KEY), 10);
+  // ancienne valeur « 5 » (sans date) ou trop vieille : on l'oublie
+  if(!isNaN(apresPlantage) && (apresPlantage < 1e12 || Date.now() - apresPlantage > QSTICK_TTL)){
+    apresPlantage = NaN;
+    try{ localStorage.removeItem(QSTICK_KEY); }catch(e){}
+  }
   if(!isNaN(apresPlantage) && isNaN(q)){
     applyQuality(QUALITY_LEVELS);
     QUALITY.locked = true;
@@ -6880,11 +6912,17 @@ function animate(){
      cadence régulière à 30 bien mieux qu'une cadence erratique entre 15
      et 25, et il chauffe deux fois moins — or c'est la chauffe qui finit
      par faire lâcher le contexte WebGL, c'est-à-dire par tout planter. */
-  if(ecoMode && nowMs - _lastRenderAt < 31) return;
+  /* Au repos (aucune partie en mouvement, aucune annonce animée) : 30 i/s
+     aussi. Les cases ondulent doucement, 30 images suffisent, et l'appareil
+     chauffe deux fois moins entre les parties — c'est la chauffe qui, au
+     bout de quelques coups, faisait ralentir puis baisser la qualité. */
+  const auRepos = !walk && !moving && !drawInProgress && !storm && !victoire && !celebRAF && cineMode === null;
+  if((ecoMode || auRepos) && nowMs - _lastRenderAt < 31) return;
   _lastRenderAt = nowMs;
   const realDt = _lastFrameAt ? (nowMs - _lastFrameAt)/1000 : 0;
   _lastFrameAt = nowMs;
-  if(!document.hidden && realDt > 0 && realDt < 1) qualityTick(realDt, nowMs/1000);
+  // au repos plafonné, la cadence ne dit rien de la santé de l'appareil
+  if(!document.hidden && realDt > 0 && realDt < 1 && !(auRepos && !ecoMode)) qualityTick(realDt, nowMs/1000);
   /* getDelta() AVANT getElapsedTime() — l'ordre est vital. Dans three.js,
      getElapsedTime() appelle lui-même getDelta() et remet le chrono à
      l'instant présent : appelé en premier, il laissait au getDelta()
@@ -6937,7 +6975,7 @@ resize();
    rendus (ex. 1470x956 CSS à 1,5x = 3,2 M). */
 {
   const px = wrap.clientWidth * wrap.clientHeight * DPR_MAX * DPR_MAX;
-  if(px > 2.4e6) applyQuality(1);
+  if(px > 2.4e6 && !QUALITY.locked) applyQuality(1);
 }
 
 /* ==========================================================================
@@ -7045,6 +7083,7 @@ function ceilingFor(mise){
 let totalMise = parseFloat(safeGetItem(TOTAL_MISE_KEY)) || 0;
 let totalPaid = parseFloat(safeGetItem(TOTAL_PAID_KEY)) || 0;
 function saveTotals(){
+  if(isDisplay) return;   // l'écran public ne fait qu'afficher : il n'écrit jamais l'état partagé
   try{
     localStorage.setItem(TOTAL_MISE_KEY, String(totalMise));
     localStorage.setItem(TOTAL_PAID_KEY, String(totalPaid));
@@ -7066,6 +7105,10 @@ function flashBankResetToken(){
   bankResetFlashTimer = setTimeout(()=>{ bankResetFlash.classList.remove('show'); }, 1400);
 }
 if(resetBankBtn) resetBankBtn.addEventListener('click', ()=>{
+  // audit 23/09 : un clic en pleine partie ajoutait le lot en cours à la
+  // nouvelle pochette (246 coups), et un clic accidentel jetait la pochette
+  if(pendingOutcome || moving || drawInProgress){ showKeyHint('Terminez la partie (C) avant de repartir sur une nouvelle pochette'); return; }
+  if(!window.confirm('Repartir sur une NOUVELLE pochette de 245 coups ? La pochette en cours sera abandonnée.')) return;
   totalMise = 0;
   totalPaid = 0;
   saveTotals();
@@ -7233,6 +7276,11 @@ function loadOutcomeState(){
         parsed.batch = parsed.batch.map(c => c === 'chest' ? 'parc' : c);
         parsed.version = OUTCOME_BATCH_VERSION;
       }
+      /* Page rechargée en pleine partie (plantage, F5) : le lot de la partie
+         interrompue n'a pas été gagné — il retourne en tête de pochette,
+         comme avec « Recommencer ». Audit 23/09 : il était perdu, et le
+         coup compté. */
+      if(parsed && parsed.enCours && parsed.pos > 0){ parsed.pos--; parsed.enCours = false; }
       if(parsed && parsed.version===OUTCOME_BATCH_VERSION && Array.isArray(parsed.batch)
          && typeof parsed.pos==='number' && parsed.pos < parsed.batch.length
          && Array.isArray(parsed.myst) && typeof parsed.mystPos==='number'){
@@ -7256,6 +7304,7 @@ function drawMysterySub(){
 }
 let outcomeState = loadOutcomeState();
 function saveOutcomeState(){
+  if(isDisplay) return;   // voir saveTotals
   try{ localStorage.setItem(OUTCOME_BATCH_KEY, JSON.stringify(outcomeState)); }catch(e){}
 }
 saveOutcomeState();
@@ -7341,6 +7390,9 @@ function nextPredeterminedOutcome(){
   }
   const cat = outcomeState.batch[outcomeState.pos];
   outcomeState.pos++;
+  // partie en cours : si la page est rechargée avant le gain, le lot
+  // retournera dans la pochette au chargement (voir loadOutcomeState)
+  outcomeState.enCours = true;
   saveOutcomeState();
   return cat;
 }
@@ -7806,7 +7858,9 @@ function updateWinButton(){
     // soit lisible en filmant. Il ne disparaît que si l'animateur
     // relance un tirage (il continue), et reste affiché si le lot
     // est validé, jusqu'au prochain "RECOMMENCER".
-    if(cat!=='prison') showLotPreview(cat);
+    // écran public : si l'annonce de l'animateur est déjà arrivée (son pion
+    // marchait encore), l'aperçu ne doit pas l'effacer
+    if(cat!=='prison' && !(isDisplay && celebLocked)) showLotPreview(cat);
   }
 }
 
@@ -7853,7 +7907,7 @@ async function move(forcedCount, forcedCard){
   if(!card && (destCat==='chance' || destCat==='chest')){
     card = drawCard(destCat==='chance' ? CHANCE_DECK : CHEST_DECK);
   }
-  broadcastSync({type:'move', count, card});
+  broadcastSync({type:'move', count, card, from: currentIndex});
 
   statusEl.textContent = 'Le joueur avance vers '+placeLabel(destIdx)+'…';
   updatePlaceBanner(destIdx, true);
@@ -7951,6 +8005,7 @@ const CHANCE_READ_RARE_MS = 3600;
    l'annonce est effacée, son effet éventuel (avancer/reculer) est joué
    sur le plateau dégagé, et la partie continue. */
 async function resolveChanceChest(myGen, forcedCard){
+  claimKeyAt = 0;   // un D pressé avant le détour ne garde pas la case d'arrivée
   const idx = currentIndex;
   const catKey = tiles[idx].catKey;
   const deck = catKey==='chance' ? CHANCE_DECK : CHEST_DECK;
@@ -8011,7 +8066,10 @@ function restart(){
     const st = outcomeState;
     if(st.pos > 0 && st.batch[st.pos-1] === pendingOutcome) st.pos--;
     else st.batch.splice(st.pos, 0, pendingOutcome);
+    st.enCours = false;
     saveOutcomeState();
+    // la partie est annulée : sa mise ne compte plus (sinon comptée deux fois)
+    totalMise = Math.max(0, totalMise - AVG_MISE); saveTotals();
   }
   pendingOutcome = null;
   forcedCat = null;
@@ -8049,7 +8107,6 @@ function startGame(){
   broadcastSync({type:'start'});
 }
 
-let drawInProgress = false;   // du clic « tirer » jusqu'au début du déplacement
 async function drawAndMove(){
   if(moving || finished || rollsUsed>=rollsAllowed || drawInProgress) return;
   drawInProgress = true;
@@ -8095,7 +8152,9 @@ async function drawAndMove(){
   if(draw.isDouble) rollsAllowed++;
   broadcastSync({type:'draw', draw});
   topNum.textContent = draw.total;
+  const genTirage = generation;
   try{ await playCardDrawAnimation(draw); } finally { drawInProgress = false; }
+  if(genTirage !== generation) return;   // partie recommencée pendant le tirage
   await move(draw.total);
 }
 
@@ -8157,8 +8216,13 @@ function landable(idx, targetCat){
   // de passage (elles passent par leur carte, voir viaChance)
   if(cat==='prison' || cat==='chance' || cat==='chest') return false;
   if(cat===targetCat) return true;
-  // pochette exacte : s'arrêter ici doit correspondre à un lot encore en stock
-  if(!pouchHas(cat)) return false;
+  /* pochette exacte : s'arrêter ici doit correspondre à un lot encore en
+     stock — SAUF la commune, qui reste toujours une case de passage. Audit
+     23/09 : sans communes en stock (fin de pochette), plus aucun chemin
+     n'existait vers le lot prévu, le pion tombait sur une mauvaise case et
+     la pochette dépassait 245 coups. Garder une commune qui n'est plus en
+     stock est refusé à la touche D (claimCurrentLot). */
+  if(cat !== 'commune' && !pouchHas(cat)) return false;
   const c = OUTCOME_COST[cat];
   if(c===undefined) return false;
   /* En cours de route : tous les PETITS lots (commune, Caisse, Lot
@@ -8318,12 +8382,32 @@ function planTotal(pos, rollsLeft, targetCat){
     for(let t=2;t<=12;t++){ const idx = landingIndex(pos,t); if(landable(idx, targetCat) && tiles[idx].catKey!==targetCat) alt.push(t); }
     if(alt.length) return { total: pickWeightedTotal(alt, pos), onTarget: false, wantDouble: false };
   }
+  if(!pouchHas('commune')){
+    /* Fin de pochette (audit 23/09) : plus aucun lot de passage en stock.
+       Se poser DÉJÀ sur la case du lot prévu, plutôt que sur une commune
+       qui n'existe plus : si le joueur la garde, c'est le bon lot. */
+    const surCible = [];
+    for(let t=3;t<=11;t++){ const idx = landingIndex(pos,t); if(idx!==0 && tiles[idx].catKey===targetCat) surCible.push(t); }
+    if(surCible.length) return { total: pickWeightedTotal(surCible, pos), onTarget: true, wantDouble: false };
+  }
   if(neutral.length) return { total: pickWeightedTotal(neutral, pos), onTarget: false, wantDouble: false };
   return null;
 }
 
 async function claimCurrentLot(){
+  if(isDisplay) return;   // l'écran public reçoit la célébration de l'animateur
   if(currentIndex<0 || (winBtn && winBtn.disabled)) return;
+  /* Garder en cours de route un lot qui n'est PLUS dans la pochette
+     (communes épuisées en fin de pochette) : refusé, sinon la pochette
+     dépasserait 245 coups. Seulement s'il reste des lancers : à la fin des
+     lancers le pion est toujours sur le lot prévu. */
+  {
+    const cat = tiles[currentIndex].catKey;
+    if(!forcedGame && pendingOutcome && cat !== pendingOutcome && !pouchHas(cat) && rollsUsed < rollsAllowed && !finished){
+      showKeyHint('Plus de « '+CATS[cat].label+' » dans la pochette : relancez (B)');
+      return;
+    }
+  }
   /* Jamais pendant un lancer. Trouvé en simulation : D pressé pendant
      l'animation du tirage (le pion n'a pas encore bougé, `moving` est
      encore faux) validait le lot de la case QUITTÉE, puis le lancer
@@ -8374,6 +8458,7 @@ async function claimCurrentLot(){
     saveOutcomeState();
   }
   pendingOutcome = null;
+  outcomeState.enCours = false; saveOutcomeState();
   updateCue();
   // Le plafond de reversement continue de calculer et suivre le
   // pourcentage payé exactement comme avant (mêmes 50%, même formule),
@@ -8401,6 +8486,8 @@ if(winBtn) winBtn.addEventListener('click', claimCurrentLot);
 
 if(undoBtn) undoBtn.addEventListener('click', ()=>{
   if(!lastWinUndo) return;
+  stopStorm();                          // annuler pendant la finale : plus de foudre sur l'aperçu
+  broadcastSync({type:'undo'});
   totalPaid = Math.max(0, totalPaid - lastWinUndo.amountAdded);
   saveTotals();
   if(lastResults.length){ lastResults.shift(); renderResultsTicker(); }
@@ -8530,7 +8617,12 @@ window.addEventListener('resize', sizeRulesBubble);
 window.addEventListener('keydown', (e)=>{
   const tag = (document.activeElement && document.activeElement.tagName) || '';
   if(tag==='INPUT' || tag==='TEXTAREA') return;
+  // Ctrl/Cmd+C, Ctrl+D… ne doivent rien déclencher en direct, ni la
+  // répétition automatique d'une touche maintenue
+  if(e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
   const k = e.key.toLowerCase();
+  // écran public : il ne pilote rien (il jouait sinon sa propre partie)
+  if(isDisplay && k!=='f' && k!=='r' && k!=='m' && e.key!=='Escape') return;
   if(k==='m'){ toggleRules(); e.preventDefault(); return; }
   if(e.key === 'Escape' && rulesOverlay && rulesOverlay.classList.contains('show')){
     toggleRules(false); return;
@@ -8542,7 +8634,12 @@ window.addEventListener('keydown', (e)=>{
     else if(busy) showKeyHint('⏳ Attendez la fin du déplacement avant de relancer (B)');
     else if(finished || rollsUsed>=rollsAllowed) showKeyHint('Partie terminée — C pour recommencer');
   }
-  else if(k==='c'){ resetBtn.click(); }
+  else if(k==='c'){
+    // jamais pendant le tirage des cartes : le pion partirait quand même
+    // pour une partie hors pochette (audit 23/09)
+    if(drawInProgress) showKeyHint('⏳ Attendez la fin du tirage avant de recommencer (C)');
+    else resetBtn.click();
+  }
   else if(k==='d'){
     const drawing = cardDrawOverlay && cardDrawOverlay.classList.contains('show');
     if(winBtn && !winBtn.hidden && !winBtn.disabled) winBtn.click();
@@ -8589,6 +8686,7 @@ if(window.PIKA_DEMO_JACKPOT){
     demoHint.classList.remove('show');
     restart();
     startGame();
+    forcedGame = true;   // démonstration : hors pochette et hors comptabilité
     const from = LAST - 4;
     currentIndex = from;
     placeTokenInstant(from);
@@ -8608,8 +8706,19 @@ if(window.PIKA_DEMO_JACKPOT){
 if(syncChannel && isDisplay){
   syncChannel.onmessage = (e)=>{
     const m = e.data || {};
-    if(m.type==='draw'){ topNum.textContent = m.draw.total; playCardDrawAnimation(m.draw); }
-    else if(m.type==='move') move(m.count, m.card);
+    if(m.type==='draw'){ topNum.textContent = m.draw.total; clearCelebration(); playCardDrawAnimation(m.draw); }
+    else if(m.type==='undo'){ clearCelebration(); stopStorm(); }
+    else if(m.type==='move'){
+      /* Les allures de marche sont tirées au hasard dans chaque fenêtre :
+         si le pion public n'a pas fini ou n'est pas sur la même case, on le
+         recale sur la case de départ de la régie avant de le faire marcher
+         (audit 23/09 : sinon il restait décalé pour toute la suite). */
+      if(m.from !== undefined && (moving || currentIndex !== m.from)){
+        generation++; moving = false; walk = null;
+        currentIndex = m.from; placeTokenInstant(m.from); setActive(m.from, false);
+      }
+      move(m.count, m.card);
+    }
     // locked:true — le lot remporté reste affiché sur l'écran public
     // exactement comme sur l'écran de l'animateur, jusqu'à RECOMMENCER
     // (qui arrive ici par le message 'restart'). Sans ce verrou, l'écran
@@ -8695,7 +8804,7 @@ function pushResult(catKey){
   renderResultsTicker();
 }
 let celebCtx = celebCanvas ? celebCanvas.getContext('2d') : null;
-let celebParticles = [], celebRockets = [], celebRAF = null, celebEndAt = 0, celebLocked = false;
+let celebParticles = [], celebRockets = [], celebEndAt = 0, celebLocked = false;
 // Compteur de génération : la carte Darkrai (jackpot300) affiche son
 // verdict après un délai (tremblement + éclats du plateau). Si entre
 // temps l'animateur relance une partie ou valide un autre lot, ce
@@ -9069,6 +9178,8 @@ function stopCelebLoop(){
 
 function clearCelebration(){
   celebGen++;
+  // C, B ou Annuler pendant le tirage du Lot Mystère : il s'arrête net
+  if(typeof mysteryToken !== 'undefined'){ mysteryToken++; if(mysteryOverlay) mysteryOverlay.classList.remove('show'); }
   stopCelebLoop();
   celebLocked = false;
   hypeGen++;
@@ -9140,8 +9251,15 @@ const mysteryOverlay = document.getElementById('mysteryOverlay');
 const mysteryCards = [document.getElementById('mysteryCard0'), document.getElementById('mysteryCard1')];
 const mysteryShade = document.getElementById('mysteryShade');
 const mysteryResult = document.getElementById('mysteryResult');
+let mysteryToken = 0;   // change à chaque clearCelebration : le tirage en cours s'arrête
 async function playMysteryReveal(sub){
   if(!mysteryOverlay || !mysteryCards[0] || !mysteryShade) return;
+  const tok = ++mysteryToken;
+  const wait = async ms => { await new Promise(r=>setTimeout(r, ms)); if(tok !== mysteryToken) throw 'mystere-interrompu'; };
+  try{ await playMysteryRevealInner(sub, wait); }
+  catch(e){ if(e !== 'mystere-interrompu') throw e; mysteryOverlay.classList.remove('show'); }
+}
+async function playMysteryRevealInner(sub, wait){
   const winIdx = sub === 'booster' ? 0 : 1;
   mysteryCards.forEach(c=>c.classList.remove('flipped','win','lose'));
   const img0 = mysteryCards[0].querySelector('img'), img1 = mysteryCards[1].querySelector('img');
