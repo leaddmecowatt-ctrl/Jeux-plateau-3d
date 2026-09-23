@@ -1369,21 +1369,9 @@ scene.add(fill);
 
 /* projecteurs de studio dorés aux quatre coins */
 function addFloodlight(x,z){
-  const glowTex = (function(){
-    const c = document.createElement('canvas'); c.width=c.height=128;
-    const g = c.getContext('2d');
-    const grad = g.createRadialGradient(64,64,0,64,64,64);
-    grad.addColorStop(0,'rgba(255,240,200,.9)');
-    grad.addColorStop(0.4,'rgba(255,210,120,.45)');
-    grad.addColorStop(1,'rgba(255,210,120,0)');
-    g.fillStyle = grad; g.fillRect(0,0,128,128);
-    return new THREE.CanvasTexture(c);
-  })();
-  const mat = new THREE.SpriteMaterial({map:glowTex,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,opacity:.6});
-  const glow = new THREE.Sprite(mat);
-  glow.position.set(x,4.6,z);
-  glow.scale.set(1.9,1.9,1.9);
-  scene.add(glow);
+  /* Halo du projecteur retiré à la demande de l'animateur : vu de biais,
+     ce grand disque additif tombait devant le plateau et faisait un
+     contre-jour. La lumière (PointLight) reste. */
   const pl = new THREE.PointLight(0xffe3ae, 0.32, 12, 2);
   pl.position.set(x,4.2,z);
   scene.add(pl);
@@ -1397,6 +1385,13 @@ function addFloodlight(x,z){
    directement sur les 4 côtés, jusqu'au contour réel des cases. */
 const boardGroup = new THREE.Group();
 scene.add(boardGroup);
+
+/* Points lumineux (loupiotes du pourtour, loupiotes qui tournent,
+   poussière dorée d'ambiance, halos sous les lots flottants) : retirés à
+   la demande de l'animateur — ils passaient devant le plateau et les
+   lots et faisaient un effet de contre-jour. Remettre à true pour les
+   retrouver. */
+const SHOW_GLOW_POINTS = false;
 
 /* points lumineux dorés qui tournent en continu autour du plateau,
    façon roue de jeu télévisé (en plus du liseré de loupiotes fixes) */
@@ -1428,6 +1423,7 @@ const perimeterPts = [];
     const spr = new THREE.Sprite(mat);
     spr.scale.set(0.26,0.26,0.26);
     spr.position.set(x,0.03,z);
+    spr.visible = SHOW_GLOW_POINTS;
     boardGroup.add(spr);
     trimLights.push({ spr, idx });
   });
@@ -1439,6 +1435,7 @@ for(let k=0;k<4;k++){
   const spr = makeSprite(brightGoldTex, 0.42);
   spr.material.blending = THREE.AdditiveBlending;
   spr.position.y = 0.04;
+  spr.visible = SHOW_GLOW_POINTS;
   boardGroup.add(spr);
   orbiterLights.push({ spr, offset:k/4 });
 }
@@ -2404,7 +2401,9 @@ for(let i=0;i<N_TILES;i++){
     group.add(shadowDisc);
 
     // halo doré supplémentaire sous les gros lots (plus intense = plus gros)
-    if(catDef.tier==='float'){
+    if(!SHOW_GLOW_POINTS){
+      // pas de halo derrière les lots flottants (contre-jour)
+    } else if(catDef.tier==='float'){
       const glowScale = { gradee:0.58, booster50:0.72, etb:0.86, jackpot300:1.05 }[catKey] || 0.58;
       const glow = new THREE.Sprite(new THREE.SpriteMaterial({
         map:goldDotTex, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.55
@@ -5618,7 +5617,7 @@ let ambientSparkleTimer = 0;
 function updateAmbientSparkles(dt){
   // mode éco : pas d'étincelles d'ambiance en continu (décoration pure,
   // et chaque étincelle est un sprite transparent de plus à dessiner)
-  if(reduceMotion || ecoMode) return;
+  if(reduceMotion || ecoMode || !SHOW_GLOW_POINTS) return;
   ambientSparkleTimer -= dt;
   if(ambientSparkleTimer <= 0){
     ambientSparkleTimer = 0.28 + Math.random()*0.35;
@@ -5775,10 +5774,10 @@ function frameStep(dt, t){
   updateAmbientSparkles(dt);
 
   // en mode éco les loupiotes sont masquées : inutile de les animer
-  if(!ecoMode) trimLights.forEach(tl=>{
+  if(!ecoMode && SHOW_GLOW_POINTS) trimLights.forEach(tl=>{
     tl.spr.material.opacity = reduceMotion ? 0.5 : 0.28 + 0.45*Math.max(0, Math.sin(t*2.2 - tl.idx*0.5));
   });
-  if(!reduceMotion && !ecoMode){
+  if(!reduceMotion && !ecoMode && SHOW_GLOW_POINTS){
     orbiterLights.forEach(ol=>{
       const u = (t*0.06 + ol.offset) % 1;
       const [x,z] = perimeterPosAt(u);
@@ -6257,8 +6256,8 @@ function setEcoMode(on){
   // La classe « eco » coupe aussi la décoration COTÉ PAGE (voir la CSS) :
   // le coût d'une page n'est pas seulement celui de la scène 3D.
   document.documentElement.classList.toggle('eco', on);
-  trimLights.forEach(tl=>{ tl.spr.visible = !on; });
-  orbiterLights.forEach(ol=>{ ol.spr.visible = !on; });
+  trimLights.forEach(tl=>{ tl.spr.visible = !on && SHOW_GLOW_POINTS; });
+  orbiterLights.forEach(ol=>{ ol.spr.visible = !on && SHOW_GLOW_POINTS; });
   // 40 disques d'ombre sous les lots flottants : transparents, donc
   // triés et dessinés à chaque image. Sans ombres portées (coupées
   // juste au-dessus), ils n'ont de toute façon plus de sens.
