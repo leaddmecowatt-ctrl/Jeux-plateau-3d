@@ -4294,8 +4294,9 @@ function luffyEllipsoid(part, c, rx, ry, rz, seg, ring, col, deform){
     for(let s=0;s<=seg;s++){
       const ph = s/seg*Math.PI*2;
       const d = new THREE.Vector3(-Math.cos(ph)*Math.sin(th), Math.cos(th), Math.sin(ph)*Math.sin(th));
-      const k = deform ? deform(d) : 1;
-      luffyPush(part, new THREE.Vector3(c.x + d.x*rx*k, c.y + d.y*ry*k, c.z + d.z*rz*k), col, [s/seg, 1 - r/ring]);
+      const k = deform ? deform(d) : 1;   // facteur commun, ou {x,y,z} par axe
+      const kx = typeof k === 'number' ? k : k.x, ky = typeof k === 'number' ? k : k.y, kz = typeof k === 'number' ? k : k.z;
+      luffyPush(part, new THREE.Vector3(c.x + d.x*rx*kx, c.y + d.y*ry*ky, c.z + d.z*rz*kz), col, [s/seg, 1 - r/ring]);
     }
   }
   for(let r=0;r<ring;r++) for(let s=0;s<seg;s++){
@@ -4385,17 +4386,18 @@ function drawLuffyFace(mode){
      pupille noire et deux reflets. Première version : yeux écartés, blanc
      immense, pupille minuscule — un regard fixe qui faisait peur. */
   const eye = (s)=>{
-    const cx = U(s*0.041), cy = Y(0.482);
+    // référence : yeux bien séparés (un œil de large entre les deux)
+    const cx = U(s*0.052), cy = Y(0.492);
     if(mode === 'ouvert'){
       x.fillStyle = '#ffffff'; x.strokeStyle = ink; x.lineWidth = 9;
-      x.beginPath(); x.ellipse(cx, cy, 44, 52, 0, 0, Math.PI*2); x.fill(); x.stroke();
-      x.fillStyle = ink; x.beginPath(); x.ellipse(cx - s*3, cy + 6, 27, 33, 0, 0, Math.PI*2); x.fill();
+      x.beginPath(); x.ellipse(cx, cy, 50, 52, 0, 0, Math.PI*2); x.fill(); x.stroke();
+      x.fillStyle = ink; x.beginPath(); x.ellipse(cx - s*3, cy + 4, 24, 28, 0, 0, Math.PI*2); x.fill();
       x.fillStyle = '#ffffff';
       x.beginPath(); x.ellipse(cx - s*3 - 10, cy - 6, 10, 11, 0, 0, Math.PI*2); x.fill();
       x.beginPath(); x.ellipse(cx - s*3 + 9, cy + 17, 4.5, 5, 0, 0, Math.PI*2); x.fill();
       // paupière du haut, trait épais qui déborde vers l'extérieur
       x.lineWidth = 14;
-      x.beginPath(); x.ellipse(cx, cy, 44, 52, 0, Math.PI*1.08, Math.PI*1.92); x.stroke();
+      x.beginPath(); x.ellipse(cx, cy, 50, 52, 0, Math.PI*1.08, Math.PI*1.92); x.stroke();
     } else if(mode === 'ferme'){
       x.strokeStyle = ink; x.lineWidth = 12;
       x.beginPath(); x.moveTo(cx-44, cy+6); x.quadraticCurveTo(cx, cy+24, cx+44, cy+6); x.stroke();
@@ -4403,22 +4405,26 @@ function drawLuffyFace(mode){
       x.strokeStyle = ink; x.lineWidth = 13;
       x.beginPath(); x.moveTo(cx-44, cy+14); x.quadraticCurveTo(cx, cy-30, cx+44, cy+14); x.stroke();
     }
-    // sourcil : court, épais, légèrement relevé — décidé, pas menaçant
+    /* sourcil : épais, froncé vers le nez comme sur la référence (le bout
+       intérieur descend) — l'air décidé de Luffy. s > 0 : l'intérieur est
+       du côté des u décroissants. */
     x.fillStyle = ink;
+    const ins = cx - s*48, ext = cx + s*50;
     x.beginPath();
-    x.moveTo(cx - s*44, cy - 72); x.quadraticCurveTo(cx - s*4, cy - 96, cx + s*42, cy - 84);
-    x.lineTo(cx + s*40, cy - 72); x.quadraticCurveTo(cx - s*4, cy - 80, cx - s*42, cy - 60); x.closePath(); x.fill();
+    x.moveTo(ins, cy - 46); x.quadraticCurveTo(cx, cy - 72, ext, cy - 80);
+    x.lineTo(ext, cy - 60); x.quadraticCurveTo(cx, cy - 52, ins, cy - 26); x.closePath(); x.fill();
   };
   eye(-1); eye(1);
   // nez : petit trait
   x.strokeStyle = '#c08a6c'; x.lineWidth = 6;
-  x.beginPath(); x.moveTo(U(0.003), Y(0.54)); x.lineTo(U(-0.002), Y(0.562)); x.stroke();
+  x.beginPath(); x.moveTo(U(0.003), Y(0.545)); x.quadraticCurveTo(U(-0.004), Y(0.56), U(0.001), Y(0.57)); x.stroke();
   // grand sourire ouvert (D couché), rangée de dents, langue rose
-  const mx = U(0), my = Y(0.598), mw = mode === 'rire' ? 94 : 82, mh = mode === 'rire' ? 80 : 66;
+  // bouche immense, comme sur la référence : presque la largeur des deux yeux
+  const mx = U(0), my = Y(0.598), mw = mode === 'rire' ? 138 : 128, mh = mode === 'rire' ? 118 : 106;
   const bouche = ()=>{ x.beginPath(); x.moveTo(mx - mw, my); x.quadraticCurveTo(mx, my - 10, mx + mw, my);
     x.quadraticCurveTo(mx + mw*0.86, my + mh, mx, my + mh); x.quadraticCurveTo(mx - mw*0.86, my + mh, mx - mw, my); x.closePath(); };
   x.save(); bouche(); x.fillStyle = '#8c2a33'; x.fill(); x.clip();
-  x.fillStyle = '#ffffff'; x.fillRect(mx - mw, my - 14, mw*2, 30);
+  x.fillStyle = '#ffffff'; x.fillRect(mx - mw, my - 14, mw*2, 34);
   x.fillStyle = '#f59aa3'; x.beginPath(); x.ellipse(mx, my + mh*0.98, mw*0.66, mh*0.52, 0, 0, Math.PI*2); x.fill();
   x.restore();
   x.strokeStyle = ink; x.lineWidth = 9; bouche(); x.stroke();
@@ -4426,7 +4432,7 @@ function drawLuffyFace(mode){
   x.lineWidth = 6;
   for(const sgn of [-1,1]){ x.beginPath(); x.moveTo(mx + sgn*(mw+4), my - 12); x.quadraticCurveTo(mx + sgn*(mw+14), my, mx + sgn*(mw+6), my + 12); x.stroke(); }
   // cicatrice sous l'œil gauche : trait arqué et deux points de couture
-  const sx = U(0.049), sy = Y(0.548);
+  const sx = U(0.058), sy = Y(0.556);
   x.strokeStyle = '#8c3b35'; x.lineWidth = 7;
   x.beginPath(); x.moveTo(sx - 34, sy - 6); x.quadraticCurveTo(sx, sy + 10, sx + 34, sy - 8); x.stroke();
   x.lineWidth = 6;
@@ -4498,12 +4504,20 @@ function buildLuffy(model, pivot){
   // ---------------- tête ----------------
   const HC = v3(0, 0.715, -0.02);
   const head = P('visage', ['Head']);
-  luffyEllipsoid(head, HC, 0.248, 0.232, 0.218, 64, 40, white, d=>{
-    // joues pleines, menton rond, crâne un peu plus large
-    let k = 1;
-    if(d.y < -0.2) k *= 1 - 0.10*Math.pow(-d.y - 0.2, 1.3);
-    if(d.z > 0.3 && d.y < 0.1 && d.y > -0.6) k *= 1 + 0.035*Math.sin((d.y+0.6)/0.7*Math.PI);
-    return k;
+  /* Forme d'après la référence de l'animateur (Luffy chibi) : crâne rond et
+     large, pommettes pleines, puis le bas du visage s'affine en V arrondi
+     jusqu'à un petit menton porté vers l'avant. Première version : une
+     boule presque ronde, plus large que haute — un visage « carré ». */
+  luffyEllipsoid(head, HC, 0.25, 0.232, 0.22, 64, 40, white, d=>{
+    const b = Math.max(0, -d.y);                 // 0 à l'équateur, 1 au menton
+    // pommettes : un léger renflement juste sous les yeux, sur les côtés
+    const joue = 1 + 0.035*Math.sin(Math.min(1, b/0.5)*Math.PI)*Math.min(1, Math.abs(d.x)*1.6);
+    const v = Math.pow(b, 1.5);
+    return {
+      x: (1 - 0.33*v)*joue,                      // mâchoire en V
+      y: 1 + 0.10*v,                             // menton un peu plus bas
+      z: (1 - 0.16*v)*(d.z > 0 ? 1 + 0.10*v : 1 - 0.1*v),   // menton porté vers l'avant
+    };
   });
   const ears = P('peau', ['Head']);
   for(const s of [-1,1]) luffyEllipsoid(ears, v3(s*0.245, 0.70, -0.02), 0.028, 0.048, 0.036, 16, 10, white);
@@ -4518,7 +4532,7 @@ function buildLuffy(model, pivot){
     luffyTube(hair, [ {p:b0.clone().addScaledVector(out, -0.03), r:rad}, {p:b0, r:rad*0.95}, {p:mid, r:rad*0.55}, {p:tip, r:0.002} ], 7, white, { capStart:true });
   };
   // calotte (couvre le crâne sous le chapeau)
-  luffyEllipsoid(hair, HC.clone().add(v3(0, 0.022, -0.012)), 0.256, 0.236, 0.228, 40, 24, white, d=> (d.z < -0.05 && d.y > -0.78) ? 1.025 : (d.y > -0.05 ? 1 : 0.9));   // tout l'arrière du crâne, jusqu'à la nuque
+  luffyEllipsoid(hair, HC.clone().add(v3(0, 0.022, -0.012)), 0.256, 0.236, 0.228, 40, 24, white, d=> (d.z < -0.05 && d.y > -0.78) ? 1.025 : ((d.y > -0.05 && !(d.z > 0.6 && d.y < 0.36)) ? 1 : 0.9));   // tout l'arrière du crâne, jusqu'à la nuque ; sur le front la lisière remonte pour dégager les sourcils (la frange retombe par-dessus)
   // mèches de côté et de nuque, sous l'aile du chapeau
   for(let i=0;i<34;i++){
     const a = Math.PI*0.28 + (i/34)*Math.PI*1.44 + (rnd()-0.5)*0.12;       // du côté gauche au côté droit, par l'arrière
