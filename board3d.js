@@ -341,164 +341,269 @@ function drawFittedBandLabel(ctx, text, cx, cy, maxWidth, maxFont, minFont){
    boosters 8€, alternatives) pour ne pas surcharger le plateau. */
 let _maxAniso = 8;
 function getMaxAniso(){ return renderer ? renderer.capabilities.getMaxAnisotropy() : _maxAniso; }
+/* ==========================================================================
+   CASES « CARTE COLLECTOR » (23/09, cahier des charges de l'animateur)
+   --------------------------------------------------------------------------
+   Toutes les cases partagent la même structure, sobre et premium :
+     socle bleu nuit profond · bordure en feuille d'or · filet intérieur ·
+     fenêtre ivoire où la photo du lot est LA vedette · filet d'accent avec
+     une gemme · nom du lot en lettres dorées.
+   Les couleurs ne remplissent plus rien : elles ne sont plus que des
+   accents (le filet et la gemme). Les produits photographiés sur fond
+   blanc sont posés en « produit » (mode multiplication) : le blanc se fond
+   dans l'ivoire, c'est un détourage propre sans aucun fichier en plus.
+   Une case = une photo. Les cartes photo qui flottaient au-dessus des gros
+   lots, doublons de la photo de la case, sont retirées.
+   ========================================================================== */
+const CASE_NAVY_HAUT = '#18234f', CASE_NAVY_BAS = '#0a1027';
+const CASE_IVOIRE = '#f6efdc', CASE_TEXTE = '#f7e6b2';
+/* Langage des accents : lots = or, Chance = violet, Caisse = vert,
+   cases spéciales = bleu, événements = rouge. */
+const CASE_ACCENT = {
+  jackpot300:'#e9c34a', etb:'#e9c34a', booster50:'#e9c34a', gradee:'#e9c34a', booster8:'#e9c34a',
+  chance:'#a46cf0', chest:'#36bf70', commune:'#4a8cf0', alternative:'#4a8cf0', depart:'#4a8cf0', prison:'#e0413f',
+};
+function caseAccent(catKey){ return CASE_ACCENT[catKey] || GOLD; }
+function goldLeafStroke(ctx, x0, y0, x1, y1){
+  const g = ctx.createLinearGradient(x0, y0, x1, y1);
+  g.addColorStop(0.00,'#fff3b8'); g.addColorStop(0.22,'#e9c34a'); g.addColorStop(0.48,'#9b7426');
+  g.addColorStop(0.70,'#f6d97c'); g.addColorStop(1.00,'#b88a2c');
+  return g;
+}
+/* Socle commun : bleu nuit en dégradé, lueur haute, bordure feuille d'or,
+   filet intérieur, léger vernis en haut et assombrissement en bas (relief). */
+function drawCaseBase(ctx, size){
+  const r = size*0.13;
+  ctx.save();
+  roundRectPath(ctx, 10, 10, size-20, size-20, r); ctx.clip();
+  const g = ctx.createLinearGradient(0, 0, 0, size);
+  g.addColorStop(0, CASE_NAVY_HAUT); g.addColorStop(1, CASE_NAVY_BAS);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, size, size);
+  const lu = ctx.createRadialGradient(size*0.5, size*0.22, 10, size*0.5, size*0.3, size*0.75);
+  lu.addColorStop(0, 'rgba(140,165,255,.16)'); lu.addColorStop(1, 'rgba(140,165,255,0)');
+  ctx.fillStyle = lu; ctx.fillRect(0, 0, size, size);
+  ctx.restore();
+  roundRectPath(ctx, 12, 12, size-24, size-24, r);
+  ctx.lineWidth = 18; ctx.strokeStyle = goldLeafStroke(ctx, 0, 0, size, size); ctx.stroke();
+  roundRectPath(ctx, 34, 34, size-68, size-68, r*0.8);
+  ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(233,195,74,.75)'; ctx.stroke();
+}
+function caseVernis(ctx, size){
+  const r = size*0.13;
+  ctx.save(); roundRectPath(ctx, 10, 10, size-20, size-20, r); ctx.clip();
+  const v = ctx.createLinearGradient(0, 0, 0, size);
+  v.addColorStop(0, 'rgba(255,255,255,.07)'); v.addColorStop(0.25, 'rgba(255,255,255,0)');
+  v.addColorStop(0.8, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.18)');
+  ctx.fillStyle = v; ctx.fillRect(0, 0, size, size);
+  ctx.restore();
+}
+const _fondBlanc = new Map();
+function photoSurFondBlanc(img){
+  if(_fondBlanc.has(img)) return _fondBlanc.get(img);
+  const c = document.createElement('canvas'); c.width = c.height = 8;
+  const x = c.getContext('2d'); x.drawImage(img, 0, 0, 8, 8);
+  const d = x.getImageData(0, 0, 8, 8).data;
+  let clair = 0;
+  for(const [px, py] of [[0,0],[7,0],[0,7],[7,7]]){ const i = (py*8+px)*4; if(d[i]+d[i+1]+d[i+2] > 3*222) clair++; }
+  const v = clair >= 3; _fondBlanc.set(img, v); return v;
+}
+/* Fenêtre photo : passe-partout ivoire, photo « contain » à taille
+   homogène, filet d'or, ombre intérieure (la photo est EN RETRAIT). */
+function drawPhotoWindow(ctx, img, x, y, w, h, rad){
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 22; ctx.shadowOffsetY = 6;
+  roundRectPath(ctx, x, y, w, h, rad); ctx.fillStyle = CASE_IVOIRE; ctx.fill();
+  ctx.restore();
+  ctx.save();
+  roundRectPath(ctx, x, y, w, h, rad); ctx.clip();
+  const pm = ctx.createRadialGradient(x+w/2, y+h*0.45, 10, x+w/2, y+h/2, Math.max(w,h)*0.7);
+  pm.addColorStop(0, '#fbf6e8'); pm.addColorStop(1, '#e8dcbc');
+  ctx.fillStyle = pm; ctx.fillRect(x, y, w, h);
+  if(img){
+    const pad = Math.min(w, h)*0.035, bw = w - pad*2, bh = h - pad*2;
+    const sc = Math.min(bw/img.width, bh/img.height);
+    const iw = img.width*sc, ih = img.height*sc, ix = x + (w-iw)/2, iy = y + (h-ih)/2;
+    if(photoSurFondBlanc(img)){
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.filter = 'saturate(1.12) contrast(1.05)';
+      ctx.drawImage(img, ix, iy, iw, ih);
+    } else {
+      ctx.shadowColor = 'rgba(40,25,0,.35)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 4;
+      ctx.filter = 'saturate(1.12) contrast(1.05)';
+      ctx.drawImage(img, ix, iy, iw, ih);
+      ctx.shadowColor = 'transparent'; ctx.filter = 'none';
+      ctx.strokeStyle = 'rgba(155,116,38,.8)'; ctx.lineWidth = 3; ctx.strokeRect(ix, iy, iw, ih);
+    }
+    ctx.globalCompositeOperation = 'source-over'; ctx.filter = 'none';
+  }
+  // ombre intérieure en bord de fenêtre
+  ctx.shadowColor = 'rgba(60,40,5,.45)'; ctx.shadowBlur = 18;
+  roundRectPath(ctx, x-8, y-8, w+16, h+16, rad+8); ctx.lineWidth = 16; ctx.strokeStyle = 'rgba(0,0,0,.001)'; ctx.stroke();
+  ctx.restore();
+  roundRectPath(ctx, x, y, w, h, rad);
+  ctx.lineWidth = 5; ctx.strokeStyle = goldLeafStroke(ctx, x, y, x+w, y+h); ctx.stroke();
+}
+function drawGem(ctx, cx, cy, r, col){
+  ctx.save();
+  ctx.beginPath(); ctx.moveTo(cx, cy-r); ctx.lineTo(cx+r*0.8, cy); ctx.lineTo(cx, cy+r); ctx.lineTo(cx-r*0.8, cy); ctx.closePath();
+  const g = ctx.createLinearGradient(cx-r, cy-r, cx+r, cy+r);
+  g.addColorStop(0, shadeHex(col, 0.45)); g.addColorStop(0.5, col); g.addColorStop(1, shadeHex(col, -0.45));
+  ctx.fillStyle = g; ctx.fill();
+  ctx.lineWidth = 3; ctx.strokeStyle = '#f6d97c'; ctx.stroke();
+  ctx.restore();
+}
+/* Filet d'accent + gemme, puis nom du lot en or clair. */
+function drawNameBlock(ctx, size, label, accent, y0, y1, dark){
+  const cx = size/2;
+  ctx.save();
+  const ly = y0 + 10;
+  const lg = ctx.createLinearGradient(size*0.18, 0, size*0.82, 0);
+  lg.addColorStop(0, 'rgba(0,0,0,0)'); lg.addColorStop(0.2, accent); lg.addColorStop(0.8, accent); lg.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = lg; ctx.fillRect(size*0.18, ly-3, size*0.64, 6);
+  drawGem(ctx, cx, ly, 17, accent);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const ty = (ly + 24 + y1)/2;
+  ctx.fillStyle = dark ? CASE_NAVY_HAUT : CASE_TEXTE;
+  if(!dark){ ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = 10; ctx.shadowOffsetY = 3; }
+  drawFittedSerif(ctx, label, cx, ty, size*0.80, size*0.090, size*0.056, y1 - ly - 30);
+  ctx.restore();
+}
+/* Titre en capitales à empattements, sur une ou deux lignes. */
+function drawFittedSerif(ctx, text, cx, cy, maxW, maxF, minF, maxH){
+  const fam = 'Georgia,"Times New Roman",serif';
+  text = text.toUpperCase();
+  const fits = (t, f)=>{ ctx.font = '700 '+f+'px '+fam; return ctx.measureText(t).width <= maxW; };
+  for(let f = maxF; f >= minF; f -= 2){ if(fits(text, f)){ ctx.font = '700 '+f+'px '+fam; ctx.fillText(text, cx, cy); return; } }
+  const w = text.split(' ');
+  let best = 1, diff = 1e9;
+  for(let i=1;i<w.length;i++){ const d = Math.abs(w.slice(0,i).join(' ').length - w.slice(i).join(' ').length); if(d < diff){ diff = d; best = i; } }
+  const l1 = w.slice(0,best).join(' '), l2 = w.slice(best).join(' ');
+  let f = Math.min(maxF, maxH ? maxH/2.2 : maxF);
+  while(f > minF*0.7 && !(fits(l1, f) && fits(l2, f))) f -= 1.5;
+  ctx.font = '700 '+f+'px '+fam;
+  ctx.fillText(l1, cx, cy - f*0.56); ctx.fillText(l2, cx, cy + f*0.56);
+}
+/* Médaillon des cases sans photo (Chance, Caisse, Prison, visite). */
+function drawMedallion(ctx, x, y, w, h, rad, kind, accent){
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 22; ctx.shadowOffsetY = 6;
+  roundRectPath(ctx, x, y, w, h, rad); ctx.fillStyle = '#0b1334'; ctx.fill();
+  ctx.restore();
+  ctx.save(); roundRectPath(ctx, x, y, w, h, rad); ctx.clip();
+  const gl = ctx.createRadialGradient(x+w/2, y+h/2, 10, x+w/2, y+h/2, Math.max(w,h)*0.6);
+  gl.addColorStop(0, shadeHex(accent, -0.35) + ''); gl.addColorStop(1, '#0b1334');
+  ctx.globalAlpha = 0.7; ctx.fillStyle = gl; ctx.fillRect(x, y, w, h); ctx.globalAlpha = 1;
+  ctx.restore();
+  const cx = x+w/2, cy = y+h/2, R = Math.min(w,h)*0.34;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI*2);
+  const mg = ctx.createRadialGradient(cx - R*0.3, cy - R*0.35, R*0.1, cx, cy, R);
+  mg.addColorStop(0, shadeHex(accent, 0.35)); mg.addColorStop(0.7, accent); mg.addColorStop(1, shadeHex(accent, -0.5));
+  ctx.fillStyle = mg; ctx.shadowColor = accent; ctx.shadowBlur = 30; ctx.fill();
+  ctx.shadowBlur = 0; ctx.lineWidth = 9; ctx.strokeStyle = goldLeafStroke(ctx, cx-R, cy-R, cx+R, cy+R); ctx.stroke();
+  ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 10;
+  if(kind === 'chance'){
+    ctx.fillStyle = CASE_IVOIRE; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '700 '+(R*1.35)+'px Georgia,serif'; ctx.fillText('?', cx, cy + R*0.06);
+  } else {
+    drawVectorIcon(ctx, { chest:'gift', prison:'lock', visite:'unlock' }[kind] || 'gift', cx, cy, R*0.52, CASE_IVOIRE);
+  }
+  ctx.restore();
+  roundRectPath(ctx, x, y, w, h, rad);
+  ctx.lineWidth = 5; ctx.strokeStyle = goldLeafStroke(ctx, x, y, x+w, y+h); ctx.stroke();
+}
+const WIN = { x:66, y:58, w:828, h:660, r:34 };
+const NAME_Y0 = 736, NAME_Y1 = 908;
 const flatFaceCache = new Map();
+const SHOW_FLOAT_PHOTOS = false;
 function getFlatPhotoFace(catKey, accentColor, badge){
-  // Clé de cache SANS le numéro de case : le rendu ne dépend que de
-  // la catégorie/couleur/badge, jamais du numéro affiché à côté (qui
-  // est un sprite séparé) — sinon chacune des 40 cases générait sa
-  // propre texture 960×960 au lieu de partager les ~8 variantes
-  // réelles, ce qui pouvait saturer la mémoire GPU sur mobile et
-  // faire clignoter des cases en noir le temps qu'une texture évincée
-  // soit rechargée.
   const key = catKey+'|'+badge;
   if(flatFaceCache.has(key)) return flatFaceCache.get(key);
   const size = 960;
-  const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
+  const cvs = document.createElement('canvas'); cvs.width = cvs.height = size;
   const ctx = cvs.getContext('2d');
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  const r = size*0.16;
-
-  ctx.save();
-  roundRectPath(ctx,9,9,size-18,size-18,r); ctx.clip();
-  ctx.fillStyle = '#0c0c0c'; ctx.fillRect(0,0,size,size);
-
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  drawCaseBase(ctx, size);
+  const accent = caseAccent(catKey);
   const img = LOT_IMAGES[catKey];
-  if(img){
-    const pad = size*0.028;
-    const bw = size-2*pad, bh = size-2*pad-size*0.19;
-
-    // Fond en dégradé dans la couleur d'accent de la catégorie (déjà
-    // utilisée pour la bordure de la case) : évite les bandes noires
-    // sur les côtés (carte plus étroite que la case) sans jamais
-    // rogner la carte elle-même au premier plan, et reste cohérent
-    // avec le code couleur déjà en place plutôt qu'un flou terne.
-    const bgGrad = ctx.createRadialGradient(
-      pad+bw/2, pad+bh*0.42, bh*0.05,
-      pad+bw/2, pad+bh/2, bh*0.75
-    );
-    bgGrad.addColorStop(0, shadeHex(accentColor, 0.4));
-    bgGrad.addColorStop(0.55, accentColor);
-    bgGrad.addColorStop(1, shadeHex(accentColor, -0.55));
-    ctx.save();
-    roundRectPath(ctx, pad, pad, bw, bh, r*0.7); ctx.clip();
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(pad, pad, bw, bh);
-    ctx.restore();
-
-    // "contain" fit (jamais "cover") : on voit toujours la carte/l'objet
-    // en entier, jamais coupé en haut ou en bas, tout en remplissant
-    // au maximum la case (zoom optimal sans rognage).
-    const scale = Math.min(bw/img.width, bh/img.height);
-    const iw = img.width*scale, ih = img.height*scale;
-    ctx.filter = 'saturate(1.14) contrast(1.07) brightness(1.06)';
-    ctx.drawImage(img, pad+(bw-iw)/2, pad+(bh-ih)/2, iw, ih);
-    ctx.filter = 'none';
-  } else if(CATS[catKey] && CATS[catKey].tier === 'glyph'){
-    // Chance / Caisse Communautaire / Prison n'ont pas de photo, mais
-    // ne doivent plus rester une case plate noire : même fond dégradé
-    // coloré que les lots, avec le symbole en grand au centre.
-    const pad = size*0.028;
-    const bw = size-2*pad, bh = size-2*pad-size*0.19;
-    const bgGrad = ctx.createRadialGradient(
-      pad+bw/2, pad+bh*0.42, bh*0.05,
-      pad+bw/2, pad+bh/2, bh*0.75
-    );
-    bgGrad.addColorStop(0, shadeHex(accentColor, 0.4));
-    bgGrad.addColorStop(0.55, accentColor);
-    bgGrad.addColorStop(1, shadeHex(accentColor, -0.55));
-    ctx.save();
-    roundRectPath(ctx, pad, pad, bw, bh, r*0.7); ctx.clip();
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(pad, pad, bw, bh);
-    ctx.restore();
-
-    ctx.save();
-    ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = size*0.03;
-    if(catKey==='chance'){
-      ctx.fillStyle = '#fff9e6';
-      ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.font = '900 '+(bh*0.6)+'px Arial,Helvetica,sans-serif';
-      ctx.fillText('?', pad+bw/2, pad+bh*0.46);
-    } else {
-      const glyphKind = { chest:'gift', prison:'lock' }[catKey];
-      drawVectorIcon(ctx, glyphKind, pad+bw/2, pad+bh*0.46, bh*0.28, '#fff9e6');
-    }
-    ctx.restore();
-  }
-  const gloss = ctx.createLinearGradient(0,0,0,size);
-  gloss.addColorStop(0,'rgba(255,255,255,.06)'); gloss.addColorStop(.22,'rgba(255,255,255,0)');
-  ctx.fillStyle = gloss; ctx.fillRect(0,0,size,size);
-  ctx.restore();
-
-  /* Filet de feuille d'or tout autour de la case, PUIS le liseré de
-     couleur de la catégorie juste à l'intérieur (22/09). Avant, le bord
-     était la seule couleur d'accent : deux cases voisines se touchaient
-     couleur contre couleur et, sur les communes (bronze), se fondaient
-     dans l'or du plateau. Le filet doré sépare chaque case de sa voisine
-     comme sur un plateau de luxe ; le dégradé clair/sombre en diagonale
-     imite le reflet d'une vraie feuille d'or. */
-  const leaf = ctx.createLinearGradient(0,0,size,size);
-  leaf.addColorStop(0.00,'#fff3b8'); leaf.addColorStop(0.28,GOLD);
-  leaf.addColorStop(0.52,'#9b7426'); leaf.addColorStop(0.76,'#f6d97c');
-  leaf.addColorStop(1.00,'#b88a2c');
-  roundRectPath(ctx,12,12,size-24,size-24,r);
-  ctx.lineWidth = 24; ctx.strokeStyle = leaf; ctx.stroke();
-  roundRectPath(ctx,28,28,size-56,size-56,r*0.9);
-  ctx.shadowColor = accentColor; ctx.shadowBlur = size*0.03;
-  ctx.lineWidth = 9; ctx.strokeStyle = accentColor; ctx.stroke();
-  ctx.shadowBlur = 0;
-  roundRectPath(ctx,34,34,size-68,size-68,r*0.85);
-  ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.stroke();
-
-  // bandeau nom du lot en bas (jamais le prix)
-  const bandH = size*0.22;
-  ctx.fillStyle = accentColor;
-  roundRectPath(ctx,9,size-9-bandH,size-18,bandH,r*0.7); ctx.fill();
-  ctx.fillStyle = '#0c0c0c'; ctx.globalAlpha=.28;
-  roundRectPath(ctx,9,size-9-bandH,size-18,bandH,r*0.7); ctx.fill(); ctx.globalAlpha=1;
-  ctx.fillStyle = '#fff9e6';
-  ctx.textAlign='center'; ctx.textBaseline='middle';
-  drawFittedBandLabel(ctx, CATS[catKey].label, size/2, size-9-bandH/2+2, size-18-size*0.06, size*0.088, size*0.045);
-
+  if(img) drawPhotoWindow(ctx, img, WIN.x, WIN.y, WIN.w, WIN.h, WIN.r);
+  else drawMedallion(ctx, WIN.x, WIN.y, WIN.w, WIN.h, WIN.r, catKey, accent);
   if(badge){
-    drawVectorIcon(ctx, 'unlock', 16+size*0.075, 16+size*0.075, size*0.075, '#fff9e6');
+    // « simple visite » : petit cadenas ouvert en coin de fenêtre
+    ctx.save(); ctx.beginPath(); ctx.arc(WIN.x+70, WIN.y+70, 50, 0, Math.PI*2);
+    ctx.fillStyle = '#0b1334'; ctx.fill(); ctx.lineWidth = 5; ctx.strokeStyle = '#e9c34a'; ctx.stroke();
+    drawVectorIcon(ctx, 'unlock', WIN.x+70, WIN.y+70, 26, CASE_IVOIRE); ctx.restore();
   }
-
+  drawNameBlock(ctx, size, badge ? 'Simple visite' : CATS[catKey].label, accent, NAME_Y0, NAME_Y1);
+  caseVernis(ctx, size);
   const tex = new THREE.CanvasTexture(cvs);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = getMaxAniso();
-  flatFaceCache.set(key,tex);
+  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = getMaxAniso();
+  flatFaceCache.set(key, tex);
   return tex;
 }
 
-/* Face d'une case d'angle : la face normale tournée de `ang` (radians,
-   repère du canvas), réduite pour tenir en losange, sur un fond flouté de
-   la même image et sous un filet de feuille d'or. */
-function getDiagonalFace(src, ang){
-  const img = src && src.image; if(!img) return src;
-  const size = img.width || 960;
+/* Case d'angle en BILLET : un seul billet collector, incliné à 45° vers
+   l'angle extérieur, qui porte l'UNIQUE photo du lot et son nom. Sous le
+   billet : le socle commun, nu — aucune autre photo, aucune copie. */
+function ticketPath(ctx, w, h, rad, ny, nr){
+  ctx.beginPath();
+  ctx.moveTo(rad, 0); ctx.lineTo(w-rad, 0); ctx.arcTo(w, 0, w, rad, rad);
+  ctx.lineTo(w, ny-nr); ctx.arc(w, ny, nr, -Math.PI/2, Math.PI/2, true);
+  ctx.lineTo(w, h-rad); ctx.arcTo(w, h, w-rad, h, rad);
+  ctx.lineTo(rad, h); ctx.arcTo(0, h, 0, h-rad, rad);
+  ctx.lineTo(0, ny+nr); ctx.arc(0, ny, nr, Math.PI/2, -Math.PI/2, true);
+  ctx.lineTo(0, rad); ctx.arcTo(0, 0, rad, 0, rad);
+  ctx.closePath();
+}
+function getTicketFace(catKey, ang){
+  const size = 960;
   const cvs = document.createElement('canvas'); cvs.width = cvs.height = size;
   const ctx = cvs.getContext('2d');
-  const r = size*0.16;
-  ctx.save();
-  roundRectPath(ctx, 9, 9, size-18, size-18, r); ctx.clip();
-  ctx.filter = 'blur(26px) brightness(0.62) saturate(1.2)';
-  ctx.drawImage(img, -size*0.1, -size*0.1, size*1.2, size*1.2);
-  ctx.filter = 'none';
-  ctx.translate(size/2, size/2); ctx.rotate(ang);
-  const k = 0.80;
-  ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = size*0.03;
-  ctx.drawImage(img, -size*k/2, -size*k/2, size*k, size*k);
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  drawCaseBase(ctx, size);
+  // étoiles d'or très discrètes sur le socle, visibles autour du billet
+  ctx.save(); roundRectPath(ctx, 40, 40, size-80, size-80, size*0.1); ctx.clip();
+  ctx.fillStyle = 'rgba(233,195,74,.22)';
+  for(let k=0;k<26;k++){ const a = k*2.399, rr = 120 + (k*37)%330; ctx.beginPath(); ctx.arc(size/2 + Math.cos(a)*rr, size/2 + Math.sin(a)*rr, 3 + (k%3), 0, Math.PI*2); ctx.fill(); }
   ctx.restore();
-  const leaf = ctx.createLinearGradient(0, 0, size, size);
-  leaf.addColorStop(0.00,'#fff3b8'); leaf.addColorStop(0.28,GOLD);
-  leaf.addColorStop(0.52,'#9b7426'); leaf.addColorStop(0.76,'#f6d97c'); leaf.addColorStop(1.00,'#b88a2c');
-  roundRectPath(ctx, 12, 12, size-24, size-24, r);
-  ctx.lineWidth = 24; ctx.strokeStyle = leaf; ctx.stroke();
+  const accent = caseAccent(catKey);
+  const W = 520, H = 760, rad = 34, ny = H*0.70, nr = 30;
+  const T = document.createElement('canvas'); T.width = W; T.height = H;
+  const t = T.getContext('2d');
+  t.imageSmoothingEnabled = true; t.imageSmoothingQuality = 'high';
+  ticketPath(t, W, H, rad, ny, nr); t.save(); t.clip();
+  const iv = t.createLinearGradient(0, 0, W, H);
+  iv.addColorStop(0, '#fbf5e4'); iv.addColorStop(1, '#eadcb6');
+  t.fillStyle = iv; t.fillRect(0, 0, W, H);
+  t.restore();
+  // fenêtre photo, dans le billet
+  const img = LOT_IMAGES[catKey];
+  const px = 34, py = 34, pw = W - 68, ph = ny - 34 - 44;
+  if(img) drawPhotoWindow(t, img, px, py, pw, ph, 22);
+  else drawMedallion(t, px, py, pw, ph, 22, catKey, accent);
+  // perforation
+  t.save(); t.setLineDash([16, 12]); t.lineWidth = 4; t.strokeStyle = 'rgba(155,116,38,.75)';
+  t.beginPath(); t.moveTo(nr + 14, ny); t.lineTo(W - nr - 14, ny); t.stroke(); t.restore();
+  // talon : gemme, nom, marque
+  t.save();
+  drawGem(t, W/2, ny + 44, 15, accent);
+  t.fillStyle = CASE_NAVY_HAUT; t.textAlign = 'center'; t.textBaseline = 'middle';
+  drawFittedSerif(t, CATS[catKey].label, W/2, ny + (H-ny)*0.55, W*0.84, 58, 36, (H-ny)*0.52);
+  t.font = '700 22px Georgia,serif'; t.fillStyle = '#9b7426';
+  t.fillText('★  P I K A P O L Y  ★', W/2, H - 34);
+  t.restore();
+  // bord doré du billet
+  ticketPath(t, W, H, rad, ny, nr);
+  t.lineWidth = 12; t.strokeStyle = goldLeafStroke(t, 0, 0, W, H); t.stroke();
+  // pose du billet, incliné, avec son ombre
+  ctx.save();
+  ctx.translate(size/2, size/2); ctx.rotate(ang);
+  ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 34; ctx.shadowOffsetY = 12;
+  ctx.drawImage(T, -W/2, -H/2);
+  ctx.restore();
+  caseVernis(ctx, size);
   const tex = new THREE.CanvasTexture(cvs);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = getMaxAniso();
+  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = getMaxAniso();
   return tex;
 }
 
@@ -509,72 +614,41 @@ function getDiagonalFace(src, ang){
 let _departFace = null;
 function getDepartFace(){
   if(_departFace) return _departFace;
+  /* Même langage que toutes les cases : socle bleu nuit, bordure d'or,
+     médaillon Poké Ball au lieu d'une photo (ce n'est pas un lot), accent
+     bleu des cases spéciales. */
   const size = 960;
-  const cvs = document.createElement('canvas'); cvs.width=cvs.height=size;
+  const cvs = document.createElement('canvas'); cvs.width = cvs.height = size;
   const ctx = cvs.getContext('2d');
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  const r = size*0.16;
-
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  drawCaseBase(ctx, size);
+  const accent = caseAccent('depart');
+  const { x, y, w, h, r } = WIN;
   ctx.save();
-  roundRectPath(ctx,9,9,size-18,size-18,r); ctx.clip();
-  ctx.fillStyle = '#0c0c0c'; ctx.fillRect(0,0,size,size);
-
-  const pad = size*0.028;
-  const bw = size-2*pad, bh = size-2*pad-size*0.19;
-  const bgGrad = ctx.createRadialGradient(
-    pad+bw/2, pad+bh*0.42, bh*0.05,
-    pad+bw/2, pad+bh/2, bh*0.75
-  );
-  bgGrad.addColorStop(0, shadeHex(GOLD, 0.4));
-  bgGrad.addColorStop(0.55, GOLD);
-  bgGrad.addColorStop(1, shadeHex(GOLD, -0.55));
+  ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 22; ctx.shadowOffsetY = 6;
+  roundRectPath(ctx, x, y, w, h, r); ctx.fillStyle = '#0b1334'; ctx.fill();
+  ctx.restore();
+  ctx.save(); roundRectPath(ctx, x, y, w, h, r); ctx.clip();
+  const gl = ctx.createRadialGradient(x+w/2, y+h/2, 10, x+w/2, y+h/2, w*0.6);
+  gl.addColorStop(0, 'rgba(74,140,240,.45)'); gl.addColorStop(1, 'rgba(11,19,52,0)');
+  ctx.fillStyle = gl; ctx.fillRect(x, y, w, h);
+  ctx.restore();
+  // Poké Ball cerclée d'or
+  const cx = x+w/2, cy = y+h/2, R = h*0.34;
   ctx.save();
-  roundRectPath(ctx, pad, pad, bw, bh, r*0.7); ctx.clip();
-  ctx.fillStyle = bgGrad;
-  ctx.fillRect(pad, pad, bw, bh);
-  ctx.restore();
-
-  // mini Pokeball centrée, même style que la plaque centrale
-  const pbY = pad+bh*0.4, pbR = bh*0.15;
-  ctx.shadowColor = 'rgba(0,0,0,.8)'; ctx.shadowBlur = size*0.015;
-  ctx.beginPath(); ctx.arc(pad+bw/2,pbY,pbR,Math.PI,0); ctx.fillStyle='#f5484f'; ctx.fill();
-  ctx.beginPath(); ctx.arc(pad+bw/2,pbY,pbR,0,Math.PI); ctx.fillStyle='#f6fbff'; ctx.fill();
+  ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 20;
+  ctx.beginPath(); ctx.arc(cx, cy, R, Math.PI, 0); ctx.fillStyle = '#e0413f'; ctx.fill();
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI); ctx.fillStyle = CASE_IVOIRE; ctx.fill();
   ctx.shadowBlur = 0;
-  ctx.fillStyle='#12283f'; ctx.fillRect(pad+bw/2-pbR,pbY-pbR*0.09,pbR*2,pbR*0.18);
-  ctx.lineWidth=pbR*0.09; ctx.strokeStyle='#12283f';
-  ctx.beginPath(); ctx.arc(pad+bw/2,pbY,pbR,0,Math.PI*2); ctx.stroke();
-  ctx.beginPath(); ctx.arc(pad+bw/2,pbY,pbR*0.34,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill(); ctx.stroke();
-
-  ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.font='900 '+(bh*0.17)+'px Arial,Helvetica,sans-serif';
-  ctx.lineJoin='round'; ctx.lineWidth=size*0.01; ctx.strokeStyle='rgba(0,0,0,.8)';
-  const txtY = pad+bh*0.78;
-  ctx.strokeText('DÉPART', pad+bw/2, txtY);
-  ctx.fillStyle = '#fff9e6';
-  ctx.fillText('DÉPART', pad+bw/2, txtY);
-
-  const gloss = ctx.createLinearGradient(0,0,0,size);
-  gloss.addColorStop(0,'rgba(255,255,255,.06)'); gloss.addColorStop(.22,'rgba(255,255,255,0)');
-  ctx.fillStyle = gloss; ctx.fillRect(0,0,size,size);
+  ctx.fillStyle = '#10183a'; ctx.fillRect(cx-R, cy-R*0.08, R*2, R*0.16);
+  ctx.beginPath(); ctx.arc(cx, cy, R*0.3, 0, Math.PI*2); ctx.fillStyle = '#10183a'; ctx.fill();
+  ctx.beginPath(); ctx.arc(cx, cy, R*0.19, 0, Math.PI*2); ctx.fillStyle = CASE_IVOIRE; ctx.fill();
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI*2); ctx.lineWidth = 9; ctx.strokeStyle = goldLeafStroke(ctx, cx-R, cy-R, cx+R, cy+R); ctx.stroke();
   ctx.restore();
-
-  roundRectPath(ctx,9,9,size-18,size-18,r);
-  ctx.shadowColor = GOLD; ctx.shadowBlur = size*0.035;
-  ctx.lineWidth = 10; ctx.strokeStyle = GOLD; ctx.stroke();
-  ctx.shadowBlur = 0;
-  roundRectPath(ctx,15,15,size-30,size-30,r*0.85);
-  ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.stroke();
-
-  const bandH = size*0.22;
-  ctx.fillStyle = GOLD;
-  roundRectPath(ctx,9,size-9-bandH,size-18,bandH,r*0.7); ctx.fill();
-  ctx.fillStyle = '#0c0c0c'; ctx.globalAlpha=.28;
-  roundRectPath(ctx,9,size-9-bandH,size-18,bandH,r*0.7); ctx.fill(); ctx.globalAlpha=1;
-  ctx.fillStyle = '#fff9e6';
-  ctx.textAlign='center'; ctx.textBaseline='middle';
-  drawFittedBandLabel(ctx, 'Point de départ', size/2, size-9-bandH/2+2, size-18-size*0.06, size*0.088, size*0.045);
-
+  roundRectPath(ctx, x, y, w, h, r);
+  ctx.lineWidth = 5; ctx.strokeStyle = goldLeafStroke(ctx, x, y, x+w, y+h); ctx.stroke();
+  drawNameBlock(ctx, size, 'Départ', accent, NAME_Y0, NAME_Y1);
+  caseVernis(ctx, size);
   const tex = new THREE.CanvasTexture(cvs);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = getMaxAniso();
@@ -721,9 +795,13 @@ function numberTexture(n){
   const size=128;
   const cvs=document.createElement('canvas'); cvs.width=cvs.height=size;
   const ctx=cvs.getContext('2d');
-  ctx.font='800 '+(size*0.5)+'px Arial'; ctx.fillStyle=GOLD_BRIGHT;
+  // pastille bleu nuit cerclée d'or : posée sur le coin doré de la case
+  ctx.beginPath(); ctx.arc(size/2, size/2, size*0.42, 0, Math.PI*2);
+  ctx.fillStyle = CASE_NAVY_BAS; ctx.fill();
+  ctx.lineWidth = size*0.07; ctx.strokeStyle = GOLD; ctx.stroke();
+  ctx.font='700 '+(size*(n >= 10 ? 0.40 : 0.48))+'px Georgia,serif'; ctx.fillStyle=GOLD_BRIGHT;
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText(String(n), size/2, size/2+2);
+  ctx.fillText(String(n), size/2, size/2+3);
   const tex=new THREE.CanvasTexture(cvs);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -2155,14 +2233,13 @@ for(let i=0;i<N_TILES;i++){
      halo blanc, constaté en gros plan et sur la capture iPhone de
      l'animateur. 0.10 suffit à la lisibilité à l'ombre sans jamais
      franchir le seuil. */
-  /* Cases d'angle en DIAGONALE, comme au Monopoly : le contenu est tourné
-     de 45°, bandeau vers l'angle extérieur du plateau. Au lieu d'une
-     photo alignée sur le côté, le coin se lit comme un coin. */
-  if(i % SIDE === 0){
+  /* Cases d'angle (sauf Départ) en BILLET incliné à 45°, talon vers
+     l'angle extérieur, comme au Monopoly : voir getTicketFace. */
+  if(i % SIDE === 0 && i !== 0){
     const yaw = outwardYaw(r, c);
     const lx = Math.sign(world.x)*Math.cos(yaw) - Math.sign(world.z)*Math.sin(yaw);
     const lz = Math.sign(world.x)*Math.sin(yaw) + Math.sign(world.z)*Math.cos(yaw);
-    faceTex = getDiagonalFace(faceTex, Math.atan2(-lx, lz));
+    faceTex = getTicketFace(catKey, Math.atan2(-lx, lz));   // remplace la face : une seule photo
   }
   const faceMat = new THREE.MeshStandardMaterial({
     map: faceTex,
@@ -2181,7 +2258,10 @@ for(let i=0;i<N_TILES;i++){
   topGroup.add(face);
 
   const numSpr = makeSprite(numberTexture(caseNum), 0.2);
-  numSpr.position.set(TILE*0.35, tileTopY+0.01, TILE*0.36);
+  // numéro de case dans le coin haut, sur la bordure d'or : il recouvrait
+  // la fin du nom du lot en bas de case
+  numSpr.position.set(TILE*0.385, tileTopY+0.03, -TILE*0.385);
+  numSpr.scale.multiplyScalar(0.8);
   numSpr.rotation.x = -Math.PI/2;
   topGroup.add(numSpr);
 
@@ -2197,7 +2277,11 @@ for(let i=0;i<N_TILES;i++){
   // Case 1 (Départ) : aucune décoration flottante, même si sa catégorie
   // de fond ('booster8') en aurait normalement une — voir getDepartFace
   // plus haut, la case n'est thématiquement pas un vrai lot.
-  if(i !== 0 && catDef.tier === 'float'){
+  /* Cartes photo flottantes au-dessus des gros lots : RETIRÉES (23/09).
+     Elles répétaient la photo déjà présente sur la case — « une case = une
+     photo ». Les médaillons Chance / Caisse / Prison (symboles, pas des
+     photos) restent. */
+  if(SHOW_FLOAT_PHOTOS && i !== 0 && catDef.tier === 'float'){
     const { tex, aspect } = getFramedPhotoTexture(catKey);
     const scaleByCat = { gradee:0.5, booster50:0.6, etb:0.7, jackpot300:0.8 }[catKey] || 0.5;
     const h = scaleByCat, w = h*aspect;

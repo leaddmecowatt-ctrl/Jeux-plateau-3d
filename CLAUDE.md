@@ -91,6 +91,13 @@ l'overlay sur la zone du plateau et publie `--celeb-box-h` pour que la CSS s'y m
 **Célébration** : `celebrate()`, `showLotPreview()`, `clearCelebration()`,
 `stopCelebLoop()`. `celebLocked` empêche la boucle de confettis d'effacer une annonce.
 
+**Cases « carte collector »** (`getFlatPhotoFace`, `getTicketFace`, `getDepartFace`,
+`CASE_ACCENT`) : même structure pour toutes (socle bleu nuit, bordure feuille d'or,
+fenêtre ivoire avec UNE photo, filet + gemme d'accent, nom en capitales dorées). Accents :
+lots = or, Chance = violet, Caisse = vert, spéciales = bleu, Prison = rouge. Coins 10,
+19, 28 = billets inclinés à 45° (une seule photo, rien dessous). Règle : **jamais deux fois
+la même photo sur une case** — les cartes photo flottantes sont coupées (`SHOW_FLOAT_PHOTOS`).
+
 **Pion Luffy** (`buildLuffy`, section « LUFFY SCULPTÉ ») : tête, visage dessiné, cheveux,
 corps et tenue (gilet à boutons, cicatrice en croix, short à revers, écharpe à pan,
 sandales) fabriqués en code, skinnés sur le squelette d'origine, contour noir (coque
