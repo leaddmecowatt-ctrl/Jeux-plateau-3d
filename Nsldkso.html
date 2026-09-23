@@ -469,17 +469,6 @@ html.display-mode .display-badge{ display:block; }
 }
 .mini-card.dealing{ animation:cardDeal .32s cubic-bezier(.2,.95,.3,1) backwards; animation-delay:var(--d,0ms) }
 
-/* Tension : reservee aux gros lots. Le plateau 3D est cache derriere le
-   fond a 86 % d'opacite, donc une secousse de camera ne se verrait pas :
-   c'est la grille elle-meme qui tremble. */
-@keyframes drawTension{
-  0%,100%{ transform:translate3d(0,0,0) }
-  25%{ transform:translate3d(-0.5%,0.3%,0) }
-  50%{ transform:translate3d(0.55%,-0.35%,0) }
-  75%{ transform:translate3d(-0.3%,-0.2%,0) }
-}
-.card-draw-overlay.tension .card-grid{ animation:drawTension .42s ease-in-out infinite }
-.card-draw-overlay.tension{ background:rgba(14,3,1,.90) }
 
 /* Le total apparaissait d'un coup, sans la moindre animation. */
 @keyframes totalStamp{
@@ -620,6 +609,12 @@ html.display-mode .display-badge{ display:block; }
    cartes choisies. */
 .mini-card.dim{ filter:brightness(.4) saturate(.55); opacity:.7; transform:scale(.93); }
 .mini-card.suspense{ z-index:2; animation:cardLift .5s ease-in-out infinite alternate; }
+/* Curseur de choix : saute de carte en carte avant de s'arrêter */
+.mini-card.pointe{ z-index:2; transform:translateY(-6px) scale(1.07); transition:transform .07s ease-out; }
+.mini-card.pointe .back{ box-shadow:0 0 0 3px var(--gold-bright),0 0 22px rgba(255,226,122,.9); }
+/* Fin du tirage : le reste du paquet se retourne, sans fanfare */
+.mini-card.dim.montre{ transform:rotateY(180deg) scale(.9); filter:brightness(.62) saturate(.7); opacity:.9;
+  transition:transform .5s ease, filter .5s ease, opacity .5s ease; }
 @keyframes cardLift{
   from{ transform:translateY(0) scale(1); }
   to  { transform:translateY(-7px) scale(1.07); }

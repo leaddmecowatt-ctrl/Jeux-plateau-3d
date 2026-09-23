@@ -7695,20 +7695,37 @@ function computeCardDraw(total, wantDouble){
     else pick = singles[Math.floor(Math.random()*singles.length)];
     a = pick.a; b = pick.b;
   }
-  return { pairs: [{a,b}], total: a+b, isDouble: a===b, slotOrder: shuffledSlots() };
+  /* Un vrai paquet (audit 23/09, « on a l'impression que les cartes sont
+     pipées ») : 12 cartes = deux séries de 1 à 6. Après le retournement,
+     les 10 autres se retournent aussi et montrent le reste du paquet. Et
+     le choix des deux cartes se VOIT : un curseur passe de carte en carte
+     et s'arrête (chemin tiré ici pour que l'écran public joue le même). */
+  const slotOrder = shuffledSlots();
+  const reste = [1,2,3,4,5,6,1,2,3,4,5,6];
+  reste.splice(reste.indexOf(a), 1); reste.splice(reste.indexOf(b), 1);
+  for(let i=reste.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [reste[i],reste[j]]=[reste[j],reste[i]]; }
+  const parcours = (fin, interdit)=>{
+    const n = 5 + Math.floor(Math.random()*4), ch = [];
+    let prev = -1;
+    for(let i=0;i<n;i++){
+      let k; do{ k = Math.floor(Math.random()*12); }while(k===prev || k===fin || k===interdit);
+      ch.push(k); prev = k;
+    }
+    ch.push(fin);
+    return ch;
+  };
+  return { pairs: [{a,b}], total: a+b, isDouble: a===b, slotOrder, reste,
+           hop1: parcours(slotOrder[0], -1), hop2: parcours(slotOrder[1], slotOrder[0]),
+           susp: 480 + Math.floor(Math.random()*420) };
 }
 async function playCardDrawAnimation(draw){
   if(!cardDrawOverlay || !cardGrid) return;
 
-  /* ---------- Mise en scene graduee par l'enjeu reel ----------
-     Le lot est DEJA decide quand on arrive ici : drawAndMove choisit
-     pendingOutcome avant le tout premier appel. La cinematique peut donc
-     monter en tension quand un gros lot est en jeu, au lieu d'etre
-     rigoureusement identique pour une commune et pour un ETB a 300 EUR.
-     C'etait le vrai reproche : la sequence durait 2900 ms fixes, sans
-     jamais rien dire de ce qui se jouait. */
-  const tier = Math.max(1, Math.min(5, TIER_LEVEL[pendingOutcome] ?? 1));
-  const gros = tier >= 3;
+  /* Même mise en scène quel que soit le lot (audit 23/09) : avant, le titre
+     (« TOUT SE JOUE MAINTENANT », « Les cartes tombent… »), la grille qui
+     tremble et la durée du suspense dépendaient du lot DÉJÀ décidé — le
+     public voyait venir les gros lots et avait l'impression d'un tirage
+     truqué. La durée du suspense est tirée au hasard, pour tous les lots. */
   const titreEl = document.getElementById('cardDrawTitle');
   const flashEl = document.getElementById('drawFlash');
   const setTitre = t => { if(titreEl) titreEl.textContent = t; };
@@ -7754,8 +7771,7 @@ async function playCardDrawAnimation(draw){
   }
   cardDrawOverlay.classList.add('show');
   if(cardDrawTotal){ cardDrawTotal.textContent = ''; cardDrawTotal.classList.remove('stamp'); }
-  setTitre(gros ? 'Les cartes tombent…' : 'Tirage en cours…');
-  if(gros) cardDrawOverlay.classList.add('tension');
+  setTitre('Tirage en cours…');
   // on attend que la cascade se pose, pas un delai arbitraire
   await wait(reduceMotion ? 120 : 12*26 + 180);
 
@@ -7768,25 +7784,39 @@ async function playCardDrawAnimation(draw){
   };
   setFace(cardEls[s1].querySelector('.front'), a);
   setFace(cardEls[s2].querySelector('.front'), b);
+  // le reste du paquet, montré à la fin (anciens messages : pas de reste)
+  const reste = Array.isArray(draw.reste) ? draw.reste : null;
+  if(reste){
+    let k = 0;
+    cardEls.forEach((c,i)=>{ if(i!==s1 && i!==s2) setFace(c.querySelector('.front'), reste[k++]); });
+  }
 
-  // Les cartes non tirées s'effacent : sans ça les deux cartes
-  // choisies se perdent au milieu de dix autres identiques et le
-  // regard ne sait pas où se poser au moment du retournement.
+  /* Le choix se voit : un curseur saute de carte en carte en ralentissant
+     et s'arrête sur la première, puis recommence pour la seconde. Avant,
+     10 cartes s'éteignaient d'un coup et les 2 « bonnes » s'allumaient
+     toutes seules : personne ne choisissait, la machine montrait. */
+  const pointer = async (chemin, fin)=>{
+    if(!chemin || reduceMotion){ cardEls[fin].classList.add('suspense'); return; }
+    for(let i=0;i<chemin.length;i++){
+      const el = cardEls[chemin[i]];
+      el.classList.add('pointe');
+      const u = i/(chemin.length-1);
+      await wait(70 + Math.round(170*u*u));
+      if(i < chemin.length-1) el.classList.remove('pointe');
+    }
+    cardEls[fin].classList.remove('pointe');
+    cardEls[fin].classList.add('suspense');
+  };
+  setTitre('Première carte…');
+  await pointer(draw.hop1, s1);
+  await wait(reduceMotion ? 60 : 160);
+  setTitre('Deuxième carte…');
+  await pointer(draw.hop2, s2);
+
+  // Les cartes non tirées reculent pour laisser la scène aux deux choisies
   cardEls.forEach((c,i)=>{ if(i!==s1 && i!==s2) c.classList.add('dim'); });
-
-  // Suspense : les 2 cartes qui vont être retournées se mettent à
-  // luire avant la révélation, avec un son qui monte en tension —
-  // aucune incidence sur le tirage, déjà déterminé au-dessus.
-  setTitre('Deux cartes…');
-  await wait(reduceMotion ? 80 : 240);
-
-  /* Suspense gradue : 700 ms sur une commune, jusqu'a 1580 ms sur le
-     jackpot. C'est le seul endroit ou l'on peut faire durer sans ennuyer,
-     parce que la duree est proportionnelle a ce qui est en jeu. */
-  const susp = reduceMotion ? 220 : (480 + tier*220);
-  cardEls[s1].classList.add('suspense');
-  cardEls[s2].classList.add('suspense');
-  setTitre(tier >= 5 ? 'TOUT SE JOUE MAINTENANT' : gros ? 'Ca se joue…' : 'Suspense…');
+  const susp = reduceMotion ? 220 : (draw.susp || 650);
+  setTitre('Suspense…');
   playRiser(susp);
   await wait(susp);
   cardEls[s1].classList.remove('suspense');
@@ -7802,7 +7832,6 @@ async function playCardDrawAnimation(draw){
      completement desynchronise de ce qu'on regardait. Il est cale sur la
      fin du retournement, avec le flash, pour ne faire qu'un seul coup. */
   await wait(reduceMotion ? 60 : 300);
-  cardDrawOverlay.classList.remove('tension');
   revealImpact();
   flash();
 
@@ -7833,11 +7862,13 @@ async function playCardDrawAnimation(draw){
     }
   }
   setTitre(draw.isDouble ? 'DOUBLE !' : 'Le pion avance');
+  // le reste du paquet se retourne : deux séries de 1 à 6, rien de caché
+  if(reste) cardEls.forEach((c,i)=>{ if(i!==s1 && i!==s2) c.classList.add('montre'); });
 
   /* Fin : 330 a 1030 ms d'image figee avant, ramenees au strict
      necessaire pour lire le total. Le double garde sa pause longue,
      l'animateur doit avoir le temps d'annoncer la relance. */
-  await wait(reduceMotion ? 200 : (draw.isDouble ? 1500 : 560));
+  await wait(reduceMotion ? 200 : (draw.isDouble ? 1500 : 900));
   cardDrawOverlay.classList.remove('show');
   // laisse le fondu de sortie se jouer avant que le pion ne parte
   if(!reduceMotion) await wait(320);
