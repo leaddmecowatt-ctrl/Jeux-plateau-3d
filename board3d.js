@@ -1791,7 +1791,7 @@ boardGroup.add(centerPlate);
   const ombre = new THREE.Mesh(new THREE.PlaneGeometry(HALF*2, HALF*2),
     new THREE.MeshBasicMaterial({ map:st, transparent:true, depthWrite:false, toneMapped:false }));
   ombre.rotation.x = -Math.PI/2;
-  ombre.position.set(0, -0.30, -0.10);            // un peu en arrière, à l'opposé de la lumière (pas vers les bords de la vue)
+  ombre.position.set(0, -0.157, -0.10);           // posée sur la feuille (sol du diorama), un peu en arrière
   ombre.renderOrder = -2;
   boardGroup.add(ombre);
   // liseré de lumière
@@ -6451,6 +6451,178 @@ function qualityTick(realDt, now){
   QUALITY.floor = QUALITY.level;
 }
 let _lastFrameAt = 0, _lastRenderAt = 0;
+/* ==========================================================================
+   DIORAMA — l'illustration de fond devient UNE FEUILLE PLIÉE À 90°
+   --------------------------------------------------------------------------
+   Demande de l'animateur : l'image imprimée sur une seule grande feuille,
+   pliée à angle droit. Au-dessus du pli, le MUR vertical derrière le
+   plateau (ciel, serpent) ; au-dessous, le SOL horizontal sur lequel le
+   plateau est posé (nuages, îlots, rochers), vu en perspective. Une seule
+   image, une seule surface : le mur et le sol sont deux découpes de la
+   même photo, jointives au pixel près sur la ligne de pli (l'horizon).
+
+   Rendu : deux calques de la PAGE (et non de la scène 3D), transformés en
+   perspective par une homographie (matrix3d) calculée à chaque image depuis
+   la caméra du plateau. Ils couvrent donc tout l'écran — la scène 3D, elle,
+   ne couvre que la zone du plateau — et restent exactement calés sur la
+   3D : le plateau repose sur le sol, l'ombre douce du plateau s'y pose.
+   Coût quasi nul (composition GPU de deux images).
+
+   La feuille suit l'azimut de la caméra : quand la vue tourne autour du
+   plateau, c'est le plateau qui tourne SUR la feuille, comme sur un
+   plateau tournant, et le serpent reste toujours derrière.
+
+   Placement (dioSolve, à chaque changement de cadrage) : pour chaque ligne
+   de pli possible et chaque distance du mur, la largeur de feuille minimale
+   qui couvre tout l'écran se calcule directement (contraintes linéaires) ;
+   on retient la combinaison qui garde le pli et le serpent au plus près de
+   leur place actuelle à l'écran.
+   ========================================================================== */
+const DIO_FLOOR_Y = -0.158;               // dessous de la dalle d'or : le plateau repose sur la feuille
+const DIO_SOL_UTILE = (N_SIDE*CELL)/2 + 1.6;   // le sol couvre au moins jusqu'ici devant le plateau
+const DIO_SRC = {
+  p: { url:'./assets/bg/dragon_sky.jpg',      plis:[0.52, 0.64], serpent:0.28 },
+  w: { url:'./assets/bg/dragon_sky_wide.jpg', plis:[0.52, 0.70], serpent:0.40 },
+};
+const dio = { ok:false, el:null, mur:null, sol:null, imgs:{}, src:null, sheet:null, sig:'', solveSig:'', t:0 };
+function dioApp(){ return document.getElementById('app'); }
+/* Position du plateau (zone du canvas) dans le repère NON transformé de
+   #app : offsetLeft/Top ignorent la rotation de la télé verticale. */
+function dioWrapRect(){
+  const app = dioApp(); let x = 0, y = 0, e = wrap;
+  while(e && e !== app){ x += e.offsetLeft; y += e.offsetTop; e = e.offsetParent; }
+  return { x, y, w: wrap.clientWidth, h: wrap.clientHeight, W: app.clientWidth, H: app.clientHeight };
+}
+function dioInit(){
+  const app = dioApp(); if(!app) return;
+  const el = document.createElement('div'); el.id = 'diorama'; el.setAttribute('aria-hidden', 'true');
+  const mk = cls=>{ const d = document.createElement('div'); d.className = cls; el.appendChild(d); return d; };
+  dio.mur = mk('dio-mur'); dio.sol = mk('dio-sol');
+  const bands = document.getElementById('bgBands');
+  app.insertBefore(el, bands ? bands.nextSibling : app.firstChild);
+  dio.el = el;
+  let n = 0;
+  for(const k of ['p','w']){
+    const im = new Image();
+    im.onload = ()=>{ dio.imgs[k] = im; if(++n === 2){ dio.ok = true; dio.solveSig = ''; } };
+    im.src = DIO_SRC[k].url;
+  }
+}
+const _dv = new THREE.Vector3(), _dc = new THREE.PerspectiveCamera();
+function dioSolve(R){
+  const k = R.W >= R.H ? 'w' : 'p';
+  const src = DIO_SRC[k], img = dio.imgs[k];
+  const A = img.naturalHeight / img.naturalWidth;
+  // caméra de référence : la vue plateau au repos, dans le repère de la feuille (azimut 0)
+  const mode = camFitMode, dir = (mode === 'square' ? CAM_DIR_SQUARE : mode === 'tall' ? CAM_DIR_TALL : CAM_DIR_DEFAULT);
+  _dc.fov = camera.fov; _dc.aspect = R.w / R.h; _dc.near = camera.near; _dc.far = camera.far;
+  _dc.position.set(0, controls.target.y, 0).addScaledVector(dir, CAM_BASE_DIST * camFitFactor);
+  _dc.lookAt(0, controls.target.y, 0); _dc.updateMatrixWorld(); _dc.updateProjectionMatrix();
+  const C = _dc.position.clone();
+  // rayons des bords de l'écran (6 par bord) + position « cover » actuelle des lignes d'image
+  const rays = [];
+  const toNdc = (px, py)=> new THREE.Vector3(((px - R.x)/R.w)*2 - 1, 1 - ((py - R.y)/R.h)*2, 0.5);
+  for(let i=0;i<=6;i++){ const s = i/6;
+    for(const [px, py] of [[s*R.W, 0], [s*R.W, R.H], [0, s*R.H], [R.W, s*R.H]]){
+      const v = toNdc(px, py).unproject(_dc).sub(C).normalize(); rays.push(v); } }
+  const sc = Math.max(R.W/img.naturalWidth, R.H/img.naturalHeight), drawH = img.naturalHeight*sc, offY = (R.H - drawH)/2;
+  const coverY = row => offY + row*drawH;
+  const proj = (p)=>{ const q = p.clone().project(_dc); return R.y + (1 - q.y)/2*R.h; };
+  let best = null;
+  for(let f = src.plis[0]; f <= src.plis[1] + 1e-6; f += 0.02){
+    for(let Dw = 5.8; Dw <= 40; Dw += 0.4){
+      let W = 4, ok = true;
+      for(const d of rays){
+        let hit = null;
+        if(d.y < 0){ const t = (DIO_FLOOR_Y - C.y)/d.y; const P = C.clone().addScaledVector(d, t); if(P.z >= -Dw) hit = ['sol', P]; }
+        if(!hit){ if(d.z >= 0){ ok = false; break; } const t = (-Dw - C.z)/d.z; hit = ['mur', C.clone().addScaledVector(d, t)]; }
+        const P = hit[1];
+        W = Math.max(W, 2*Math.abs(P.x) + 0.4);
+        if(hit[0] === 'mur') W = Math.max(W, (P.y - DIO_FLOOR_Y + 0.3)/(A*f));
+        /* Le sol doit couvrir le dessous du plateau et un peu au-delà ; plus
+           près de la caméra, il s'estompe (premier plan hors mise au point,
+           voir le masque de .dio-sol) : une feuille assez grande pour aller
+           jusqu'au bas de l'écran rendrait le mur si haut que le serpent
+           sortirait du cadre. */
+        else W = Math.max(W, (Math.min(P.z, DIO_SOL_UTILE) + Dw + 0.3)/(A*(1-f)));
+      }
+      if(!ok) continue;
+      const Hw = W*A*f;
+      const yPli = proj(new THREE.Vector3(0, DIO_FLOOR_Y, -Dw));
+      const ySerp = proj(new THREE.Vector3(0, DIO_FLOOR_Y + Hw*(1 - src.serpent/f), -Dw));
+      // le serpent compte double : c'est lui qui doit rester visible au mur
+      const cout = Math.abs(yPli - coverY(f)) + 2*Math.abs(ySerp - coverY(src.serpent));
+      if(!best || cout < best.cout) best = { f, Dw, W, cout };
+    }
+  }
+  if(!best) return null;
+  const { f, Dw, W } = best;
+  const iw = img.naturalWidth, ih = img.naturalHeight;
+  dio.sheet = { k, f, Dw, W, Hw: W*A*f, Lf: W*A*(1-f), iw, ih };
+  for(const [el, y0, y1] of [[dio.mur, 0, f], [dio.sol, f, 1]]){
+    el.style.width = iw + 'px'; el.style.height = (ih*(y1 - y0)) + 'px';
+    el.style.backgroundImage = 'url("' + img.src + '")';
+    el.style.backgroundSize = iw + 'px ' + ih + 'px';
+    el.style.backgroundPosition = '0px ' + (-ih*y0) + 'px';
+  }
+  return dio.sheet;
+}
+/* Homographie : le rectangle (0,0)-(w,h) d'un calque vers 4 points écran. */
+function dioMatrix(w, h, p){
+  const [x0,y0] = p[0], [x1,y1] = p[1], [x2,y2] = p[2], [x3,y3] = p[3];
+  const dx1 = x1-x2, dx2 = x3-x2, dx3 = x0-x1+x2-x3, dy1 = y1-y2, dy2 = y3-y2, dy3 = y0-y1+y2-y3;
+  let a, b, c, d, e, f, g, hh;
+  if(Math.abs(dx3) < 1e-9 && Math.abs(dy3) < 1e-9){ a = x1-x0; b = x2-x1; c = x0; d = y1-y0; e = y2-y1; f = y0; g = 0; hh = 0; }
+  else {
+    const det = dx1*dy2 - dx2*dy1;
+    g = (dx3*dy2 - dx2*dy3)/det; hh = (dx1*dy3 - dx3*dy1)/det;
+    a = x1-x0 + g*x1; b = x3-x0 + hh*x3; c = x0; d = y1-y0 + g*y1; e = y3-y0 + hh*y3; f = y0;
+  }
+  a /= w; d /= w; g /= w; b /= h; e /= h; hh /= h;
+  return 'matrix3d(' + [a, d, 0, g, b, e, 0, hh, 0, 0, 1, 0, c, f, 0, 1].map(v=>+v.toFixed(9)).join(',') + ')';
+}
+const _dq = new THREE.Vector3(), _dm = new THREE.Matrix4();
+function dioUpdate(){
+  if(!dio.ok || !dio.el) return;
+  const R = dioWrapRect(); if(!(R.w > 0 && R.h > 0)) return;
+  const solveSig = [R.x, R.y, R.w, R.h, R.W, R.H, camFitMode, camFitFactor.toFixed(3), Math.round(camera.fov)].join('|');
+  if(solveSig !== dio.solveSig){
+    dio.solveSig = solveSig;
+    if(!dioSolve(R)){ dio.el.style.display = 'none'; document.documentElement.classList.remove('diorama'); return; }
+    dio.el.style.display = ''; document.documentElement.classList.add('diorama');
+    dio.sig = '';
+  }
+  const S = dio.sheet; if(!S) return;
+  camera.updateMatrixWorld();
+  // repère de la feuille : tourné comme l'azimut de la caméra autour du plateau
+  const az = Math.atan2(camera.position.x, camera.position.z);
+  _dm.makeRotationY(az);
+  const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd);
+  const depth = p=> _dq.copy(p).sub(camera.position).dot(fwd);
+  const W2 = S.W/2, zM = -S.Dw, y0 = DIO_FLOOR_Y;
+  const L = (x, y, z)=> new THREE.Vector3(x, y, z).applyMatrix4(_dm);
+  // sol : raccourci si son bord avant passe derrière la caméra
+  let zNear = zM + S.Lf, vNear = 1;
+  const nearMin = camera.near*4;
+  const dA = depth(L(-W2, y0, zM)), dB = Math.min(depth(L(-W2, y0, zNear)), depth(L(W2, y0, zNear)));
+  if(dB < nearMin){
+    const t = (dA - nearMin)/Math.max(1e-6, dA - dB);
+    zNear = zM + S.Lf*Math.max(0.02, Math.min(1, t)); vNear = (zNear - zM)/S.Lf;
+  }
+  const scr = p=>{ const q = p.clone().project(camera); return [R.x + (q.x + 1)/2*R.w, R.y + (1 - q.y)/2*R.h]; };
+  const top = y0 + S.Hw;
+  const pm = [scr(L(-W2, top, zM)), scr(L(W2, top, zM)), scr(L(W2, y0, zM)), scr(L(-W2, y0, zM))];
+  const ps = [scr(L(-W2, y0, zM)), scr(L(W2, y0, zM)), scr(L(W2, y0, zNear)), scr(L(-W2, y0, zNear))];
+  const hs = S.ih*(1 - S.f)*vNear;
+  const sig = pm.concat(ps).map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(';') + '|' + hs.toFixed(1);
+  if(sig === dio.sig) return;
+  dio.sig = sig;
+  dio.mur.style.transform = dioMatrix(S.iw, S.ih*S.f, pm);
+  dio.sol.style.height = hs + 'px';
+  dio.sol.style.transform = dioMatrix(S.iw, hs, ps);
+}
+dioInit();
+
 function animate(){
   requestAnimationFrame(animate);
   const nowMs = performance.now();
@@ -6474,8 +6646,10 @@ function animate(){
   const _t = clock.getElapsedTime();
   updateContactShadow();
   frameStep(_dt, _t);
+  dioUpdate();   // la feuille pliée suit la caméra (voir DIORAMA)
 }
 animate();
+
 
 /* ---------- Redimensionnement ---------- */
 function resize(){
