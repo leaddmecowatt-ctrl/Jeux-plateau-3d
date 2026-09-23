@@ -13,6 +13,8 @@ Ce que fait le script, de façon reproductible :
     transparence ;
   - retire les gadgets des poignets (petites pièces isolées du maillage
     « wear » à hauteur des mains) ;
+  - taille le haut en gilet de Luffy : sans manches, ouvert sur le torse,
+    arrêté à la taille ;
   - recolore la tenue aux couleurs du pion d'origine : haut rouge, short
     bleu, ceinture jaune façon écharpe, bras nus (manches et gants noirs
     passés en peau) — l'identité du pion au chapeau de paille ;
@@ -99,6 +101,7 @@ for n in j['nodes']:
         mname = j['materials'][p['material']]['name']
         if mname not in ('huku_bake', 'wear_metal'): continue
         P = read_acc(p['attributes']['POSITION']); I = read_acc(p['indices']).reshape(-1, 3)
+        UV = read_acc(p['attributes']['TEXCOORD_0'])
         par = np.arange(len(P))
         def f(a):
             while par[a] != a:
@@ -113,6 +116,35 @@ for n in j['nodes']:
             sz = q.max(0) - q.min(0)
             if mname != 'body_bake' and abs(c[0]) > 0.38 and c[1] < 1.05: drop.add(r)
         keepT = np.array([roots[t[0]] not in drop for t in I])
+        if mname == 'huku_bake':
+            # Le haut devient le GILET DE LUFFY : sans manches, ouvert sur le
+            # torse, arrêté à la taille (l'écharpe jaune fait la ceinture).
+            # Coordonnées du modèle au repos (mètres) ; seules les pièces du
+            # haut sont touchées (atlas u < 0,66, v < 0,46), jamais le short.
+            c = P[I].mean(1); u = UV[I].mean(1)
+            haut = (u[:,0] < 0.66) & (u[:,1] < 0.46)
+            jupe = c[:,1] < 0.875                              # sous l'écharpe
+            # manches : îlots entièrement d'un côté du corps, à hauteur d'épaule
+            manche = np.zeros(len(I), bool)
+            tr = roots[I[:,0]]
+            for r in set(tr.tolist()):
+                q = P[roots == r]
+                if q[:,1].min() > 1.0 and (q[:,0].min() >= 0.13 or q[:,0].max() <= -0.13):
+                    manche |= (tr == r)
+            # Ouverture du devant à bords NETS : plutôt que de supprimer des
+            # triangles (bord en escalier, effet tissu déchiré), les sommets
+            # du devant pris dans l'ouverture sont rabattus sur le bord ; seuls
+            # les triangles qui enjambent l'ouverture disparaissent.
+            Pm = P.copy()
+            vu = np.zeros(len(P)); vu[I[haut].ravel()] = 1
+            ouvV = np.where(P[:,1] >= 1.20, 0.05, 0.085)
+            dv = (vu > 0) & (P[:,2] > 0.03) & (np.abs(P[:,0]) < ouvV) & (P[:,1] > 0.86)
+            sg = np.where(P[:,0] >= 0, 1.0, -1.0)
+            Pm[dv, 0] = sg[dv] * ouvV[dv]
+            xs = Pm[I][:,:,0]
+            enjambe = (xs.max(1) - xs.min(1)) > 0.06
+            keepT &= ~(haut & (jupe | manche | enjambe))
+            acc_override[p['attributes']['POSITION']] = Pm.astype(np.float32).tobytes()
         A = j['accessors'][p['indices']]
         dt = {5125:np.uint32,5123:np.uint16,5121:np.uint8}[A['componentType']]
         acc_override[p['indices']] = I[keepT].astype(dt).tobytes()
@@ -149,6 +181,34 @@ TENUE = [  # (x0, y0, x1, y1, couleur)
     (0.00, 0.46, 0.66, 0.865, (52, 86, 150)),    # short bleu
     (0.00, 0.865, 0.40, 0.985, (236, 178, 38)),  # ceinture -> écharpe jaune
 ]
+def cicatrices(img):
+    """Cicatrices de Luffy peintes dans l'atlas « body » (visage et torse y
+    partagent la même texture). Positions relevées par lancer de rayon sur le
+    modèle affiché : torse u 0,66 = milieu, 6 cm = 0,034 en u et 0,033 en v ;
+    visage u 0,333 = milieu, 1 cm = 0,0145. +x du personnage = u décroissant."""
+    from PIL import ImageDraw
+    W, H = img.size; k = 4
+    big = img.resize((W*k, H*k), Image.LANCZOS)
+    d = ImageDraw.Draw(big)
+    P = lambda u, v: (u*W*k, v*H*k)
+    def trait(p0, p1, lw, col):
+        d.line([P(*p0), P(*p1)], fill=col, width=int(lw*k))
+        for q in (p0, p1):
+            x, y = P(*q); r = lw*k/2; d.ellipse([x-r, y-r, x+r, y+r], fill=col)
+    # grand X sur la poitrine, croisé au sternum
+    cu, cv, du, dv = 0.660, 0.738, 0.040, 0.040
+    for s_ in (1, -1):
+        a0, a1 = (cu - du, cv - s_*dv), (cu + du, cv + s_*dv)
+        trait(a0, a1, 7, (196, 134, 122, 255))
+        trait(a0, a1, 2.6, (228, 178, 166, 255))
+    # sous l'œil gauche : trait court, deux points de couture
+    e0, e1 = (0.371, 0.5205), (0.386, 0.5125)
+    trait(e0, e1, 3.2, (150, 70, 66, 255))
+    for t in (0.33, 0.70):
+        mu, mv = e0[0] + (e1[0]-e0[0])*t, e0[1] + (e1[1]-e0[1])*t
+        trait((mu - 0.0022, mv - 0.0035), (mu + 0.0022, mv + 0.0035), 2.2, (150, 70, 66, 255))
+    return big.resize((W, H), Image.LANCZOS)
+
 def recolor(name, img):
     if name == 'wear':
         a = np.asarray(img.convert('RGBA')).astype(np.float32)
@@ -172,15 +232,7 @@ def recolor(name, img):
         shade = 0.86 + 0.14*np.clip(lum/0.35, 0, 1)
         for k in range(3): reg[...,k] = np.where(m, skin[k]*shade, reg[...,k])
         a[:, int(0.76*w):, :] = reg
-        # Le haut d'origine est ajouré d'un motif d'hexagones (le logo de la
-        # marque) sur la poitrine gauche : on y voyait la peau, blanche sous
-        # l'éclairage. La peau vue au travers est repeinte dans le rouge du
-        # haut ; la zone (relevée par lancer de rayon sur le rendu) s'arrête
-        # avant l'encolure en V, qui reste couleur peau.
-        u0, v0, u1, v1 = 0.598, 0.688, 0.658, 0.780
-        ys, xs = slice(int(v0*h), int(v1*h)), slice(int(u0*w), int(u1*w))
-        for k, c in enumerate((176, 30, 40)): a[ys, xs, k] = c
-        return Image.fromarray(a.clip(0, 255).astype(np.uint8), 'RGBA')
+        return cicatrices(Image.fromarray(a.clip(0, 255).astype(np.uint8), 'RGBA'))
     return img
 
 # 4. reconstruction du binaire
@@ -201,6 +253,9 @@ def copy_bv(i):
 for ai, a in enumerate(j['accessors']):
     if ai in acc_used:
         if ai in acc_override:
+            if a['type'] == 'VEC3':
+                v = np.frombuffer(acc_override[ai], dtype=np.float32).reshape(-1, 3)
+                a['min'] = v.min(0).tolist(); a['max'] = v.max(0).tolist()
             a['bufferView'] = push(acc_override[ai])
             bv_new[a['bufferView']]['target'] = 34963 if a['type'] == 'SCALAR' else 34962
         elif 'bufferView' in a: a['bufferView'] = copy_bv(a['bufferView'])

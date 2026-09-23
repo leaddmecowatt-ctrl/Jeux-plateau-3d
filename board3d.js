@@ -3907,7 +3907,10 @@ const AVATAR_URL = './assets/character/avatar.glb';
 /* Hauteur du corps, chapeau non compris. L'ancien pion culminait vers 1,05
    (chapeau compris) : le personnage anime, plus élancé, a la tête bien plus
    petite, il lui faut un peu plus de hauteur pour occuper la même place. */
-const AVATAR_BODY_H = 1.08;
+const AVATAR_BODY_H = 1.50;
+/* Épaisseur de la semelle des sandales (mètres du modèle) : tout le corps
+   est remonté d'autant pour que le pied repose dessus, pas dedans. */
+const AVATAR_SOLE = 0.014;
 const AVATAR_MAP = {
   hips:'Hips', spine:'Spine', chest:'Chest', upperChest:'UpperChest', neck:'Neck', head:'Head',
   leftShoulder:'LeftShoulder', rightShoulder:'RightShoulder',
@@ -3972,6 +3975,24 @@ function makeStrawHat(w){
   hat.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.userData.avatar = true; } });
   return hat;
 }
+
+/* Touche P : bascule entre le personnage anime et l'ancien pion, pour les
+   comparer en direct. Choix mémorisé (pika_perso) et suivi par l'écran
+   public, qui partage le même localStorage. Rien ne s'affiche à l'écran. */
+function persoChoice(){
+  try{ return localStorage.getItem('pika_perso') === 'ancien' ? 'ancien' : 'anime'; }catch(e){ return 'anime'; }
+}
+function applyPersoChoice(){
+  if(!player.avatarHolder || !player.kModel) return;
+  const ancien = persoChoice() === 'ancien';
+  player.avatarHolder.visible = !ancien;
+  player.kModel.traverse(o=>{ if(o.isMesh) o.visible = ancien; });
+}
+function togglePerso(){
+  try{ localStorage.setItem('pika_perso', persoChoice() === 'ancien' ? 'anime' : 'ancien'); }catch(e){}
+  applyPersoChoice();
+}
+window.addEventListener('storage', e=>{ if(e.key === 'pika_perso') applyPersoChoice(); });
 
 async function loadAvatar(player, kModel, pivot){
   const gltf = await new Promise((resolve, reject)=>{
@@ -4075,6 +4096,30 @@ async function loadAvatar(player, kModel, pivot){
     N('head').add(hat);
   }
 
+  // ---- sandales de paille (Luffy ne marche pas pieds nus) ----
+  {
+    const solMat = new THREE.MeshToonMaterial({ color:0xb07a3c });
+    const laniere = new THREE.MeshToonMaterial({ color:0x6b4020 });
+    for(const side of ['left','right']){
+      const foot = N(side+'Foot'); if(!foot) continue;
+      const g = new THREE.Group();
+      const ankle = restWorld(side+'Foot');
+      /* Pied du modèle (repère VRM, mètres) : talon ~4 cm derrière la
+         cheville, orteils ~19 cm devant. Semelle de 23 cm, lanière sur
+         l'avant du pied, entre les orteils et le coup-de-pied. */
+      const sole = new THREE.Mesh(new THREE.BoxGeometry(0.088, 0.014, 0.235), solMat);
+      sole.position.set(0, 0.007, 0.075);
+      g.add(sole);
+      const strap = new THREE.Mesh(new THREE.BoxGeometry(0.092, 0.012, 0.02), laniere);
+      strap.position.set(0, 0.040, 0.125);
+      g.add(strap);
+      // semelle posée au sol (y=0 du repère VRM), le pied remonté d'autant
+      g.position.set(0, -ankle.y - AVATAR_SOLE, 0.0);
+      g.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.userData.avatar = true; } });
+      foot.add(g);
+    }
+  }
+
   // ---- expressions : clignement, et joie à la victoire ----
   const EM = vrm.expressionManager;
   let blinkT = 2 + Math.random()*2, blinkK = -1, mood = 0, moodT = 0, moodPeak = 0;
@@ -4104,6 +4149,7 @@ async function loadAvatar(player, kModel, pivot){
     const hips = N('hips');
     _v1.copy(kPos.Hips).sub(kRestPos.Hips); _v1.y -= calib;
     hips.position.copy(hipsRest).addScaledVector(_v1, 1/s);
+    hips.position.y += AVATAR_SOLE;       // debout SUR ses sandales
     hips.quaternion.copy(D.hips);
     W.hips = D.hips;
 
@@ -4121,6 +4167,7 @@ async function loadAvatar(player, kModel, pivot){
       // cible de cheville, repère du holder
       _v1.copy(kFoot).sub(kRestPos[L.K+'Foot']); _v1.y -= calib;
       const T = _v2.copy(vRest[L.side+'Foot']).addScaledVector(_v1, 1/s);
+      T.y += AVATAR_SOLE;
       // hanche : position actuelle de l'articulation
       const Ph = _v3.copy(L.up.position).applyQuaternion(D.hips).add(hips.position);
       const toT = T.clone().sub(Ph);
@@ -4164,9 +4211,14 @@ async function loadAvatar(player, kModel, pivot){
     }
     vrm.update(dt);
   };
+  const _sync = player.syncAvatar;
+  player.syncAvatar = (dt)=>{ if(holder.visible) _sync(dt); };
 
   // l'ancien pion devient un squelette pilote invisible
   kModel.traverse(o=>{ if(o.isMesh) o.visible = false; });
+  player.avatarHolder = holder;
+  player.kModel = kModel;
+  applyPersoChoice();
   holder.updateMatrixWorld(true);
   const top = new THREE.Box3().setFromObject(holder).max.y + pivot.position.y;
   playerTopOffset = Math.max(playerTopOffset, top);
@@ -7406,6 +7458,7 @@ window.addEventListener('keydown', (e)=>{
   }
   else if(k==='f'){ toggleFullscreen(); }
   else if(k==='r'){ cycleRotation(); }
+  else if(k==='p'){ togglePerso(); }
 });
 
 if(syncChannel && isDisplay){

@@ -18,7 +18,7 @@ Tout est en français, y compris le code et les messages de commit — garder ce
 | `vendor/three/` | three.js et ses modules (`VENDOR_MODULES` dans build.py les liste) |
 | `assets/lots/*.jpg` | photo de chaque lot, clé = catégorie (`etb150.jpg`, `booster50.jpg`…) |
 | `assets/character/player.glb` | squelette pilote du pion (Kenney) : il porte toute l'animation, mais n'est plus affiché |
-| `assets/character/avatar.glb` | le personnage affiché : Seed-san (VirtualCast, licence VRM 1.0, crédit dans la bulle de règles), tenue recolorée, sans sac robot — produit par `tools/prepare_avatar.py` |
+| `assets/character/avatar.glb` | le personnage affiché : Seed-san (VirtualCast, licence VRM 1.0, crédit dans la bulle de règles) habillé en Luffy (gilet rouge ouvert sans manches, cicatrices, short bleu, écharpe jaune), sans sac robot — produit par `tools/prepare_avatar.py` |
 | `vendor/three-vrm/` | chargeur VRM (MIT), 2.0.10 = dernière version compatible three r160 |
 | `assets/bg/`, `assets/ui/` | fond, dos de carte, jeton |
 
@@ -53,7 +53,8 @@ les animations, confettis et timings **ne se vérifient pas** — seul un vrai a
 
 **Commandes clavier** (`addEventListener('keydown'`) : A démarrer · B tirer les cartes ·
 D garder le lot · C recommencer · F plein écran · R pivoter l'image ·
-Z / 1–6 = **lot forcé** avant le premier lancer · M affiche la **bulle de règles**
+Z / 1–6 = **lot forcé** avant le premier lancer · P bascule personnage anime / ancien pion
+(mémorisé dans `pika_perso`) · M affiche la **bulle de règles**
 (M ou Échap pour fermer). M était un doublon exact de la touche 3 — même
 `booster50` — elle a donc été retirée de `FORCE_KEYS` sans rien perdre.
 
