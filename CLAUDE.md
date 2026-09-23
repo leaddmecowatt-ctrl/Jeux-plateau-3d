@@ -17,7 +17,9 @@ Tout est en français, y compris le code et les messages de commit — garder ce
 | `tools/build.py` | bundle HTML + JS + three.js + assets en **un seul fichier** autonome |
 | `vendor/three/` | three.js et ses modules (`VENDOR_MODULES` dans build.py les liste) |
 | `assets/lots/*.jpg` | photo de chaque lot, clé = catégorie (`etb150.jpg`, `booster50.jpg`…) |
-| `assets/character/player.glb` | le pion 3D |
+| `assets/character/player.glb` | squelette pilote du pion (Kenney) : il porte toute l'animation, mais n'est plus affiché |
+| `assets/character/avatar.glb` | le personnage affiché : Seed-san (VirtualCast, licence VRM 1.0, crédit dans la bulle de règles), tenue recolorée, sans sac robot — produit par `tools/prepare_avatar.py` |
+| `vendor/three-vrm/` | chargeur VRM (MIT), 2.0.10 = dernière version compatible three r160 |
 | `assets/bg/`, `assets/ui/` | fond, dos de carte, jeton |
 
 `dist/` est ignoré par git : c'est là qu'on construit.
@@ -90,6 +92,13 @@ l'overlay sur la zone du plateau et publie `--celeb-box-h` pour que la CSS s'y m
 
 **Célébration** : `celebrate()`, `showLotPreview()`, `clearCelebration()`,
 `stopCelebLoop()`. `celebLocked` empêche la boucle de confettis d'effacer une annonce.
+
+**Personnage** (`loadAvatar`, `syncAvatar`) : le squelette Kenney reste le pilote invisible
+(marche, saut, salto, regard, réactions). À chaque image sa pose est recopiée sur le
+personnage anime : rotations par rapport à la pose en T pour le buste, les bras et les
+pieds, cinématique inverse pour les jambes (les chevilles visent celles du pilote, donc
+aucun patinage malgré des jambes plus longues). Chapeau de paille modelé (`makeStrawHat`).
+Si l'avatar ne charge pas, l'ancien pion réapparaît.
 
 **Qualité** : `applyQuality()`, `setEcoMode()` (mode éco : plus de flou, d'ombres ni de
 décoration). Le contexte WebGL perdu est rattrapé (`webglcontextlost`).

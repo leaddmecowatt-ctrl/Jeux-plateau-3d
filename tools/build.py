@@ -42,6 +42,7 @@ VENDOR_MODULES = [
     'vendor/three/examples/jsm/postprocessing/UnrealBloomPass.js',
     'vendor/three/examples/jsm/shaders/CopyShader.js',
     'vendor/three/examples/jsm/shaders/LuminosityHighPassShader.js',
+    'vendor/three-vrm/three-vrm.module.min.js',
 ]
 ENTRY = 'board3d.js'
 THREE_CORE = 'vendor/three/three.module.min.js'

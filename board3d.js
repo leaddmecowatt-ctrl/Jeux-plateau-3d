@@ -4,6 +4,7 @@ import { GLTFLoader } from './vendor/three/examples/jsm/loaders/GLTFLoader.js';
 import { EffectComposer } from './vendor/three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from './vendor/three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from './vendor/three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { VRMLoaderPlugin, VRMUtils, VRMHumanBoneParentMap } from './vendor/three-vrm/three-vrm.module.min.js';
 
 /* =========================================================================
    PIKAPOLY — plateau 40 cases en vraie 3D (WebGL / three.js)
@@ -2844,7 +2845,7 @@ function measurePlayerTop(){
   let maxY = -Infinity, minY = Infinity;
   player.root.updateWorldMatrix(true, true);
   player.root.traverse(o=>{
-    if(!o.isSkinnedMesh) return;
+    if(!o.isSkinnedMesh || o.userData.avatar) return;
     if(typeof o.computeBoundingBox === 'function') o.computeBoundingBox();
     const src = o.boundingBox || o.geometry.boundingBox;
     if(!src) return;
@@ -3849,6 +3850,327 @@ async function loadPlayerModel(player){
   for(const n of RIG_BONES) bones[n] = findBone(model, n);
   player.updateBody = buildBodyLayer(bones, blink, model);
   player.bones = bones;
+  /* Pose de liaison du squelette pilote (en T), relevée ICI : c'est le
+     seul moment où aucun clip ni la couche procédurale n'a encore bougé
+     un os. Relevée plus tard (quand le personnage anime a fini de
+     charger), elle capturait une pose déjà animée et la recopie donnait
+     un personnage figé bras en croix. */
+  {
+    model.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(flipPivot.matrixWorld).invert();
+    const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
+    const kb = {}, kRestInv = {}, kRestPos = {};
+    const kNames = new Set([...Object.values(AVATAR_MAP), 'LeftUpLeg','RightUpLeg','LeftLeg','RightLeg']);
+    model.traverse(o=>{
+      if(!o.isBone || !kNames.has(o.name) || kb[o.name]) return;
+      kb[o.name] = o;
+      m.multiplyMatrices(inv, o.matrixWorld).decompose(p, q, sc);
+      kRestInv[o.name] = q.clone().invert();
+      kRestPos[o.name] = p.clone();
+    });
+    player.kRest = { kb, kRestInv, kRestPos, y0: model.position.y };
+  }
+  loadAvatar(player, model, flipPivot).catch(err=>{
+    console.warn('Personnage anime indisponible, l\'ancien pion reste affiché :', err);
+    model.traverse(o=>{ if(o.isMesh) o.visible = true; });
+  });
+}
+
+/* ============================================================================
+   PERSONNAGE ANIME — Seed-san (VirtualCast, Inc., licence VRM 1.0)
+   ----------------------------------------------------------------------------
+   L'ancien pion (modèle Kenney « characterMedium » habillé d'une texture) a
+   une tête en cube, des yeux peints à plat et un corps en boîte : 7 000
+   triangles, aucun visage. Aucun éclairage ne le rend « anime premium ».
+   Il est remplacé à l'écran par un vrai personnage anime (45 000 triangles,
+   visage modelé, yeux, cils, mèches de cheveux physiques, expressions),
+   coiffé d'un chapeau de paille pour garder l'identité du pion.
+
+   Principe : le squelette Kenney RESTE le pilote. Tout le code de marche,
+   de saut, de salto, de regard et de réaction continue de le faire bouger
+   comme avant — il est simplement rendu invisible. À chaque image, sa pose
+   est recopiée sur le personnage anime :
+     - buste, bras, tête, pieds : rotation de chaque os par rapport à sa
+       pose de liaison (les deux squelettes sont en T, face à +Z) ;
+     - jambes : cinématique inverse à deux os. Les proportions ne sont pas
+       les mêmes (jambes d'anime bien plus longues que celles du pion
+       Kenney), recopier les angles ferait patiner les pieds. On vise donc
+       la POSITION des chevilles Kenney — qui, elles, sont calées au sol
+       sans glissement par la couche de marche — et on en déduit genou et
+       hanche. Les pieds restent plantés, par construction.
+   Si le personnage anime ne se charge pas, l'ancien pion reste affiché.
+
+   Crédit exigé par la licence : affiché dans la bulle de règles (touche M).
+   Préparation du fichier : tools/prepare_avatar.py.
+   ========================================================================== */
+const AVATAR_URL = './assets/character/avatar.glb';
+/* Hauteur du corps, chapeau non compris. L'ancien pion culminait vers 1,05
+   (chapeau compris) : le personnage anime, plus élancé, a la tête bien plus
+   petite, il lui faut un peu plus de hauteur pour occuper la même place. */
+const AVATAR_BODY_H = 1.08;
+const AVATAR_MAP = {
+  hips:'Hips', spine:'Spine', chest:'Chest', upperChest:'UpperChest', neck:'Neck', head:'Head',
+  leftShoulder:'LeftShoulder', rightShoulder:'RightShoulder',
+  leftUpperArm:'LeftArm', rightUpperArm:'RightArm',
+  leftLowerArm:'LeftForeArm', rightLowerArm:'RightForeArm',
+  leftHand:'LeftHand', rightHand:'RightHand',
+  leftFoot:'LeftFoot', rightFoot:'RightFoot', leftToes:'LeftToes', rightToes:'RightToes',
+};
+/* Os pilotés par rotation, dans l'ordre de la hiérarchie (un parent avant
+   ses enfants). Les jambes sont traitées à part, par cinématique inverse. */
+const AVATAR_CHAIN = ['spine','chest','upperChest','neck','head',
+  'leftShoulder','leftUpperArm','leftLowerArm','leftHand',
+  'rightShoulder','rightUpperArm','rightLowerArm','rightHand'];
+/* Doigts : le pion Kenney n'en a que deux par main, le personnage anime en
+   a cinq. Laissés à plat, ils font une main de mannequin raide ; on les
+   plie légèrement, comme une main au repos. Angle par phalange, en radians. */
+const AVATAR_CURL = { Proximal:0.32, Intermediate:0.42, Distal:0.30 };
+
+/* Chapeau de paille modelé (profil tourné) : le chapeau du pion Kenney était
+   un cône de 600 sommets en couleur unie, et à l'échelle de sa tête cube.
+   Profil (rayon, hauteur) en unités de largeur de tête, du bord de l'aile
+   au sommet de la calotte. */
+function makeStrawHat(w){
+  const P = [
+    [1.02,-0.035],[1.00,-0.012],[0.93,0.004],[0.78,0.020],[0.62,0.034],[0.56,0.040],
+    [0.555,0.080],[0.55,0.22],[0.54,0.34],[0.51,0.43],[0.44,0.49],[0.32,0.53],[0.16,0.548],[0.0,0.552],
+  ].map(([r,y])=>new THREE.Vector2(r*w, y*w));
+  const cvs = document.createElement('canvas'); cvs.width = 1024; cvs.height = 512;
+  const ctx = cvs.getContext('2d');
+  ctx.fillStyle = '#e6c27a'; ctx.fillRect(0,0,1024,512);
+  // tresse de paille : rangs le long du profil (anneaux sur l'aile,
+  // rangées sur la calotte), chacun fait de brins inclinés en alternance
+  const rows = 46;
+  for(let r=0;r<rows;r++){
+    const y0 = r*512/rows, h = 512/rows;
+    ctx.fillStyle = r%2 ? 'rgba(150,104,40,.20)' : 'rgba(255,240,200,.16)';
+    ctx.fillRect(0, y0, 1024, h*0.5);
+    ctx.strokeStyle = 'rgba(120,80,28,.30)'; ctx.lineWidth = 1.2;
+    for(let x=0;x<1024;x+=9){
+      ctx.beginPath();
+      const s = (r%2 ? 1 : -1)*4;
+      ctx.moveTo(x, y0+1); ctx.lineTo(x+s, y0+h-1); ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(95,60,20,.35)'; ctx.fillRect(0, y0+h-1.2, 1024, 1.2);
+  }
+  const tex = new THREE.CanvasTexture(cvs);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping; tex.repeat.set(3, 1);
+  tex.anisotropy = getMaxAniso();
+  const grad = (()=>{ const d = new Uint8Array([70,150,255]);
+    const t = new THREE.DataTexture(d, 3, 1, THREE.RedFormat);
+    t.magFilter = t.minFilter = THREE.NearestFilter; t.needsUpdate = true; return t; })();
+  const straw = new THREE.MeshToonMaterial({ map:tex, color:0xffffff, gradientMap:grad, side:THREE.DoubleSide });
+  const hat = new THREE.Group();
+  const shell = new THREE.Mesh(new THREE.LatheGeometry(P, 96), straw);
+  hat.add(shell);
+  // ruban rouge autour de la base de la calotte, à peine plus large qu'elle
+  const B = [[0.562,0.045],[0.566,0.070],[0.565,0.145],[0.561,0.170]].map(([r,y])=>new THREE.Vector2(r*w, y*w));
+  const band = new THREE.Mesh(new THREE.LatheGeometry(B, 96),
+    new THREE.MeshToonMaterial({ color:0xc8141e, gradientMap:grad }));
+  hat.add(band);
+  hat.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.userData.avatar = true; } });
+  return hat;
+}
+
+async function loadAvatar(player, kModel, pivot){
+  const gltf = await new Promise((resolve, reject)=>{
+    const loader = new GLTFLoader();
+    loader.register(parser => new VRMLoaderPlugin(parser));
+    const b64 = (typeof window !== 'undefined' && window.__GLB_B64) ? window.__GLB_B64[AVATAR_URL] : null;
+    if(b64){
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+      loader.parse(bytes.buffer, '', resolve, reject);
+    } else {
+      loader.load(AVATAR_URL, resolve, undefined, reject);
+    }
+  });
+  const vrm = gltf.userData.vrm;
+  if(!vrm || !vrm.humanoid) throw new Error('avatar : pas de VRM');
+  VRMUtils.removeUnnecessaryVertices(gltf.scene);
+  VRMUtils.removeUnnecessaryJoints(gltf.scene);
+  const H = vrm.humanoid;
+  const N = name => H.getNormalizedBoneNode(name);
+
+  // hauteur au repos, cheveux compris, pour l'échelle
+  vrm.scene.updateMatrixWorld(true);
+  let hairBox = null;
+  vrm.scene.traverse(o=>{
+    if(!o.isMesh) return;
+    o.castShadow = true;
+    o.frustumCulled = false;   // boîte de liaison ≠ pose animée : pas de clignotement
+    o.userData.avatar = true;
+    if(/hair/i.test(o.name) && !/tail/i.test(o.name)){
+      const b = new THREE.Box3().setFromObject(o);
+      hairBox = hairBox ? hairBox.union(b) : b;
+    }
+  });
+  const full = new THREE.Box3().setFromObject(vrm.scene);
+  const s = AVATAR_BODY_H / (full.max.y - Math.min(0, full.min.y));
+
+  const holder = new THREE.Group();
+  holder.scale.setScalar(s);
+  holder.position.y = -pivot.position.y;      // semelles au sol (y=0 du repère VRM)
+  holder.add(vrm.scene);
+  pivot.add(holder);
+
+  // ---- poses de liaison ----
+  // relevées au chargement du pion, AVANT la première image animée
+  const { kb, kRestInv, kRestPos, y0: kModelY0 } = player.kRest;
+  const inv = new THREE.Matrix4();
+  const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3();
+  const toPivot = v => v.clone().multiplyScalar(s).add(holder.position);
+  const restWorld = name => { const n = N(name); const v = new THREE.Vector3(); n.getWorldPosition(v);
+    return v.applyMatrix4(new THREE.Matrix4().copy(holder.matrixWorld).invert()); };   // repère du holder
+  holder.updateMatrixWorld(true);
+  const vRest = {};
+  for(const n of ['hips','leftUpperLeg','rightUpperLeg','leftFoot','rightFoot']) vRest[n] = restWorld(n);
+  const hipsRest = N('hips').position.clone();
+  const parentOf = {};
+  for(const name of Object.keys(VRMHumanBoneParentMap)){
+    let p = VRMHumanBoneParentMap[name];
+    while(p && !N(p)) p = VRMHumanBoneParentMap[p];
+    parentOf[name] = p;
+  }
+  const legs = ['left','right'].map(side=>{
+    const up = N(side+'UpperLeg'), lo = N(side+'LowerLeg'), ft = N(side+'Foot');
+    const K = side==='left' ? 'Left' : 'Right';
+    const L1 = lo.position.length(), L2 = ft.position.length();
+    const zf = new THREE.Vector3(0,0,1);
+    const basis = (dir, pole) => {
+      const y = dir.clone().normalize();
+      const z = pole.clone().addScaledVector(y, -pole.dot(y)).normalize();
+      const x = new THREE.Vector3().crossVectors(y, z);
+      return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+    };
+    return { side, K, up, lo, ft, L1, L2, basis,
+      q0up: basis(lo.position, zf).invert(), q0lo: basis(ft.position, zf).invert() };
+  });
+
+  // doigts pliés une fois pour toutes (les mains Kenney n'en pilotent aucun)
+  for(const side of ['left','right']){
+    const sg = side==='left' ? -1 : 1;
+    for(const f of ['Index','Middle','Ring','Little']){
+      for(const [ph, a] of Object.entries(AVATAR_CURL)){
+        const n = N(side+f+ph);
+        if(n) n.quaternion.setFromAxisAngle(new THREE.Vector3(0,0,1), sg*a*(f==='Little'?1.15:1));
+      }
+    }
+    const t = N(side+'ThumbProximal'); if(t) t.quaternion.setFromAxisAngle(new THREE.Vector3(0,1,0), -sg*0.35);
+  }
+
+  // ---- chapeau de paille, sur la tête normalisée ----
+  if(hairBox){
+    const w = hairBox.max.x - hairBox.min.x;
+    const hat = makeStrawHat(w);
+    const headRest = restWorld('head');
+    const cx = (hairBox.min.x + hairBox.max.x)/2, cz = (hairBox.min.z + hairBox.max.z)/2;
+    /* Enfoncé sur la tête : la calotte couvre le haut du crâne, l'aile
+       passe juste au-dessus des sourcils, légèrement penchée en arrière
+       comme le porte le personnage d'origine. */
+    hat.position.set(cx - headRest.x, hairBox.max.y - w*0.50 - headRest.y, cz - headRest.z + w*0.03);
+    hat.rotation.x = -0.10;
+    N('head').add(hat);
+  }
+
+  // ---- expressions : clignement, et joie à la victoire ----
+  const EM = vrm.expressionManager;
+  let blinkT = 2 + Math.random()*2, blinkK = -1, mood = 0, moodT = 0, moodPeak = 0;
+  player.setMood = (level)=>{ moodPeak = Math.min(1, 0.45 + 0.15*(level||1)); moodT = 3.2 + 0.4*(level||1); };
+
+  const D = {}, W = {};
+  for(const n of Object.keys(AVATAR_MAP)) D[n] = new THREE.Quaternion();
+  const _qi = new THREE.Quaternion(), _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
+  const kPos = {};
+  for(const n of Object.keys(kRestPos)) kPos[n] = new THREE.Vector3();
+  const ident = new THREE.Quaternion();
+
+  player.syncAvatar = (dt)=>{
+    kModel.updateMatrixWorld(true);
+    inv.copy(pivot.matrixWorld).invert();
+    for(const [vn, kn] of Object.entries(AVATAR_MAP)){
+      const b = kb[kn]; if(!b) continue;
+      _m.multiplyMatrices(inv, b.matrixWorld).decompose(kPos[kn], _q, _s);
+      D[vn].copy(_q).multiply(kRestInv[kn]);
+    }
+    for(const kn of ['LeftUpLeg','RightUpLeg','LeftLeg','RightLeg']){
+      if(kb[kn]) kPos[kn].setFromMatrixPosition(_m.multiplyMatrices(inv, kb[kn].matrixWorld));
+    }
+    const calib = kModel.position.y - kModelY0;
+
+    // bassin : même déplacement que le bassin Kenney, depuis la pose de repos
+    const hips = N('hips');
+    _v1.copy(kPos.Hips).sub(kRestPos.Hips); _v1.y -= calib;
+    hips.position.copy(hipsRest).addScaledVector(_v1, 1/s);
+    hips.quaternion.copy(D.hips);
+    W.hips = D.hips;
+
+    for(const vn of AVATAR_CHAIN){
+      const node = N(vn); if(!node) continue;
+      const pw = W[parentOf[vn]] || ident;
+      const wq = D[vn] || pw;
+      W[vn] = wq;
+      node.quaternion.copy(pw).invert().multiply(wq);
+    }
+
+    // jambes : cinématique inverse vers les chevilles Kenney
+    for(const L of legs){
+      const kFoot = kPos[L.K+'Foot'];
+      // cible de cheville, repère du holder
+      _v1.copy(kFoot).sub(kRestPos[L.K+'Foot']); _v1.y -= calib;
+      const T = _v2.copy(vRest[L.side+'Foot']).addScaledVector(_v1, 1/s);
+      // hanche : position actuelle de l'articulation
+      const Ph = _v3.copy(L.up.position).applyQuaternion(D.hips).add(hips.position);
+      const toT = T.clone().sub(Ph);
+      let d = toT.length();
+      const u = toT.normalize();
+      d = Math.min(Math.max(d, Math.abs(L.L1-L.L2)+1e-4), L.L1+L.L2-1e-4);
+      // direction du genou : celle du genou Kenney, à défaut l'avant du bassin
+      const kh = kPos[L.K+'UpLeg'], kk = kPos[L.K+'Leg'];
+      const axis = kFoot.clone().sub(kh).normalize();
+      const pole = kk.clone().sub(kh); pole.addScaledVector(axis, -pole.dot(axis));
+      if(pole.lengthSq() < 1e-8) pole.set(0,0,1).applyQuaternion(D.hips);
+      pole.addScaledVector(new THREE.Vector3(0,0,1).applyQuaternion(D.hips), 0.02);
+      const pp = pole.clone().addScaledVector(u, -pole.dot(u)).normalize();
+      const ca = (L.L1*L.L1 + d*d - L.L2*L.L2) / (2*L.L1*d);
+      const a = Math.acos(Math.max(-1, Math.min(1, ca)));
+      const knee = Ph.clone().addScaledVector(u, L.L1*Math.cos(a)).addScaledVector(pp, L.L1*Math.sin(a));
+      const footP = Ph.clone().addScaledVector(u, d);
+      const wUp = L.basis(knee.clone().sub(Ph), pp).multiply(L.q0up);
+      const wLo = L.basis(footP.clone().sub(knee), pp).multiply(L.q0lo);
+      L.up.quaternion.copy(D.hips).invert().multiply(wUp);
+      L.lo.quaternion.copy(wUp).invert().multiply(wLo);
+      const wFt = D[L.side+'Foot'];
+      L.ft.quaternion.copy(wLo).invert().multiply(wFt);
+      const toes = N(L.side+'Toes');
+      if(toes && D[L.side+'Toes']) toes.quaternion.copy(wFt).invert().multiply(D[L.side+'Toes']);
+    }
+
+    if(EM){
+      blinkT -= dt;
+      if(blinkT <= 0 && blinkK < 0){ blinkK = 0; }
+      let bl = 0;
+      if(blinkK >= 0){
+        blinkK += dt/0.16;
+        bl = blinkK < 0.5 ? blinkK*2 : Math.max(0, 2 - blinkK*2);
+        if(blinkK >= 1){ blinkK = -1; blinkT = 2.2 + Math.random()*3.6; if(Math.random()<0.18) blinkT = 0.18; }
+      }
+      if(moodT > 0){ moodT -= dt; mood += (moodPeak - mood)*Math.min(1, dt*6); }
+      else mood += (0 - mood)*Math.min(1, dt*3);
+      EM.setValue('happy', mood);
+      EM.setValue('blink', mood > 0.3 ? 0 : bl);   // on ne cligne pas en riant (les yeux sont déjà plissés)
+    }
+    vrm.update(dt);
+  };
+
+  // l'ancien pion devient un squelette pilote invisible
+  kModel.traverse(o=>{ if(o.isMesh) o.visible = false; });
+  holder.updateMatrixWorld(true);
+  const top = new THREE.Box3().setFromObject(holder).max.y + pivot.position.y;
+  playerTopOffset = Math.max(playerTopOffset, top);
+  player.avatar = vrm;
 }
 
 const player = createPlayer();
@@ -5111,6 +5433,8 @@ function frameStep(dt, t){
       if(reactSettle && reactT0 < 0) reactSettle = false;
     }
   }
+  // le personnage anime recopie la pose du squelette pilote (voir loadAvatar)
+  if(player.syncAvatar) player.syncAvatar(dt);
 
   // Secousse "gros lot" (tripack / coffret) : décroît puis se remet à plat
   if(hypeShakeUntil>0 && shatterUntil===0){
