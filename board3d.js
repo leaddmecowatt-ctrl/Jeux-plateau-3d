@@ -1945,6 +1945,30 @@ const goldLeafMat = new THREE.MeshStandardMaterial({
 const goldLeafDarkMat = goldLeafMat.clone();
 goldLeafDarkMat.color = new THREE.Color(0x9a7a44);
 goldLeafDarkMat.emissiveIntensity = 0.14;
+/* ---------- Base du plateau en feuille d'or ----------
+   Une dalle continue sous la couronne des 40 cases, épaisse et biseautée :
+   c'est le socle du plateau, fixe (les cases, elles, ondulent au-dessus).
+   Elle suit exactement l'anneau des cases, du bord extérieur jusque sous le
+   bord du panneau central : le centre reste tel quel, et la photo de fond
+   se voit toujours au-delà du plateau. */
+{
+  const ext = (N_SIDE*CELL)/2 + 0.10, int = (N_SIDE-2)*CELL/2 - 0.06;
+  const rr = 0.18;
+  const sh = new THREE.Shape();
+  sh.moveTo(-ext + rr, -ext); sh.lineTo(ext - rr, -ext); sh.quadraticCurveTo(ext, -ext, ext, -ext + rr);
+  sh.lineTo(ext, ext - rr); sh.quadraticCurveTo(ext, ext, ext - rr, ext); sh.lineTo(-ext + rr, ext);
+  sh.quadraticCurveTo(-ext, ext, -ext, ext - rr); sh.lineTo(-ext, -ext + rr); sh.quadraticCurveTo(-ext, -ext, -ext + rr, -ext);
+  const hole = new THREE.Path();
+  hole.moveTo(-int, -int); hole.lineTo(-int, int); hole.lineTo(int, int); hole.lineTo(int, -int); hole.lineTo(-int, -int);
+  sh.holes.push(hole);
+  const H = 0.16, bev = 0.035;
+  const geo = new THREE.ExtrudeGeometry(sh, { depth: H - bev*2, bevelEnabled:true, bevelSize:bev, bevelThickness:bev, bevelSegments:3, curveSegments:6 });
+  geo.rotateX(-Math.PI/2);
+  const baseSlab = new THREE.Mesh(geo, goldLeafMat);
+  baseSlab.position.y = -H + bev + 0.004;     // dessus au ras du dessous des cases
+  baseSlab.receiveShadow = true;
+  boardGroup.add(baseSlab);
+}
 
 const tileGoldMat = new THREE.MeshStandardMaterial({
   /* roughness .28 et non .2 : la roughnessMap MULTIPLIE cette valeur, et
@@ -4510,31 +4534,53 @@ function buildLuffy(model, pivot){
     }
   }
 
-  // ---------------- assemblage : un maillage skinné par matière ----------------
+  /* ---------------- assemblage ----------------
+     DEUX maillages skinnés seulement (le visage, qui porte sa texture, et
+     tout le reste), plus leurs deux contours. La première version faisait
+     un maillage par matière : 12 maillages + 11 contours, chacun recalculé
+     os par os à chaque image. Sur iPhone la cadence s'effondrait dès que la
+     caméra tournait, et l'échelle de qualité baissait la résolution —
+     l'image « cassée » constatée par l'animateur. La couleur de chaque
+     pièce passe désormais par les couleurs de sommet, son émissif par un
+     attribut (aEmi), la largeur de son contour par un autre (aOut) : rendu
+     identique, 23 dessins skinnés ramenés à 4. */
   const grad = luffyGradient();
   const faceTex = { ouvert: drawLuffyFace('ouvert'), ferme: drawLuffyFace('ferme'), rire: drawLuffyFace('rire') };
-  const MATS = {
-    visage: new THREE.MeshToonMaterial({ map:faceTex.ouvert, gradientMap:grad }),
-    peau: new THREE.MeshToonMaterial({ color:LUFFY_COL.peau, gradientMap:grad, vertexColors:true }),
-    cheveux: new THREE.MeshToonMaterial({ color:LUFFY_COL.cheveux, gradientMap:grad, vertexColors:true }),
-    gilet: new THREE.MeshToonMaterial({ color:LUFFY_COL.gilet, gradientMap:grad, vertexColors:true, side:THREE.DoubleSide }),
-    short: new THREE.MeshToonMaterial({ color:LUFFY_COL.short, gradientMap:grad, vertexColors:true }),
-    revers: new THREE.MeshToonMaterial({ color:LUFFY_COL.revers, gradientMap:grad, vertexColors:true, emissive:0x3a3632 }),
-    echarpe: new THREE.MeshToonMaterial({ color:LUFFY_COL.echarpe, gradientMap:grad, vertexColors:true, side:THREE.DoubleSide }),
-    bouton: new THREE.MeshToonMaterial({ color:LUFFY_COL.bouton, gradientMap:grad, vertexColors:true, emissive:0x4a3400 }),
-    semelle: new THREE.MeshToonMaterial({ color:LUFFY_COL.semelle, gradientMap:grad, vertexColors:true }),
-    laniere: new THREE.MeshToonMaterial({ color:LUFFY_COL.laniere, gradientMap:grad, vertexColors:true }),
-    cicatrice: new THREE.MeshToonMaterial({ color:LUFFY_COL.cicatrice, gradientMap:grad, vertexColors:true, side:THREE.DoubleSide, emissive:0x3a1512 }),
-  };
+  const COL = { peau:LUFFY_COL.peau, cheveux:LUFFY_COL.cheveux, gilet:LUFFY_COL.gilet, short:LUFFY_COL.short,
+                revers:LUFFY_COL.revers, echarpe:LUFFY_COL.echarpe, bouton:LUFFY_COL.bouton, semelle:LUFFY_COL.semelle,
+                laniere:LUFFY_COL.laniere, cicatrice:LUFFY_COL.cicatrice, visage:0xffffff };
+  const EMI = { revers:0x3a3632, bouton:0x4a3400, cicatrice:0x3a1512 };
   const OUT_W = { visage:0.0055, peau:0.0045, cheveux:0.005, gilet:0.004, short:0.0045, revers:0.004, echarpe:0.004,
                   bouton:0.0022, semelle:0.003, laniere:0.0015, cicatrice:0 };
+  const OUT_BASE = 0.0045;
+  const withEmi = m=>{
+    m.onBeforeCompile = sh=>{
+      sh.vertexShader = 'attribute vec3 aEmi;\nvarying vec3 vEmi;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vEmi = aEmi;');
+      sh.fragmentShader = 'varying vec3 vEmi;\n' + sh.fragmentShader.replace('vec3 totalEmissiveRadiance = emissive;', 'vec3 totalEmissiveRadiance = emissive + vEmi;');
+    };
+    return m;
+  };
+  const MATS = {
+    visage: new THREE.MeshToonMaterial({ map:faceTex.ouvert, gradientMap:grad }),
+    corps: withEmi(new THREE.MeshToonMaterial({ color:0xffffff, gradientMap:grad, vertexColors:true, side:THREE.DoubleSide })),
+  };
+  const outlineMat = ()=>{
+    const m = luffyOutlineMat(OUT_BASE/localScale);
+    const prev = m.onBeforeCompile;
+    m.onBeforeCompile = sh=>{ prev(sh);
+      sh.vertexShader = 'attribute float aOut;\n' + sh.vertexShader.replace('* uContour;', '* uContour * aOut;'); };
+    return m;
+  };
   const meshes = [];
-  const pv = new THREE.Vector3(), pn = new THREE.Vector3();
-  for(const [mat, list] of Object.entries(parts)){
-    const pos = [], col = [], uv = [], idx = [], si = [], sw = [];
-    for(const pt of list){
+  const pv = new THREE.Vector3(), cc = new THREE.Color(), ce = new THREE.Color();
+  const groupes = { visage:['visage'], corps:Object.keys(parts).filter(k=>k!=='visage') };
+  for(const [nom, mats] of Object.entries(groupes)){
+    const pos = [], col = [], emi = [], out = [], uv = [], idx = [], idxOut = [], si = [], sw = [];
+    for(const mat of mats) for(const pt of (parts[mat] || [])){
       const off = pos.length/3;
       const cand = pt.bones.filter(b=>SEG[b]);
+      cc.set(COL[mat]); ce.set(EMI[mat] || 0x000000);
+      const ow = OUT_W[mat]/OUT_BASE;
       for(let v=0; v<pt.p.length/3; v++){
         pv.set(pt.p[v*3], pt.p[v*3+1], pt.p[v*3+2]);
         // poids : inverse de la distance aux os candidats, puissance 4
@@ -4545,34 +4591,43 @@ function buildLuffy(model, pivot){
         ws.forEach((w,k)=>{ ids[k] = Math.max(0, boneIdx(w[0])); wts[k] = w[1]/tot; });
         if(!ws.length){ ids[0] = Math.max(0, boneIdx('Hips')); wts[0] = 1; }
         pv.applyMatrix4(M);
-        pos.push(pv.x, pv.y, pv.z); col.push(pt.c[v*3], pt.c[v*3+1], pt.c[v*3+2]); uv.push(pt.uv[v*2], pt.uv[v*2+1]);
+        pos.push(pv.x, pv.y, pv.z);
+        col.push(pt.c[v*3]*cc.r, pt.c[v*3+1]*cc.g, pt.c[v*3+2]*cc.b);
+        emi.push(ce.r, ce.g, ce.b); out.push(ow);
+        uv.push(pt.uv[v*2], pt.uv[v*2+1]);
         si.push(...ids); sw.push(...wts);
       }
       for(const k of pt.i) idx.push(k + off);
+      if(ow > 0) for(const k of pt.i) idxOut.push(k + off);
     }
+    if(!pos.length) continue;
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.setAttribute('aEmi', new THREE.Float32BufferAttribute(emi, 3));
+    g.setAttribute('aOut', new THREE.Float32BufferAttribute(out, 1));
     g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4));
     g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
     g.setIndex(idx);
     g.computeVertexNormals();
-    const m = new THREE.SkinnedMesh(g, MATS[mat]);
-    m.name = 'luffy_' + mat;
+    const m = new THREE.SkinnedMesh(g, MATS[nom]);
+    m.name = 'luffy_' + nom;
     m.castShadow = true; m.frustumCulled = false;
     kSkin.parent.add(m);
     m.position.copy(kSkin.position); m.quaternion.copy(kSkin.quaternion); m.scale.copy(kSkin.scale);
     m.bind(skel, kSkin.bindMatrix);
     meshes.push(m);
-    if(OUT_W[mat] > 0){
-      const o = new THREE.SkinnedMesh(g, luffyOutlineMat(OUT_W[mat]/localScale));
-      o.name = 'luffy_contour_' + mat; o.frustumCulled = false; o.userData.contour = true;
-      kSkin.parent.add(o);
-      o.position.copy(kSkin.position); o.quaternion.copy(kSkin.quaternion); o.scale.copy(kSkin.scale);
-      o.bind(skel, kSkin.bindMatrix);
-      meshes.push(o);
-    }
+    // contour : mêmes sommets, sans les pièces qui n'en ont pas (cicatrice)
+    const go = new THREE.BufferGeometry();
+    for(const k of Object.keys(g.attributes)) go.setAttribute(k, g.attributes[k]);
+    go.setIndex(idxOut);
+    const o = new THREE.SkinnedMesh(go, outlineMat());
+    o.name = 'luffy_contour_' + nom; o.frustumCulled = false; o.userData.contour = true;
+    kSkin.parent.add(o);
+    o.position.copy(kSkin.position); o.quaternion.copy(kSkin.quaternion); o.scale.copy(kSkin.scale);
+    o.bind(skel, kSkin.bindMatrix);
+    meshes.push(o);
   }
   // ---------------- chapeau d'origine : paille tressée + contour ----------------
   for(const o of skins){
@@ -6080,8 +6135,19 @@ function applyQuality(level){
      d'ombre), de sorte qu'une degradation legere ne se voie pas du tout.
      Au cran le plus bas, 0.78 et non 0.6 : rendre a 60 % de resolution
      est pire, sur un ecran de diffusion, que quelques images perdues. */
-  const dpr = level>=5 ? 0.78 : level>=4 ? 0.9 : level>=3 ? 1 : DPR_MAX;
-  const eco = level >= 5;
+  /* Résolution JAMAIS sous 1x (23/09). À 0,78 sur un iPhone, l'image
+     devenait crénelée dès que la caméra tournait — « la résolution s'est
+     cassé la gueule », capture à l'appui. Ce qui se voit le plus se retire
+     désormais en dernier : on coupe d'abord le flou lumineux, les ombres
+     et la décoration (mode éco, cran 4), la finesse ne descend qu'ensuite,
+     et jamais sous la résolution normale de l'écran.
+       cran 0-2 : pleine finesse (DPR_MAX, 2x max)
+       cran 3   : 1,5x
+       cran 4   : 1,5x + mode éco
+       cran 5   : 1x + mode éco */
+  const mid = Math.min(DPR_MAX, 1.5);
+  const dpr = level>=5 ? Math.min(DPR_MAX, 1) : level>=3 ? mid : DPR_MAX;
+  const eco = level >= 4;
   const bs  = bloomScaleForLevel(level);
   /* Rien de reellement different : on ne touche a rien. Les crans 1 et 2
      partagent la meme resolution et le meme etat de mode eco ; sans cette
