@@ -17,7 +17,7 @@ Tout est en français, y compris le code et les messages de commit — garder ce
 | `tools/build.py` | bundle HTML + JS + three.js + assets en **un seul fichier** autonome |
 | `vendor/three/` | three.js et ses modules (`VENDOR_MODULES` dans build.py les liste) |
 | `assets/lots/*.jpg` | photo de chaque lot, clé = catégorie (`etb150.jpg`, `booster50.jpg`…) |
-| `assets/character/player.glb` | le pion 3D |
+| `assets/character/player.glb` | le pion : son squelette (qui porte toutes les animations) et son chapeau sont gardés ; le reste est refait en volumes par `buildLuffy()` |
 | `assets/bg/`, `assets/ui/` | fond, dos de carte, jeton |
 
 `dist/` est ignoré par git : c'est là qu'on construit.
@@ -90,6 +90,14 @@ l'overlay sur la zone du plateau et publie `--celeb-box-h` pour que la CSS s'y m
 
 **Célébration** : `celebrate()`, `showLotPreview()`, `clearCelebration()`,
 `stopCelebLoop()`. `celebLocked` empêche la boucle de confettis d'effacer une annonce.
+
+**Pion Luffy** (`buildLuffy`, section « LUFFY SCULPTÉ ») : tête, visage dessiné, cheveux,
+corps et tenue (gilet à boutons, cicatrice en croix, short à revers, écharpe à pan,
+sandales) fabriqués en code, skinnés sur le squelette d'origine, contour noir (coque
+inversée). Les meshes Kenney du corps sont masqués ; le chapeau d'origine est gardé.
+
+**Finale du jackpot** (`startJackpotStorm`, `updateStorm`, `ABD`) : silhouette noire,
+foudre fractale, faisceau du ciel, enlèvement puis retour sur la case (`STORM_MS` = 6,8 s).
 
 **Qualité** : `applyQuality()`, `setEcoMode()` (mode éco : plus de flou, d'ombres ni de
 décoration). Le contexte WebGL perdu est rattrapé (`webglcontextlost`).

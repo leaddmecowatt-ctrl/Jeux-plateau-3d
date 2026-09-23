@@ -472,6 +472,36 @@ function getFlatPhotoFace(catKey, accentColor, badge){
   return tex;
 }
 
+/* Face d'une case d'angle : la face normale tournée de `ang` (radians,
+   repère du canvas), réduite pour tenir en losange, sur un fond flouté de
+   la même image et sous un filet de feuille d'or. */
+function getDiagonalFace(src, ang){
+  const img = src && src.image; if(!img) return src;
+  const size = img.width || 960;
+  const cvs = document.createElement('canvas'); cvs.width = cvs.height = size;
+  const ctx = cvs.getContext('2d');
+  const r = size*0.16;
+  ctx.save();
+  roundRectPath(ctx, 9, 9, size-18, size-18, r); ctx.clip();
+  ctx.filter = 'blur(26px) brightness(0.62) saturate(1.2)';
+  ctx.drawImage(img, -size*0.1, -size*0.1, size*1.2, size*1.2);
+  ctx.filter = 'none';
+  ctx.translate(size/2, size/2); ctx.rotate(ang);
+  const k = 0.80;
+  ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = size*0.03;
+  ctx.drawImage(img, -size*k/2, -size*k/2, size*k, size*k);
+  ctx.restore();
+  const leaf = ctx.createLinearGradient(0, 0, size, size);
+  leaf.addColorStop(0.00,'#fff3b8'); leaf.addColorStop(0.28,GOLD);
+  leaf.addColorStop(0.52,'#9b7426'); leaf.addColorStop(0.76,'#f6d97c'); leaf.addColorStop(1.00,'#b88a2c');
+  roundRectPath(ctx, 12, 12, size-24, size-24, r);
+  ctx.lineWidth = 24; ctx.strokeStyle = leaf; ctx.stroke();
+  const tex = new THREE.CanvasTexture(cvs);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = getMaxAniso();
+  return tex;
+}
+
 /* Texture dédiée à la case "Départ" (case 1) : ni photo ni prix, pour
    qu'elle ne se lise jamais comme un lot — même dans le cas rare où
    une carte Chance ferait reculer un joueur jusque-là (le côté
@@ -2040,6 +2070,15 @@ for(let i=0;i<N_TILES;i++){
      halo blanc, constaté en gros plan et sur la capture iPhone de
      l'animateur. 0.10 suffit à la lisibilité à l'ombre sans jamais
      franchir le seuil. */
+  /* Cases d'angle en DIAGONALE, comme au Monopoly : le contenu est tourné
+     de 45°, bandeau vers l'angle extérieur du plateau. Au lieu d'une
+     photo alignée sur le côté, le coin se lit comme un coin. */
+  if(i % SIDE === 0){
+    const yaw = outwardYaw(r, c);
+    const lx = Math.sign(world.x)*Math.cos(yaw) - Math.sign(world.z)*Math.sin(yaw);
+    const lz = Math.sign(world.x)*Math.sin(yaw) + Math.sign(world.z)*Math.cos(yaw);
+    faceTex = getDiagonalFace(faceTex, Math.atan2(-lx, lz));
+  }
   const faceMat = new THREE.MeshStandardMaterial({
     map: faceTex,
     roughness: 0.46, metalness: 0.0, envMapIntensity: 0.55,
