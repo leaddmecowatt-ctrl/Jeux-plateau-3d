@@ -96,7 +96,7 @@ l'overlay sur la zone du plateau et publie `--celeb-box-h` pour que la CSS s'y m
 fenêtre ivoire avec UNE photo, filet + gemme d'accent, nom en capitales dorées). Accents :
 lots = or, Chance = violet, Caisse = vert, spéciales = bleu, Prison = rouge. Coins 10,
 19, 28 = billets inclinés à 45° (une seule photo, rien dessous). Règle : **jamais deux fois
-la même photo sur une case** — les cartes photo flottantes sont coupées (`SHOW_FLOAT_PHOTOS`).
+la même photo sur une case** : les gros lots gardent leur carte photo FLOTTANTE (ce qui les fait reconnaître), leur case montre alors un socle doré (`drawPedestal`) ; pas de carte flottante sur un coin (le billet porte la photo).
 
 **Pion Luffy** (`buildLuffy`, section « LUFFY SCULPTÉ ») : tête, visage dessiné, cheveux,
 corps et tenue (gilet à boutons, cicatrice en croix, short à revers, écharpe à pan,

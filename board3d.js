@@ -512,12 +512,40 @@ function drawMedallion(ctx, x, y, w, h, rad, kind, accent){
   roundRectPath(ctx, x, y, w, h, rad);
   ctx.lineWidth = 5; ctx.strokeStyle = goldLeafStroke(ctx, x, y, x+w, y+h); ctx.stroke();
 }
+/* Socle des gros lots : la carte photo flotte au-dessus, la case montre
+   donc un piédestal — halo doré, anneau d'or en perspective, étincelles —
+   et jamais une seconde fois la photo. */
+function drawPedestal(ctx, x, y, w, h, rad){
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 22; ctx.shadowOffsetY = 6;
+  roundRectPath(ctx, x, y, w, h, rad); ctx.fillStyle = '#0b1334'; ctx.fill();
+  ctx.restore();
+  ctx.save(); roundRectPath(ctx, x, y, w, h, rad); ctx.clip();
+  const cx = x+w/2, cy = y+h*0.52;
+  const gl = ctx.createRadialGradient(cx, cy, 10, cx, cy, w*0.55);
+  gl.addColorStop(0, 'rgba(255,226,122,.55)'); gl.addColorStop(0.35, 'rgba(233,195,74,.18)'); gl.addColorStop(1, 'rgba(11,19,52,0)');
+  ctx.fillStyle = gl; ctx.fillRect(x, y, w, h);
+  for(const [k, a] of [[1, 0.9], [0.72, 0.55], [0.46, 0.35]]){
+    ctx.beginPath(); ctx.ellipse(cx, cy, w*0.36*k, h*0.20*k, 0, 0, Math.PI*2);
+    ctx.lineWidth = 7*k; ctx.strokeStyle = 'rgba(246,217,124,'+a+')'; ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(255,243,184,.85)';
+  for(let k=0;k<18;k++){ const an = k*2.399, rr = 0.2 + (k*0.137)%0.8; ctx.beginPath();
+    ctx.arc(cx + Math.cos(an)*w*0.42*rr, cy + Math.sin(an)*h*0.38*rr, 2.5 + (k%3)*1.5, 0, Math.PI*2); ctx.fill(); }
+  ctx.restore();
+  roundRectPath(ctx, x, y, w, h, rad);
+  ctx.lineWidth = 5; ctx.strokeStyle = goldLeafStroke(ctx, x, y, x+w, y+h); ctx.stroke();
+}
 const WIN = { x:66, y:58, w:828, h:660, r:34 };
 const NAME_Y0 = 736, NAME_Y1 = 908;
 const flatFaceCache = new Map();
-const SHOW_FLOAT_PHOTOS = false;
-function getFlatPhotoFace(catKey, accentColor, badge){
-  const key = catKey+'|'+badge;
+/* Cartes photo flottantes au-dessus des gros lots : GARDÉES — c'est ce qui
+   les fait reconnaître de loin (retour de l'animateur). Pour qu'une case
+   n'affiche jamais deux fois la même photo, la case sous une carte
+   flottante montre un socle doré au lieu de la photo (sansPhoto). */
+const SHOW_FLOAT_PHOTOS = true;
+function getFlatPhotoFace(catKey, accentColor, badge, sansPhoto){
+  const key = catKey+'|'+badge+'|'+(sansPhoto?1:0);
   if(flatFaceCache.has(key)) return flatFaceCache.get(key);
   const size = 960;
   const cvs = document.createElement('canvas'); cvs.width = cvs.height = size;
@@ -526,7 +554,8 @@ function getFlatPhotoFace(catKey, accentColor, badge){
   drawCaseBase(ctx, size);
   const accent = caseAccent(catKey);
   const img = LOT_IMAGES[catKey];
-  if(img) drawPhotoWindow(ctx, img, WIN.x, WIN.y, WIN.w, WIN.h, WIN.r);
+  if(img && sansPhoto) drawPedestal(ctx, WIN.x, WIN.y, WIN.w, WIN.h, WIN.r);
+  else if(img) drawPhotoWindow(ctx, img, WIN.x, WIN.y, WIN.w, WIN.h, WIN.r);
   else drawMedallion(ctx, WIN.x, WIN.y, WIN.w, WIN.h, WIN.r, catKey, accent);
   if(badge){
     // « simple visite » : petit cadenas ouvert en coin de fenêtre
@@ -2218,7 +2247,10 @@ for(let i=0;i<N_TILES;i++){
     // "float" (le lot flotte déjà en carte au-dessus, la case reste
     // sobre) / "glyph" (Chance, Caisse, Prison : pas de photo, mais
     // getFlatPhotoFace dessine désormais son propre fond + symbole)
-    faceTex = getFlatPhotoFace(catKey, accentColor, null);
+    // gros lot hors coin : sa photo est sur la carte flottante, la case
+    // montre le socle ; Chance / Caisse / Prison gardent leur médaillon
+    const flotte = SHOW_FLOAT_PHOTOS && catDef.tier === 'float' && i % SIDE !== 0;
+    faceTex = getFlatPhotoFace(catKey, accentColor, null, flotte);
   }
   /* Dessus de case ÉCLAIRÉ (polish 22/09). C'était un MeshBasicMaterial :
      un matériau qui ignore la lumière ET les ombres — la ligne
@@ -2281,11 +2313,8 @@ for(let i=0;i<N_TILES;i++){
   // Case 1 (Départ) : aucune décoration flottante, même si sa catégorie
   // de fond ('booster8') en aurait normalement une — voir getDepartFace
   // plus haut, la case n'est thématiquement pas un vrai lot.
-  /* Cartes photo flottantes au-dessus des gros lots : RETIRÉES (23/09).
-     Elles répétaient la photo déjà présente sur la case — « une case = une
-     photo ». Les médaillons Chance / Caisse / Prison (symboles, pas des
-     photos) restent. */
-  if(SHOW_FLOAT_PHOTOS && i !== 0 && catDef.tier === 'float'){
+  // (pas de carte flottante sur un coin : le billet porte déjà la photo)
+  if(SHOW_FLOAT_PHOTOS && i % SIDE !== 0 && catDef.tier === 'float'){
     const { tex, aspect } = getFramedPhotoTexture(catKey);
     const scaleByCat = { gradee:0.5, booster50:0.6, etb:0.7, jackpot300:0.8 }[catKey] || 0.5;
     const h = scaleByCat, w = h*aspect;
