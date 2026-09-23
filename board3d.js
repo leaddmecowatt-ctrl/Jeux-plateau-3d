@@ -8013,6 +8013,8 @@ function celebrate(catKey, forcedCard, opts){
   celebLocked = !!(opts && opts.locked);
   const myCelebGen = ++celebGen;
   const level = TIER_LEVEL[catKey] ?? 1;
+  // le personnage anime sourit au lot gagné, d'autant plus que le lot est gros
+  if(level > 0 && player.setMood) player.setMood(level);
   if(level===0){
     // La case Prison arrête la partie, mais ne repart jamais totalement
     // les mains vides : une carte commune de consolation est offerte

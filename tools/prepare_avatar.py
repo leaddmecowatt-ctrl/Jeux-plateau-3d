@@ -81,7 +81,7 @@ for e in preset.values():
 sb = j['extensions'].get('VRMC_springBone')
 if sb: sb['springs'] = [s for s in sb['springs'] if s.get('name') != 'RoboWire']
 
-# 2 bis. gadgets des poignets, et logo de poitrine : composantes connexes isolées, loin de l'axe
+# 2 bis. gadgets des poignets : composantes connexes isolées, loin de l'axe
 # du corps (|x| > 0,38) et sous la hauteur des épaules, dans le maillage
 # « wear ». Les doigts (body_bake) et les bras (body_nm) sont d'autres
 # primitives, jamais touchées ici.
@@ -97,7 +97,7 @@ for n in j['nodes']:
     if n.get('name') != 'wear' or 'mesh' not in n: continue
     for p in j['meshes'][n['mesh']]['primitives']:
         mname = j['materials'][p['material']]['name']
-        if mname not in ('huku_bake', 'wear_metal', 'body_bake'): continue
+        if mname not in ('huku_bake', 'wear_metal'): continue
         P = read_acc(p['attributes']['POSITION']); I = read_acc(p['indices']).reshape(-1, 3)
         par = np.arange(len(P))
         def f(a):
@@ -112,9 +112,6 @@ for n in j['nodes']:
             q = P[roots == r]; c = (q.min(0) + q.max(0)) / 2
             sz = q.max(0) - q.min(0)
             if mname != 'body_bake' and abs(c[0]) > 0.38 and c[1] < 1.05: drop.add(r)
-            # logo hexagonal de la marque d'origine, décalque posé sur la poitrine
-            if mname == 'body_bake' and c[2] > 0.06 and 1.05 < c[1] < 1.25 and 0 < c[0] < 0.16 and sz.max() < 0.1:
-                drop.add(r)
         keepT = np.array([roots[t[0]] not in drop for t in I])
         A = j['accessors'][p['indices']]
         dt = {5125:np.uint32,5123:np.uint16,5121:np.uint8}[A['componentType']]
@@ -175,11 +172,14 @@ def recolor(name, img):
         shade = 0.86 + 0.14*np.clip(lum/0.35, 0, 1)
         for k in range(3): reg[...,k] = np.where(m, skin[k]*shade, reg[...,k])
         a[:, int(0.76*w):, :] = reg
-        # logo hexagonal de la marque d'origine (décalque de poitrine) : repeint
-        # dans le rouge du haut, ombrage conservé
-        ys, xs = slice(int(0.695*h), int(0.775*h)), slice(int(0.595*w), int(0.640*w))
-        L = 0.80 + 0.20*np.clip((0.30*a[ys, xs, 0] + 0.59*a[ys, xs, 1] + 0.11*a[ys, xs, 2]) / 255.0, 0, 1)
-        for k, c in enumerate((200, 34, 44)): a[ys, xs, k] = c * L
+        # Le haut d'origine est ajouré d'un motif d'hexagones (le logo de la
+        # marque) sur la poitrine gauche : on y voyait la peau, blanche sous
+        # l'éclairage. La peau vue au travers est repeinte dans le rouge du
+        # haut ; la zone (relevée par lancer de rayon sur le rendu) s'arrête
+        # avant l'encolure en V, qui reste couleur peau.
+        u0, v0, u1, v1 = 0.598, 0.688, 0.658, 0.780
+        ys, xs = slice(int(v0*h), int(v1*h)), slice(int(u0*w), int(u1*w))
+        for k, c in enumerate((176, 30, 40)): a[ys, xs, k] = c
         return Image.fromarray(a.clip(0, 255).astype(np.uint8), 'RGBA')
     return img
 
@@ -201,7 +201,8 @@ def copy_bv(i):
 for ai, a in enumerate(j['accessors']):
     if ai in acc_used:
         if ai in acc_override:
-            a['bufferView'] = push(acc_override[ai]); bv_new[a['bufferView']]['target'] = 34963
+            a['bufferView'] = push(acc_override[ai])
+            bv_new[a['bufferView']]['target'] = 34963 if a['type'] == 'SCALAR' else 34962
         elif 'bufferView' in a: a['bufferView'] = copy_bv(a['bufferView'])
         if 'sparse' in a:
             a['sparse']['indices']['bufferView'] = copy_bv(a['sparse']['indices']['bufferView'])
