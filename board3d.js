@@ -2584,7 +2584,7 @@ function toonGradient(){
    sculptés ; la marche utilise la vraie animation du modèle (pilotée
    par un AnimationMixer), plus une transition douce vers l'animation
    "idle" à l'arrêt. */
-const PLAYER_TARGET_HEIGHT = 0.82; // hauteur visee sur le plateau (memes proportions que l'ancien pion). Ne pas monter : en vue plateau (plongee 51 deg) c'est le bord du chapeau de paille qui grandit, pas la silhouette, et il masque encore plus le corps. Le personnage se regarde en gros plan (CINE.closeup, cale a 7 deg exprES).
+const PLAYER_TARGET_HEIGHT = 1.12; // hauteur visee sur le plateau (memes proportions que l'ancien pion). Ne pas monter : en vue plateau (plongee 51 deg) c'est le bord du chapeau de paille qui grandit, pas la silhouette, et il masque encore plus le corps. Le personnage se regarde en gros plan (CINE.closeup, cale a 7 deg exprES).
 
 /* Crée immédiatement un pion "vide" (groupe + mixer/setWalking neutres)
    pour que le plateau puisse démarrer sa boucle de rendu tout de suite :
@@ -3694,6 +3694,7 @@ async function loadPlayerModel(player){
     if(!o.isMesh) return;
     o.castShadow = true;
     const oldMat = o.material;
+    o.userData.nomOrigine = oldMat.name || '';
     if(oldMat.name === 'skin') skinMat = null;   // (posé plus bas sur le nouveau matériau)
     /* FINITION DU PERSONNAGE — le point qui change tout.
        Les 7 matériaux du GLB étaient remplacés par du MeshToonMaterial :
@@ -3847,8 +3848,591 @@ async function loadPlayerModel(player){
   // besoin des épaules, des poignets et des jambes, pas seulement des bras
   const bones = {};
   for(const n of RIG_BONES) bones[n] = findBone(model, n);
+  /* Le pion refait en volumes (voir « LUFFY SCULPTÉ ») ; son clignement
+     remplace celui de la texture peinte. En cas d'échec, le pion d'origine
+     reste tel quel. */
+  try{
+    const luffy = buildLuffy(model, flipPivot);
+    if(luffy){ blink = luffy.blink; player.luffy = luffy; }
+  }catch(e){ console.warn('Luffy sculpté indisponible, pion d\'origine conservé :', e); }
   player.updateBody = buildBodyLayer(bones, blink, model);
   player.bones = bones;
+}
+
+/* ============================================================================
+   LUFFY SCULPTÉ — le pion de l'animateur, refait en volumes
+   ----------------------------------------------------------------------------
+   Le modèle d'origine (Kenney « characterMedium ») est un personnage de
+   blocs : visage peint sur une plaque, cheveux en caisson, corps en boîte,
+   vêtements peints dans la texture. Son squelette, lui, est bon, et c'est lui
+   que toute la couche d'animation pilote (marche, saut, salto, regard,
+   réactions). On garde donc le squelette et le CHAPEAU d'origine, et on
+   fabrique par-dessus un vrai personnage chibi d'après la référence :
+     - tête ronde, visage dessiné (grands yeux, grand sourire, cicatrice
+       cousue sous l'œil gauche), cheveux noirs en mèches ;
+     - corps en volumes lisses ; vêtements taillés en 3D, pas repeints :
+       gilet rouge ouvert à boutons dorés et mancherons effrangés, cicatrice
+       en croix en relief sur le torse, short bleu ample qui tombe en plis,
+       revers blancs duveteux, écharpe jaune nouée avec son long pan,
+       sandales à lanières ;
+     - chaque maillage est SKINNÉ sur le squelette d'origine (poids calculés
+       par distance aux os) : les vêtements plient avec le corps ;
+     - contour noir façon dessin animé (coque inversée), ombrage en aplats.
+   Unités « design » : repère du pivot du pion mesuré au chargement avec
+   l'échelle d'origine (sol à y = -0,204, tête vers 0,72). Tout est converti
+   dans le repère du maillage d'origine : la taille finale du pion se règle
+   indépendamment (PLAYER_TARGET_HEIGHT).
+   ========================================================================== */
+const LUFFY_DESIGN = { scale: 0.28682, offY: -0.20285 };   // repère de mesure
+const LUFFY_COL = {
+  peau:0xf1c29b, gilet:0xc9252b, short:0x5d84d9, revers:0xfbf8f0, echarpe:0xf3c230,
+  cheveux:0x17171c, bouton:0xf8d23e, semelle:0xb58a52, laniere:0x5b3a1f, cicatrice:0xe39c96,
+};
+function luffyGradient(){
+  const d = new Uint8Array([90, 175, 255]);
+  const t = new THREE.DataTexture(d, 3, 1, THREE.RedFormat);
+  t.magFilter = t.minFilter = THREE.NearestFilter; t.needsUpdate = true; return t;
+}
+
+/* ---- géométrie : petits outils de construction (repère design) ---- */
+function luffyPart(){ return { p:[], n:[], c:[], uv:[], i:[], bones:null, rigid:null }; }
+function luffyPush(part, pos, col, uv){
+  part.p.push(pos.x, pos.y, pos.z); part.c.push(col[0], col[1], col[2]);
+  part.uv.push(uv ? uv[0] : 0, uv ? uv[1] : 0);
+  return part.p.length/3 - 1;
+}
+// grille (rangées x colonnes) déjà remplie -> triangles
+function luffyGrid(part, base, rows, cols, wrap){
+  const C = wrap ? cols : cols;
+  for(let r=0;r<rows-1;r++) for(let k=0;k<cols-(wrap?0:1);k++){
+    const k2 = (k+1) % cols;
+    const a = base + r*cols + k, b = base + r*cols + k2, c = base + (r+1)*cols + k, d = base + (r+1)*cols + k2;
+    part.i.push(a, b, c, b, d, c);      // faces tournées vers l'extérieur
+  }
+}
+// ellipsoïde déformable ; f(dir) peut retoucher le rayon
+function luffyEllipsoid(part, c, rx, ry, rz, seg, ring, col, deform){
+  const base = part.p.length/3;
+  for(let r=0;r<=ring;r++){
+    const th = r/ring*Math.PI;
+    for(let s=0;s<=seg;s++){
+      const ph = s/seg*Math.PI*2;
+      const d = new THREE.Vector3(-Math.cos(ph)*Math.sin(th), Math.cos(th), Math.sin(ph)*Math.sin(th));
+      const k = deform ? deform(d) : 1;
+      luffyPush(part, new THREE.Vector3(c.x + d.x*rx*k, c.y + d.y*ry*k, c.z + d.z*rz*k), col, [s/seg, 1 - r/ring]);
+    }
+  }
+  for(let r=0;r<ring;r++) for(let s=0;s<seg;s++){
+    const a = base + r*(seg+1) + s, b = a+1, cc = a+seg+1, d = cc+1;
+    if(r>0) part.i.push(a, cc, b);
+    if(r<ring-1) part.i.push(b, cc, d);
+  }
+}
+// tube le long d'une polyligne : pts [{p,r,rz?}], sections elliptiques,
+// repères par transport parallèle ; bosses(k, angle, t) retouche le rayon
+function luffyTube(part, pts, seg, col, opts={}){
+  const base = part.p.length/3;
+  const N = pts.length;
+  const T = [], U = [], V = [];
+  for(let i=0;i<N;i++){
+    const a = pts[Math.max(0,i-1)].p, b = pts[Math.min(N-1,i+1)].p;
+    T.push(b.clone().sub(a).normalize());
+  }
+  let u = new THREE.Vector3(0,0,1);
+  if(Math.abs(u.dot(T[0])) > 0.9) u.set(1,0,0);
+  u.addScaledVector(T[0], -u.dot(T[0])).normalize();
+  for(let i=0;i<N;i++){
+    if(i>0){ u.addScaledVector(T[i], -u.dot(T[i])).normalize(); }
+    U.push(u.clone()); V.push(new THREE.Vector3().crossVectors(T[i], u).normalize());
+  }
+  for(let i=0;i<N;i++){
+    const P = pts[i];
+    for(let s=0;s<seg;s++){
+      const ang = s/seg*Math.PI*2;
+      let rr = P.r * (opts.bosses ? opts.bosses(i, ang, i/(N-1)) : 1);
+      const rz = (P.rz || P.r)/P.r;
+      const q = P.p.clone().addScaledVector(U[i], Math.cos(ang)*rr*rz).addScaledVector(V[i], Math.sin(ang)*rr);
+      luffyPush(part, q, opts.colAt ? opts.colAt(i, ang) : col, [s/seg, i/(N-1)]);
+    }
+  }
+  luffyGrid(part, base, N, seg, true);
+  const cap = (i, flip)=>{
+    const ci = luffyPush(part, pts[i].p.clone().addScaledVector(T[i], flip ? -pts[i].r*0.35 : pts[i].r*0.35), col);
+    for(let s=0;s<seg;s++){
+      const a = base + i*seg + s, b = base + i*seg + (s+1)%seg;
+      if(flip) part.i.push(ci, b, a); else part.i.push(ci, a, b);
+    }
+  };
+  if(opts.capStart) cap(0, true);
+  if(opts.capEnd) cap(N-1, false);
+}
+// coque verticale autour du tronc : sections superellipse, secteur d'angle
+// [a0, a1] (0 = devant), profil(y) -> {rx, rz, zc}
+function luffyShell(part, ys, prof, seg, col, opts={}){
+  const base = part.p.length/3;
+  const cols = seg + 1;
+  for(let r=0;r<ys.length;r++){
+    const y = ys[r], P = prof(y, r/(ys.length-1));
+    const a0 = opts.a0 ? opts.a0(y) : 0, a1 = opts.a1 ? opts.a1(y) : Math.PI*2;
+    for(let s=0;s<=seg;s++){
+      const a = a0 + (a1-a0)*s/seg;
+      const sa = Math.sin(a), ca = Math.cos(a), n = opts.n || 2.4;
+      const ex = Math.sign(sa)*Math.pow(Math.abs(sa), 2/n), ez = Math.sign(ca)*Math.pow(Math.abs(ca), 2/n);
+      let k = opts.bosses ? opts.bosses(a, y, r/(ys.length-1)) : 1;
+      luffyPush(part, new THREE.Vector3(P.rx*ex*k, y + (opts.dy ? opts.dy(a, y) : 0), P.zc + P.rz*ez*k),
+        opts.colAt ? opts.colAt(a, y) : col, [s/seg, r/(ys.length-1)]);
+    }
+  }
+  for(let r=0;r<ys.length-1;r++) for(let s=0;s<seg;s++){
+    const a = base + r*cols + s, b = a+1, c = a+cols, d = c+1;
+    part.i.push(a, b, c, b, d, c);
+  }
+}
+
+/* ---- visage : dessiné sur la sphère de la tête (u = 0,25 = face) ---- */
+function drawLuffyFace(mode){
+  const W = 2048, H = 1024;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const x = cv.getContext('2d');
+  x.fillStyle = '#f1c29b'; x.fillRect(0, 0, W, H);
+  const U = (du)=> (0.25 + du)*W;          // du > 0 : vers la gauche du personnage
+  const Y = (t)=> t*H;
+  x.lineCap = 'round'; x.lineJoin = 'round';
+  const ink = '#1b1414';
+  // joues légèrement rosées
+  for(const s of [-1, 1]){
+    const g = x.createRadialGradient(U(s*0.083), Y(0.585), 5, U(s*0.083), Y(0.585), 70);
+    g.addColorStop(0, 'rgba(240,140,120,.28)'); g.addColorStop(1, 'rgba(240,140,120,0)');
+    x.fillStyle = g; x.fillRect(U(s*0.083)-80, Y(0.585)-80, 160, 160);
+  }
+  const eye = (s)=>{
+    const cx = U(s*0.052), cy = Y(0.475);
+    if(mode === 'ouvert'){
+      x.fillStyle = '#ffffff'; x.strokeStyle = ink; x.lineWidth = 11;
+      x.beginPath(); x.ellipse(cx, cy, 58, 66, 0, 0, Math.PI*2); x.fill(); x.stroke();
+      x.fillStyle = ink; x.beginPath(); x.ellipse(cx + s*4, cy + 6, 25, 29, 0, 0, Math.PI*2); x.fill();
+      x.fillStyle = '#ffffff'; x.beginPath(); x.ellipse(cx + s*4 - 9, cy - 5, 8, 9, 0, 0, Math.PI*2); x.fill();
+    } else if(mode === 'ferme'){
+      x.strokeStyle = ink; x.lineWidth = 12;
+      x.beginPath(); x.moveTo(cx-54, cy+8); x.quadraticCurveTo(cx, cy+26, cx+54, cy+8); x.stroke();
+    } else { // rire : yeux en accent circonflexe
+      x.strokeStyle = ink; x.lineWidth = 14;
+      x.beginPath(); x.moveTo(cx-52, cy+18); x.lineTo(cx, cy-22); x.lineTo(cx+52, cy+18); x.stroke();
+    }
+    // sourcil épais, remonté vers l'extérieur
+    x.fillStyle = ink;
+    x.beginPath();
+    x.moveTo(cx - s*62, cy - 78); x.quadraticCurveTo(cx, cy - 112, cx + s*66, cy - 104);
+    x.lineTo(cx + s*64, cy - 88); x.quadraticCurveTo(cx, cy - 92, cx - s*60, cy - 64); x.closePath(); x.fill();
+  };
+  eye(-1); eye(1);
+  // nez : petit trait
+  x.strokeStyle = '#b77d62'; x.lineWidth = 7;
+  x.beginPath(); x.moveTo(U(0.002), Y(0.535)); x.lineTo(U(-0.004), Y(0.562)); x.stroke();
+  // grand sourire ouvert (D couché), dents du haut, langue
+  const mx = U(0), my = Y(0.615), mw = mode === 'rire' ? 118 : 104, mh = mode === 'rire' ? 96 : 80;
+  x.save();
+  x.beginPath(); x.moveTo(mx - mw, my); x.quadraticCurveTo(mx, my - 14, mx + mw, my);
+  x.quadraticCurveTo(mx + mw*0.9, my + mh, mx, my + mh); x.quadraticCurveTo(mx - mw*0.9, my + mh, mx - mw, my); x.closePath();
+  x.fillStyle = '#6e1f25'; x.fill();
+  x.clip();
+  x.fillStyle = '#ffffff'; x.fillRect(mx - mw, my - 20, mw*2, 34);
+  x.fillStyle = '#f08a92'; x.beginPath(); x.ellipse(mx, my + mh*0.95, mw*0.62, mh*0.5, 0, 0, Math.PI*2); x.fill();
+  x.restore();
+  x.strokeStyle = ink; x.lineWidth = 10;
+  x.beginPath(); x.moveTo(mx - mw, my); x.quadraticCurveTo(mx, my - 14, mx + mw, my);
+  x.quadraticCurveTo(mx + mw*0.9, my + mh, mx, my + mh); x.quadraticCurveTo(mx - mw*0.9, my + mh, mx - mw, my); x.closePath(); x.stroke();
+  // cicatrice sous l'œil gauche : trait arqué et deux points de couture
+  const sx = U(0.062), sy = Y(0.545);
+  x.strokeStyle = '#8c3b35'; x.lineWidth = 7;
+  x.beginPath(); x.moveTo(sx - 34, sy - 6); x.quadraticCurveTo(sx, sy + 10, sx + 34, sy - 8); x.stroke();
+  x.lineWidth = 6;
+  for(const t of [-14, 14]){ x.beginPath(); x.moveTo(sx + t - 5, sy - 12); x.lineTo(sx + t + 5, sy + 12); x.stroke(); }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = getMaxAniso();
+  return tex;
+}
+
+/* ---- matériau de contour : coque inversée poussée le long des normales ---- */
+function luffyOutlineMat(width){
+  const m = new THREE.MeshBasicMaterial({ color:0x140d0d, side:THREE.BackSide });
+  m.onBeforeCompile = sh=>{
+    sh.vertexShader = sh.vertexShader.replace('#include <skinning_vertex>',
+      '#include <skinning_vertex>\n  transformed += normalize(objectNormal) * ' + width.toFixed(5) + ';');
+  };
+  return m;
+}
+
+function buildLuffy(model, pivot){
+  const skins = [];
+  model.traverse(o=>{ if(o.isSkinnedMesh) skins.push(o); });
+  const kSkin = skins.find(o=>o.material && o.material.map) || skins[0];
+  if(!kSkin) return null;
+  model.updateMatrixWorld(true);
+  const skel = kSkin.skeleton;
+  const boneIdx = name => skel.bones.findIndex(b=>b.name===name);
+  // design -> repère local du maillage d'origine
+  const toNative = new THREE.Matrix4().makeTranslation(0, -LUFFY_DESIGN.offY, 0)
+    .premultiply(new THREE.Matrix4().makeScale(1/LUFFY_DESIGN.scale, 1/LUFFY_DESIGN.scale, 1/LUFFY_DESIGN.scale));
+  const M = new THREE.Matrix4().copy(kSkin.matrixWorld).invert().multiply(model.matrixWorld).multiply(toNative);
+  const Mn = new THREE.Matrix3().getNormalMatrix(M);
+  const localScale = new THREE.Vector3().setFromMatrixScale(M).x;
+  // positions de repos des os, repère design
+  const invModel = new THREE.Matrix4().copy(model.matrixWorld).invert();
+  const bpos = name => {
+    const b = skel.bones[boneIdx(name)]; if(!b) return null;
+    const v = new THREE.Vector3().setFromMatrixPosition(b.matrixWorld).applyMatrix4(invModel);
+    return v.multiplyScalar(LUFFY_DESIGN.scale).add(new THREE.Vector3(0, LUFFY_DESIGN.offY, 0));
+  };
+  const CHILD = { Hips:'Spine', Spine:'Chest', Chest:'UpperChest', UpperChest:'Neck', Neck:'Head', Head:'Head_end' };
+  for(const s of ['Left','Right']){
+    Object.assign(CHILD, { [s+'Shoulder']:s+'Arm', [s+'Arm']:s+'ForeArm', [s+'ForeArm']:s+'Hand', [s+'Hand']:s+'HandIndex1',
+      [s+'UpLeg']:s+'Leg', [s+'Leg']:s+'Foot', [s+'Foot']:s+'Toes', [s+'Toes']:s+'Toes_end' });
+  }
+  const SEG = {};
+  for(const [b, c] of Object.entries(CHILD)){
+    const a = bpos(b), e = bpos(c);
+    if(a && e) SEG[b] = [a, e];
+  }
+  const _t = new THREE.Vector3();
+  const segDist = (p, b)=>{
+    const [a, e] = SEG[b]; const ab = _t.copy(e).sub(a); const L = ab.lengthSq();
+    const t = L > 0 ? Math.max(0, Math.min(1, p.clone().sub(a).dot(ab)/L)) : 0;
+    return p.distanceTo(a.clone().addScaledVector(ab, t));
+  };
+  const B = bpos;   // raccourci pour placer les pièces sur les os
+
+  const parts = {};
+  const P = (mat, bones)=>{ const pt = luffyPart(); pt.bones = bones; (parts[mat] = parts[mat] || []).push(pt); return pt; };
+  const white = [1,1,1];
+  const v3 = (x,y,z)=> new THREE.Vector3(x,y,z);
+
+  // ---------------- tête ----------------
+  const HC = v3(0, 0.715, -0.02);
+  const head = P('visage', ['Head']);
+  luffyEllipsoid(head, HC, 0.248, 0.232, 0.218, 64, 40, white, d=>{
+    // joues pleines, menton rond, crâne un peu plus large
+    let k = 1;
+    if(d.y < -0.2) k *= 1 - 0.10*Math.pow(-d.y - 0.2, 1.3);
+    if(d.z > 0.3 && d.y < 0.1 && d.y > -0.6) k *= 1 + 0.035*Math.sin((d.y+0.6)/0.7*Math.PI);
+    return k;
+  });
+  const ears = P('peau', ['Head']);
+  for(const s of [-1,1]) luffyEllipsoid(ears, v3(s*0.245, 0.70, -0.02), 0.028, 0.048, 0.036, 16, 10, white);
+  // ---------------- cheveux : mèches coniques ----------------
+  const hair = P('cheveux', ['Head']);
+  const rnd = (()=>{ let s = 7; return ()=>{ s = (s*16807) % 2147483647; return s/2147483647; }; })();
+  const spike = (baseDir, len, rad, bend, droop)=>{
+    const b0 = HC.clone().add(v3(baseDir.x*0.238, baseDir.y*0.222, baseDir.z*0.21));
+    const out = baseDir.clone().normalize();
+    const tip = b0.clone().addScaledVector(out, len).add(v3(0, -droop, 0)).addScaledVector(bend, len*0.3);
+    const mid = b0.clone().lerp(tip, 0.5).addScaledVector(out, len*0.12);
+    luffyTube(hair, [ {p:b0.clone().addScaledVector(out, -0.03), r:rad}, {p:b0, r:rad*0.95}, {p:mid, r:rad*0.55}, {p:tip, r:0.002} ], 7, white, { capStart:true });
+  };
+  // calotte (couvre le crâne sous le chapeau)
+  luffyEllipsoid(hair, HC.clone().add(v3(0, 0.022, -0.012)), 0.256, 0.236, 0.228, 40, 24, white, d=> (d.z < -0.05 && d.y > -0.78) ? 1.025 : (d.y > -0.05 ? 1 : 0.9));   // tout l'arrière du crâne, jusqu'à la nuque
+  // mèches de côté et de nuque, sous l'aile du chapeau
+  for(let i=0;i<34;i++){
+    const a = Math.PI*0.28 + (i/34)*Math.PI*1.44 + (rnd()-0.5)*0.12;       // du côté gauche au côté droit, par l'arrière
+    const dir = v3(Math.sin(a), 0.05 + rnd()*0.35, Math.cos(a));
+    spike(dir, 0.055 + rnd()*0.05, 0.03 + rnd()*0.012, v3(0,-1,0), 0.02 + rnd()*0.02);
+  }
+  // nuque : mèches en désordre qui pointent vers le bas et l'extérieur
+  for(let i=0;i<22;i++){
+    const a = Math.PI*0.62 + (i/22)*Math.PI*0.76 + (rnd()-0.5)*0.1;
+    const dir = v3(Math.sin(a), 0.05 - rnd()*0.2, Math.cos(a));
+    spike(dir, 0.035 + rnd()*0.03, 0.026 + rnd()*0.008, v3(Math.sin(a)*0.6, -1, Math.cos(a)*0.6).normalize(), 0.012);
+  }
+  // frange : mèches épaisses qui tombent sur le front
+  const bangs = [[-0.13,0.090],[-0.075,0.105],[-0.02,0.11],[0.035,0.108],[0.09,0.10],[0.14,0.085],[-0.17,0.07],[0.18,0.07]];
+  for(const [bx, bl] of bangs){
+    const dir = v3(bx/0.24, 0.62, 0.72);
+    spike(dir, bl, 0.034, v3(bx*0.8, -1.2, 0.25).normalize(), 0.075);
+  }
+  // mèches qui dépassent au-dessus des oreilles
+  for(const s of [-1,1]) for(let k=0;k<3;k++)
+    spike(v3(s*0.95, 0.1 + k*0.12, -0.1 + k*0.12), 0.06, 0.028, v3(s*0.4,-1,0), 0.03);
+
+  // ---------------- cou et tronc ----------------
+  const neck = P('peau', ['Neck','Head','UpperChest']);
+  luffyTube(neck, [{p:v3(0,0.50,-0.005), r:0.046}, {p:v3(0,0.545,-0.005), r:0.046}, {p:v3(0,0.60,-0.01), r:0.05}], 16, white);
+  const TORSE = (y)=>{
+    // profil du tronc chibi : léger ventre, poitrine, épaules arrondies
+    const k = [[0.08,0.096,0.072,0.012],[0.16,0.104,0.078,0.016],[0.24,0.104,0.077,0.018],[0.32,0.110,0.080,0.022],
+               [0.40,0.117,0.080,0.018],[0.46,0.114,0.074,0.010],[0.505,0.096,0.064,0.004],[0.54,0.058,0.048,0]];
+    if(y <= k[0][0]) return {rx:k[0][1], rz:k[0][2], zc:k[0][3]};
+    for(let i=0;i<k.length-1;i++) if(y <= k[i+1][0]){
+      const t = (y-k[i][0])/(k[i+1][0]-k[i][0]), s = t*t*(3-2*t);
+      return { rx:k[i][1]+(k[i+1][1]-k[i][1])*s, rz:k[i][2]+(k[i+1][2]-k[i][2])*s, zc:k[i][3]+(k[i+1][3]-k[i][3])*s };
+    }
+    const e = k[k.length-1]; return {rx:e[1], rz:e[2], zc:e[3]};
+  };
+  const torso = P('peau', ['Hips','Spine','Chest','UpperChest','Neck']);
+  const tys = []; for(let y=0.07; y<=0.545; y+=0.0125) tys.push(y);
+  luffyShell(torso, tys, y=>TORSE(y), 48, white);
+  // clavicules et plis de ventre : légers creux d'ombre peints en couleur de sommet
+  // cicatrice en croix : deux bandes en relief posées sur la surface du torse
+  const scar = P('cicatrice', ['Chest','UpperChest','Spine']);
+  const surf = (x, y, lift)=>{ const T = TORSE(y); const sx = Math.max(-0.999, Math.min(0.999, x/T.rx));
+    // superellipse n=2.4 : z = rz * (1-|sx|^n)^(1/n)
+    const z = T.zc + T.rz*Math.pow(1 - Math.pow(Math.abs(sx), 2.4), 1/2.4); return v3(x, y, z + lift); };
+  for(const s of [-1, 1]){
+    const base = scar.p.length/3, n = 22;
+    for(let k=0;k<=n;k++){
+      const t = k/n, x = (t-0.5)*0.118*s, y = 0.392 + (0.5-t)*0.118;
+      const w = 0.0105*Math.sin(Math.PI*Math.min(1, t*1.05+0.02)) + 0.003;
+      const c = surf(x, y, 0.0035);
+      const perp = v3(0.707*s, 0.707, 0).multiplyScalar(w);
+      luffyPush(scar, surf(x + perp.x, y + perp.y, 0.0022), [1,1,1]);
+      luffyPush(scar, c, [1.06,1.02,1.02]);
+      luffyPush(scar, surf(x - perp.x, y - perp.y, 0.0022), [1,1,1]);
+      if(k>0){ const a = base+(k-1)*3, b = base+k*3;
+        scar.i.push(a, b, a+1, a+1, b, b+1, a+1, b+1, a+2, a+2, b+1, b+2); }
+    }
+  }
+
+  // ---------------- bras et poings ----------------
+  for(const s of ['Left','Right']){
+    const sg = s==='Left' ? 1 : -1;
+    const sh = B(s+'Arm'), el = B(s+'ForeArm'), wr = B(s+'Hand');
+    const arm = P('peau', [s+'Shoulder', s+'Arm', s+'ForeArm', s+'Hand', 'UpperChest']);
+    luffyTube(arm, [
+      {p:v3(sg*0.07, sh.y+0.005, sh.z), r:0.043}, {p:sh.clone(), r:0.042},
+      {p:sh.clone().lerp(el, 0.5), r:0.039}, {p:el.clone(), r:0.035},
+      {p:el.clone().lerp(wr, 0.55), r:0.032}, {p:wr.clone(), r:0.029}], 18, white, {capStart:true});
+    const fist = P('peau', [s+'Hand']);
+    const fc = wr.clone().add(v3(sg*0.042, -0.004, 0.006));
+    luffyEllipsoid(fist, fc, 0.044, 0.042, 0.045, 24, 16, white, d=> 1 + 0.06*Math.max(0, d.z)*Math.max(0,-d.y+0.3));
+    luffyEllipsoid(fist, fc.clone().add(v3(-sg*0.004, -0.004, 0.04)), 0.02, 0.017, 0.024, 12, 8, white);
+    // jointures : quatre bosses discrètes sur l'avant du poing
+    for(let k=0;k<4;k++) luffyEllipsoid(fist, fc.clone().add(v3(sg*(0.012 + 0.0), 0.028 - k*0.018, 0.028)), 0.017, 0.011, 0.018, 10, 6, white);
+  }
+  // ---------------- jambes et pieds ----------------
+  for(const s of ['Left','Right']){
+    const sg = s==='Left' ? 1 : -1;
+    const hp = B(s+'UpLeg'), kn = B(s+'Leg'), an = B(s+'Foot');
+    const leg = P('peau', [s+'UpLeg', s+'Leg', s+'Foot', 'Hips']);
+    luffyTube(leg, [{p:hp.clone().add(v3(0,0.02,0)), r:0.05}, {p:hp.clone().lerp(kn,0.5), r:0.046}, {p:kn.clone(), r:0.041},
+      {p:kn.clone().lerp(an,0.5).add(v3(0,0,0.006)), r:0.038}, {p:an.clone().add(v3(0,-0.012,0.01)), r:0.031}], 18, white);
+    const foot = P('peau', [s+'Foot', s+'Toes']);
+    luffyEllipsoid(foot, v3(sg*0.095, -0.171, 0.012), 0.043, 0.023, 0.078, 24, 12, white, d=> d.y < 0 ? 0.85 : 1);
+    for(let k=0;k<4;k++) luffyEllipsoid(foot, v3(sg*(0.078 + k*0.012), -0.176, 0.083), 0.0085, 0.009, 0.01, 8, 6, white);
+    // sandale : semelle de paille, lanière en V entre les orteils, bride de talon
+    const sole = P('semelle', [s+'Foot', s+'Toes']);
+    luffyEllipsoid(sole, v3(sg*0.095, -0.198, 0.012), 0.054, 0.0065, 0.094, 28, 8, white);
+    const strap = P('laniere', [s+'Foot', s+'Toes']);
+    const toe = v3(sg*0.088, -0.18, 0.082);
+    for(const side of [-1,1]){
+      luffyTube(strap, [{p:toe, r:0.006}, {p:v3(sg*0.095 + side*0.042, -0.168, 0.028), r:0.007}, {p:v3(sg*0.095 + side*0.05, -0.192, 0.0), r:0.006}], 8, white);
+    }
+  }
+
+  // ---------------- short : bassin + jambes amples, plis qui tombent ----------------
+  const shortCol = (a, y)=>{ const f = 0.5 + 0.5*Math.sin(a*9 + y*30); return [0.86 + 0.14*f, 0.86 + 0.14*f, 0.9 + 0.1*f]; };
+  const pelvis = P('short', ['Hips','Spine','LeftUpLeg','RightUpLeg']);
+  const pys = []; for(let y=0.085; y<=0.30; y+=0.0125) pys.push(y);
+  luffyShell(pelvis, pys, y=>{ const T = TORSE(y); return {rx:T.rx+0.017, rz:T.rz+0.016, zc:T.zc}; }, 48, white,
+    { bosses:(a,y)=> 1 + 0.018*Math.sin(a*9 + y*30), colAt:shortCol });
+  const cuffs = P('revers', []);
+  for(const s of ['Left','Right']){
+    const sg = s==='Left' ? 1 : -1;
+    const hp = B(s+'UpLeg'), kn = B(s+'Leg');
+    const top = v3(sg*0.058, 0.15, 0.012), hem = hp.clone().lerp(kn, 0.86).add(v3(sg*0.012, 0, 0.004));
+    const pts = []; for(let k=0;k<=8;k++){ const t = k/8; pts.push({ p: top.clone().lerp(hem, t), r: 0.066 + 0.018*t*t }); }
+    const leg = P('short', ['Hips', s+'UpLeg', s+'Leg']);
+    luffyTube(leg, pts, 26, white, { bosses:(i, a, t)=> 1 + (0.03 + 0.05*t)*Math.sin(a*6 + t*2), colAt:(i,a)=>shortCol(a, i*0.01) });
+    // revers blanc duveteux : anneau épais à petites bosses
+    const cp = P('revers', ['Hips', s+'UpLeg', s+'Leg']);
+    const ring = [];
+    const axis = hem.clone().sub(top).normalize();
+    // profil arrondi (bourrelet) : le revers se retrousse, épais et moelleux
+    const prof = [0.074, 0.090, 0.099, 0.101, 0.096, 0.082, 0.066];
+    prof.forEach((r, k)=> ring.push({ p: hem.clone().addScaledVector(axis, -0.026 + k*0.009), r }));
+    luffyTube(cp, ring, 48, white, { bosses:(i, a)=> 1 + 0.055*Math.pow(Math.abs(Math.sin(a*13 + i*0.7)), 0.7)*Math.sin(i/6*Math.PI) });
+  }
+
+  // ---------------- gilet rouge : ouvert, sans manches, mancherons effrangés ----------------
+  const gilet = P('gilet', ['Hips','Spine','Chest','UpperChest','Neck']);
+  const gys = []; for(let y=0.225; y<=0.548; y+=0.0115) gys.push(y);
+  const ouverture = (y)=> 1.02 - 0.55*(y - 0.225);        // demi-angle de l'ouverture : gilet grand ouvert, plus large en bas
+  luffyShell(gilet, gys, (y, t)=>{ const T = TORSE(y); const fl = 1 + 0.08*Math.pow(1-t, 2);
+      return {rx:(T.rx+0.012)*fl, rz:(T.rz+0.012)*fl, zc:T.zc}; }, 56, white,
+    { a0:y=>ouverture(y), a1:y=>Math.PI*2 - ouverture(y),
+      dy:(a, y)=> y < 0.23 ? -0.012*Math.abs(Math.sin(a*7)) : 0,
+      colAt:(a, y)=>{ const e = Math.min(Math.abs(a - ouverture(y)), Math.abs(Math.PI*2 - ouverture(y) - a)); return e < 0.09 ? [0.82,0.82,0.82] : [1,1,1]; } });
+  // col rabattu autour du cou
+  const col = P('gilet', ['UpperChest','Neck']);
+  luffyShell(col, [0.528, 0.548, 0.566], (y, t)=>({ rx:0.076 + 0.012*(1-t), rz:0.064 + 0.01*(1-t), zc:0.0 }), 40, white,
+    { a0:()=>0.62, a1:()=>Math.PI*2 - 0.62 });
+  // mancherons : manches courtes, bord effrangé
+  for(const s of ['Left','Right']){
+    const sg = s==='Left' ? 1 : -1;
+    const sh = B(s+'Arm'), el = B(s+'ForeArm');
+    const sl = P('gilet', [s+'Shoulder', s+'Arm', 'UpperChest']);
+    const a0 = v3(sg*0.06, sh.y+0.008, sh.z), a1 = sh.clone().lerp(el, 0.38);
+    luffyTube(sl, [{p:a0, r:0.056}, {p:a0.clone().lerp(a1,0.5), r:0.058}, {p:a1, r:0.061}], 26, white,
+      { bosses:(i, a)=> i===2 ? 1 + 0.12*Math.abs(Math.sin(a*5 + sg)) : 1 });
+  }
+  // quatre boutons dorés sur le pan droit (côté -x du personnage)
+  const btn = P('bouton', ['Spine','Chest','UpperChest']);
+  for(const y of [0.475, 0.425, 0.375, 0.325]){
+    const a = Math.PI*2 - ouverture(y) - 0.2, T = TORSE(y);
+    const sa = Math.sin(a), ca = Math.cos(a);
+    const ex = Math.sign(sa)*Math.pow(Math.abs(sa), 2/2.4), ez = Math.sign(ca)*Math.pow(Math.abs(ca), 2/2.4);
+    luffyEllipsoid(btn, v3((T.rx+0.016)*ex, y, T.zc + (T.rz+0.016)*ez), 0.0115, 0.0115, 0.0075, 12, 8, white);
+  }
+
+  // ---------------- écharpe jaune : nouée à gauche, long pan en drapeau ----------------
+  const sash = P('echarpe', ['Hips','Spine']);
+  const sys = []; for(let y=0.21; y<=0.295; y+=0.0085) sys.push(y);
+  luffyShell(sash, sys, (y, t)=>{ const T = TORSE(y); return {rx:T.rx+0.036, rz:T.rz+0.032, zc:T.zc}; }, 60, white,
+    { bosses:(a, y, t)=> 1 + 0.03*Math.sin(a*8 + t*5) + 0.02*Math.sin(t*Math.PI),
+      colAt:(a, y)=>{ const f = 0.5 + 0.5*Math.sin(y*260 + a*2); return [0.86 + 0.14*f, 0.86 + 0.14*f, 0.86 + 0.14*f]; } });
+  const knot = v3(0.132, 0.25, 0.06);
+  luffyEllipsoid(sash, knot, 0.036, 0.03, 0.03, 16, 10, white);
+  luffyEllipsoid(sash, knot.clone().add(v3(0.018, 0.02, -0.01)), 0.03, 0.022, 0.024, 14, 8, white);
+  const tail = P('echarpe', ['Hips','LeftUpLeg']);
+  { const base = tail.p.length/3, rows = 16, cols = 7;
+    for(let r=0;r<rows;r++){
+      const t = r/(rows-1), y = 0.245 - t*0.29;
+      const w = 0.078 - 0.02*t;
+      for(let c=0;c<cols;c++){
+        const u = c/(cols-1) - 0.5;
+        const wave = 0.012*Math.sin(t*5 + u*3) + 0.018*t*t;
+        const torn = r === rows-1 ? (c%2 ? 0.02 : -0.012) : 0;
+        luffyPush(tail, v3(0.148 + u*w*0.35 + 0.015*t, y + torn, 0.07 + u*w*0.9 + wave), [0.9 + 0.1*Math.cos(u*6), 0.9 + 0.1*Math.cos(u*6), 0.9]);
+      }
+    }
+    for(let r=0;r<rows-1;r++) for(let c=0;c<cols-1;c++){
+      const a = base + r*cols + c, b = a+1, cc = a+cols, d = cc+1;
+      tail.i.push(a, b, cc, b, d, cc);    // une seule face : la matière est double face
+    }
+  }
+
+  // ---------------- assemblage : un maillage skinné par matière ----------------
+  const grad = luffyGradient();
+  const faceTex = { ouvert: drawLuffyFace('ouvert'), ferme: drawLuffyFace('ferme'), rire: drawLuffyFace('rire') };
+  const MATS = {
+    visage: new THREE.MeshToonMaterial({ map:faceTex.ouvert, gradientMap:grad }),
+    peau: new THREE.MeshToonMaterial({ color:LUFFY_COL.peau, gradientMap:grad, vertexColors:true }),
+    cheveux: new THREE.MeshToonMaterial({ color:LUFFY_COL.cheveux, gradientMap:grad, vertexColors:true }),
+    gilet: new THREE.MeshToonMaterial({ color:LUFFY_COL.gilet, gradientMap:grad, vertexColors:true, side:THREE.DoubleSide }),
+    short: new THREE.MeshToonMaterial({ color:LUFFY_COL.short, gradientMap:grad, vertexColors:true }),
+    revers: new THREE.MeshToonMaterial({ color:LUFFY_COL.revers, gradientMap:grad, vertexColors:true, emissive:0x3a3632 }),
+    echarpe: new THREE.MeshToonMaterial({ color:LUFFY_COL.echarpe, gradientMap:grad, vertexColors:true, side:THREE.DoubleSide }),
+    bouton: new THREE.MeshToonMaterial({ color:LUFFY_COL.bouton, gradientMap:grad, vertexColors:true, emissive:0x4a3400 }),
+    semelle: new THREE.MeshToonMaterial({ color:LUFFY_COL.semelle, gradientMap:grad, vertexColors:true }),
+    laniere: new THREE.MeshToonMaterial({ color:LUFFY_COL.laniere, gradientMap:grad, vertexColors:true }),
+    cicatrice: new THREE.MeshToonMaterial({ color:LUFFY_COL.cicatrice, gradientMap:grad, vertexColors:true, side:THREE.DoubleSide, emissive:0x3a1512 }),
+  };
+  const OUT_W = { visage:0.0055, peau:0.0045, cheveux:0.005, gilet:0.004, short:0.0045, revers:0.004, echarpe:0.004,
+                  bouton:0.0022, semelle:0.003, laniere:0.0015, cicatrice:0 };
+  const meshes = [];
+  const pv = new THREE.Vector3(), pn = new THREE.Vector3();
+  for(const [mat, list] of Object.entries(parts)){
+    const pos = [], col = [], uv = [], idx = [], si = [], sw = [];
+    for(const pt of list){
+      const off = pos.length/3;
+      const cand = pt.bones.filter(b=>SEG[b]);
+      for(let v=0; v<pt.p.length/3; v++){
+        pv.set(pt.p[v*3], pt.p[v*3+1], pt.p[v*3+2]);
+        // poids : inverse de la distance aux os candidats, puissance 4
+        let ws = cand.map(b=>{ const d = segDist(pv, b); return [b, 1/Math.pow(d*d + 1e-5, 2)]; });
+        ws.sort((a,b)=>b[1]-a[1]); ws = ws.slice(0, 4);
+        let tot = ws.reduce((a,w)=>a+w[1], 0);
+        const ids = [0,0,0,0], wts = [0,0,0,0];
+        ws.forEach((w,k)=>{ ids[k] = Math.max(0, boneIdx(w[0])); wts[k] = w[1]/tot; });
+        if(!ws.length){ ids[0] = Math.max(0, boneIdx('Hips')); wts[0] = 1; }
+        pv.applyMatrix4(M);
+        pos.push(pv.x, pv.y, pv.z); col.push(pt.c[v*3], pt.c[v*3+1], pt.c[v*3+2]); uv.push(pt.uv[v*2], pt.uv[v*2+1]);
+        si.push(...ids); sw.push(...wts);
+      }
+      for(const k of pt.i) idx.push(k + off);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4));
+    g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    const m = new THREE.SkinnedMesh(g, MATS[mat]);
+    m.name = 'luffy_' + mat;
+    m.castShadow = true; m.frustumCulled = false;
+    kSkin.parent.add(m);
+    m.position.copy(kSkin.position); m.quaternion.copy(kSkin.quaternion); m.scale.copy(kSkin.scale);
+    m.bind(skel, kSkin.bindMatrix);
+    meshes.push(m);
+    if(OUT_W[mat] > 0){
+      const o = new THREE.SkinnedMesh(g, luffyOutlineMat(OUT_W[mat]/localScale));
+      o.name = 'luffy_contour_' + mat; o.frustumCulled = false; o.userData.contour = true;
+      kSkin.parent.add(o);
+      o.position.copy(kSkin.position); o.quaternion.copy(kSkin.quaternion); o.scale.copy(kSkin.scale);
+      o.bind(skel, kSkin.bindMatrix);
+      meshes.push(o);
+    }
+  }
+  // ---------------- chapeau d'origine : paille tressée + contour ----------------
+  for(const o of skins){
+    const nm = (o.userData.nomOrigine || '').toLowerCase();
+    if(nm === 'cap_red' || nm === 'hatband_red'){
+      const band = nm === 'hatband_red';
+      const hm = new THREE.MeshToonMaterial({ color: band ? 0xd01c24 : 0xe8c078, gradientMap:grad, side:THREE.DoubleSide });
+      if(!band) hm.onBeforeCompile = sh=>{
+        sh.vertexShader = 'varying vec3 vPaille;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vPaille = position;');
+        sh.fragmentShader = 'varying vec3 vPaille;\n' + sh.fragmentShader.replace('#include <color_fragment>',
+          `#include <color_fragment>
+          float rr = length(vPaille.xz);
+          float rang = sin(rr*70.0 + vPaille.y*70.0);
+          float brin = sin(atan(vPaille.z, vPaille.x)*140.0 + rr*30.0);
+          diffuseColor.rgb *= 0.90 + 0.07*smoothstep(-0.3, 0.9, rang) + 0.04*brin;`);
+      };
+      o.material = hm; o.visible = true;
+      /* Chapeau d'origine, repoussé en arrière de 26° (et réduit de 10 %) : sur un plateau vu en
+         plongée, l'aile à plat recouvrait tout le personnage — on ne voyait
+         qu'un disque de paille. Incliné comme Luffy le porte souvent, il
+         dégage le visage. Rotation appliquée à la géométrie (100 % liée à
+         l'os de la tête), autour du bord de la calotte. */
+      if(!o.geometry.userData.penche){
+        const g = o.geometry.clone();
+        // pivot = centre de la tête : le chapeau glisse vers l'arrière sur
+        // le crâne, comme un vrai chapeau repoussé, au lieu de flotter
+        const piv = new THREE.Vector3(0, 3.2, -0.07);
+        g.applyMatrix4(new THREE.Matrix4().makeTranslation(-piv.x, -piv.y, -piv.z));
+        g.applyMatrix4(new THREE.Matrix4().makeScale(0.9, 0.9, 0.9));
+        g.applyMatrix4(new THREE.Matrix4().makeRotationX(-0.46));
+        g.applyMatrix4(new THREE.Matrix4().makeTranslation(piv.x, piv.y, piv.z));
+        g.userData.penche = true;
+        o.geometry = g;
+      }
+      const ol = new THREE.SkinnedMesh(o.geometry, luffyOutlineMat((band ? 0.003 : 0.0045)/localScale));
+      ol.name = 'luffy_contour_chapeau'; ol.frustumCulled = false;
+      o.parent.add(ol); ol.position.copy(o.position); ol.quaternion.copy(o.quaternion); ol.scale.copy(o.scale);
+      ol.bind(o.skeleton, o.bindMatrix);
+      meshes.push(ol);
+    } else if(o.visible !== false){
+      o.visible = false;      // corps en blocs, cheveux-caisson, écharpe et sandales d'origine
+    }
+  }
+  // ---------------- clignement et rire (textures du visage) ----------------
+  let closeFor = 0, nextIn = 1.8 + Math.random()*2.5, burst = 0, rire = 0;
+  const setFace = t=>{ if(MATS.visage.map !== t){ MATS.visage.map = t; } };
+  const blink = {
+    update(dt){
+      if(rire > 0){ rire -= dt; setFace(faceTex.rire); return; }
+      if(closeFor > 0){
+        closeFor -= dt;
+        if(closeFor <= 0){ setFace(faceTex.ouvert); if(burst > 0){ burst--; nextIn = 0.12; } else nextIn = 1.1 - Math.log(Math.random()+1e-6)*2.6; }
+        return;
+      }
+      setFace(faceTex.ouvert);
+      nextIn -= dt;
+      if(nextIn <= 0){ setFace(faceTex.ferme); closeFor = 0.09 + Math.random()*0.05; if(burst===0 && Math.random()<0.18) burst = 1; }
+    },
+    rire(sec){ rire = Math.max(rire, sec || 2.5); },
+  };
+  return { blink, meshes };
 }
 
 const player = createPlayer();
@@ -4429,6 +5013,7 @@ function updateFxSystem(sys, dt, gravity, drag, shrink){
    duree et le nombre de saltos montent avec l'enjeu : une pirouette sur un
    Tripack, deux saltos et un envol dans une colonne de feu sur le jackpot. */
 let victoire = null, _colAcc = 0;
+let idleFor = 0;   // temps passé immobile (voir « se tourne vers le public »)
 function startVictoryJump(level){
   if(reduceMotion || !player || !player.root) return;
   const lvl = Math.max(1, Math.min(5, level|0));
@@ -5111,6 +5696,19 @@ function frameStep(dt, t){
       if(reactSettle && reactT0 < 0) reactSettle = false;
     }
   }
+  /* Au repos, Luffy se tourne vers le public. Il gardait le cap de sa
+     dernière marche, souvent dos à la caméra : vu en plongée, on ne voyait
+     alors qu'un chapeau. Il pivote en douceur, une seconde après l'arrêt,
+     sans jamais contrarier la marche, le saut de victoire ni un gros plan. */
+  if(!walk && !victoire && cineMode === null){
+    idleFor += dt;
+    if(idleFor > 0.9){
+      const face = Math.atan2(camera.position.x - player.root.position.x, camera.position.z - player.root.position.z);
+      let d = face - player.root.rotation.y;
+      d = Math.atan2(Math.sin(d), Math.cos(d));
+      player.root.rotation.y += d * Math.min(1, dt*1.6);
+    }
+  } else idleFor = 0;
 
   // Secousse "gros lot" (tripack / coffret) : décroît puis se remet à plat
   if(hypeShakeUntil>0 && shatterUntil===0){
@@ -7689,6 +8287,8 @@ function celebrate(catKey, forcedCard, opts){
   celebLocked = !!(opts && opts.locked);
   const myCelebGen = ++celebGen;
   const level = TIER_LEVEL[catKey] ?? 1;
+  // Luffy éclate de rire au lot gagné, plus longtemps sur les gros lots
+  if(level > 0 && player.luffy) player.luffy.blink.rire(1.6 + level*0.7);
   if(level===0){
     // La case Prison arrête la partie, mais ne repart jamais totalement
     // les mains vides : une carte commune de consolation est offerte
