@@ -3307,10 +3307,15 @@ function measurePlayerTop(){
     if(player.bones && player.bones.LeftFoot && player.bones.LeftUpLeg){
       const _v = new THREE.Vector3();
       player.root.updateWorldMatrix(true, true);
+      /* Mesurées sur le plateau, elles sont ramenées dans le repère du
+         modèle (÷ GAIT_K) où vivent cuisse, tibia et allonge. Sans cette
+         conversion, depuis le pion à 1,12 : hanche à 0,41 pour une jambe
+         de 0,32 — la jambe ne pouvait plus atteindre le sol, la foulée
+         tombait à 0,01 et Luffy glissait pieds joints en frétillant. */
       player.bones.LeftUpLeg.getWorldPosition(_v);
-      GAIT.hipY = _v.y - player.root.position.y;
+      GAIT.hipY = (_v.y - player.root.position.y) / GAIT_K;
       player.bones.LeftFoot.getWorldPosition(_v);
-      GAIT.footY = _v.y - player.root.position.y;
+      GAIT.footY = (_v.y - player.root.position.y) / GAIT_K;
     }
     if(++footCalSamples >= 14) footCalDone = true;
   }
@@ -5041,7 +5046,17 @@ function landingIndex(fromIdx, count){
    même calcul, donc le pied posé reste au sol par construction, de la
    marche à la course.
      jambe 0,3255 · hanche 0,3176 au-dessus du pied · case = 1,0 */
-const strideForSpeed = sp => GAIT.stride(sp);
+/* GAIT est relevé sur le pion à sa taille d'ALORS (0,82) : ses cotes sont
+   donc dans le repère du modèle, pas du plateau. Depuis que le pion mesure
+   1,12 (Luffy sculpté, 23/09), ses jambes balaient 1,37 fois plus de
+   plateau par pas que ce que le moteur de déplacement faisait avancer le
+   corps : les pieds patinaient vers l'arrière et les pas paraissaient
+   minuscules et précipités (« il fourmille », constaté par l'animateur).
+   Tout ce qui passe du repère du modèle au plateau (distance parcourue par
+   cycle, descente du bassin) est multiplié par GAIT_K ; la cinématique
+   inverse, elle, reste dans le repère du modèle. */
+const GAIT_K = PLAYER_TARGET_HEIGHT / 0.82;
+const strideForSpeed = sp => GAIT.stride(sp) * GAIT_K;
 /* Vitesse de croisière : bornée par la physique du personnage. Il a des
    jambes de 0,33 pour des cases de 1,0 — une case fait trois longueurs de
    jambe, donc il faut ~3 pas par case. Au-delà de ~2,2 cases/s la cadence
@@ -5052,7 +5067,9 @@ const strideForSpeed = sp => GAIT.stride(sp);
    écart), 1,24–2,35 cases/s imposait 3 à 5 pas par seconde : des jambes
    qui s'agitent, pas un homme qui marche. 0,95–1,45 garde un déplacement
    vif (12 cases en ~9 s) avec une cadence de marche rapide. */
-const WALK_V_MIN = 1.50, WALK_V_MAX = 2.05;
+/* 1,50–2,05 cases/s faisait 4,5 à 6 pas par seconde : un trottinement.
+   Avec la foulée recalée (GAIT_K) et cette plage, 2,7 à 3,7 pas/s. */
+const WALK_V_MIN = 1.25, WALK_V_MAX = 1.75;
 let walkBank = 0, walkGait = 0, walkStepPhase = 0, hopGait = 0, hopPhase = 0;
 let walkSpeedK = 0, walkCrouch = 0;
 
@@ -6005,7 +6022,7 @@ function frameStep(dt, t){
     const crouch = GAIT.crouch(spC) * gaitAmp;
     const osc = reduceMotion ? 0
       : (-Math.abs(Math.cos(walk.phase*Math.PI*2)) * GAIT.rise + GAIT.rise) * gaitAmp;
-    const bob = -crouch + osc;
+    const bob = (-crouch + osc) * GAIT_K;   // repère modèle -> plateau (voir GAIT_K)
 
     /* Transfert de poids pendant l'anticipation et la stabilisation :
        un petit creux avant de partir, un autre en posant le dernier pas. */
