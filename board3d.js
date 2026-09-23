@@ -1461,7 +1461,7 @@ function perimeterPosAt(u){ // u in [0,1)
 // libellé et la vraie photo de chaque lot, sans jamais les retaper.
 // Chances (en %) de chaque lot par partie, affichées à droite de sa
 // ligne. Remplies plus bas à partir de la recette réelle du cycle
-// (OUTCOME_RECIPE), puis la plaque est redessinée : une seule source
+// (POUCH), puis la plaque est redessinée : une seule source
 // de vérité, jamais un chiffre retapé à la main.
 let LOT_ODDS_PCT = null;
 /* Affichage public des chances : désactivé à la demande de l'animateur
@@ -5118,18 +5118,21 @@ function startWalk(fromIdx, count, stepDuration){
   const forcedFast = stepDuration < 0.42;
   const gaitMode = 'walk';
   if(!forcedFast && steps > 0){
-    const v = Math.min(WALK_V_MAX, WALK_V_MIN + (steps-1)*0.20);
+    /* Allure variable d'un trajet à l'autre (±15 %), en plus de la
+       longueur : deux trajets de même longueur n'ont pas la même durée. */
+    const v = Math.min(WALK_V_MAX, WALK_V_MIN + (steps-1)*0.20) * (0.87 + Math.random()*0.28);
     stepDuration = 1/v;
   }
   const vCruise = steps>0 ? 1/stepDuration : 0;
   // rampes courtes : 0,3 case au départ et à l'arrivée, sinon les premiers
   // et derniers pas s'étirent et la cadence paraît irrégulière
-  const rampUnits = Math.min(0.3, steps/2);
+  // rampes (démarrage et ralentissement final) variables : 0,22 à 0,45 case
+  const rampUnits = Math.min(forcedFast ? 0.3 : 0.22 + Math.random()*0.23, steps/2);
   const accelTime = rampUnits>0 ? (2*rampUnits)/vCruise : 0;
   const cruiseUnits = steps - 2*rampUnits;
   const cruiseTime = vCruise>0 ? cruiseUnits/vCruise : 0;
-  const prepTime = steps>0 ? 0.22 : 0;
-  const settleTime = steps>0 ? 0.34 : 0;
+  const prepTime = steps>0 ? (forcedFast ? 0.22 : 0.14 + Math.random()*0.22) : 0;
+  const settleTime = steps>0 ? (forcedFast ? 0.34 : 0.28 + Math.random()*0.16) : 0;
   const moveTime = Math.max(0.001, accelTime*2+cruiseTime);
   walk = {
     path, indices, steps, vCruise, rampUnits, accelTime, cruiseTime,
@@ -6765,27 +6768,34 @@ function fundedCategory(catKey){
    au lot déjà décidé, pour que la photo affichée corresponde toujours
    exactement à la case sur laquelle il est posé. */
 const OUTCOME_BATCH_KEY = 'pika_outcome_batch';
-const OUTCOME_BATCH_SIZE = Math.round(CA_CYCLE/AVG_MISE);   // 500 parties = un cycle de 4500 €
-/* Nombre de lots de chaque sorte PAR CYCLE de 500 parties (4500 €) :
-   un cycle = TOUT le stock 30 ans de l'hôte (5 ETB, 11 coffrets dont 9
-   ouverts, 6 tripacks dont 3 ouverts, 6 duopacks dont 3 ouverts : les
-   ouvertures donnent 51 boosters + 24 promos/jumbos).
-   Recette retenue avec l'hôte : 17,6 % de 30 ans (1 partie sur 5,7),
-   communes 60 %, Zone Safari 23 % (dont les 24 promos/jumbos, remises
-   par l'animateur), prison 4 %, marge 26,6 % à la valeur marché (~46 %
-   sur le prix payé). Total 3304 € pour un plafond de 3330 €.
-   Chance et Caisse ne sont pas des lots : ce sont des détours (la carte
-   amène sur la case du lot prévu), voir CARD_ROUTE_P. */
-const OUTCOME_RECIPE = [
-  { cat:'jackpot300',  n:5   },   // ETB 30 ans
-  { cat:'etb',         n:2   },   // Coffret ex (1 Amphinobi, 1 Nymphali)
-  { cat:'booster50',   n:3   },   // Tripack 30 ans
-  { cat:'gradee',      n:3   },   // Duopack 30 ans
-  { cat:'booster8',    n:51  },   // Booster 30 ans
-  { cat:'alternative', n:116 },   // Zone Safari (92) + promos/jumbos 30 ans (24)
-  // Prison : fin de partie immédiate, carte commune de consolation
-  { cat:'prison',      n:20  },
+/* ---------- Pochette de 245 coups (configuration de l'hôte, 23/09) ----------
+   Un coup = une partie (une mise = un lot, même en plusieurs lancers).
+   Les quantités sont EXACTES : aucun plafond de rentabilité ne retire,
+   ne remplace ni ne décale un lot (décision de l'hôte, qui calcule sa
+   rentabilité sur ses coûts réels). Nouvelle pochette mélangée à
+   l'épuisement de la précédente et à chaque « Démarrage cagnotte ».
+     • Lot Mystère : 60 « EX » + 30 « booster japonais », ordre tiré au
+       sort à chaque pochette (voir MYSTERY_MIX) ;
+     • Caisse Communautaire : 7 coups pris sur les communes (le total
+       reste 245) ; le jeu n'en connaît pas le contenu, remis
+       physiquement par l'hôte (promos des coffrets et tripacks ouverts).
+   Chance n'est pas un lot : c'est un détour qui amène sur la case du lot. */
+const POUCH = [
+  { cat:'jackpot300',  n:1   },   // ETB 30 ans (gagnée fermée)
+  { cat:'etb',         n:2   },   // Coffret 30 ans (gagné fermé)
+  { cat:'booster50',   n:2   },   // Tripack 30 ans (gagné fermé)
+  { cat:'gradee',      n:1   },   // Duopack 30 ans (gagné fermé)
+  { cat:'booster8',    n:42  },   // Booster 30 ans
+  { cat:'alternative', n:90  },   // Lot Mystère
+  { cat:'chest',       n:7   },   // Caisse Communautaire
+  { cat:'commune',     n:100 },   // Carte commune
 ];
+const POUCH_SIZE = POUCH.reduce((s,r)=>s+r.n, 0);
+if(POUCH_SIZE !== 245) throw new Error('POUCH : '+POUCH_SIZE+' coups au lieu de 245');
+const MYSTERY_MIX = { carte:60, booster:30 };   // carte = Mystère EX, booster = booster japonais
+if(MYSTERY_MIX.carte + MYSTERY_MIX.booster !== POUCH.find(r=>r.cat==='alternative').n)
+  throw new Error('MYSTERY_MIX ne correspond pas au nombre de Lots Mystère');
+const OUTCOME_BATCH_SIZE = POUCH_SIZE;
 
 // Coût réel de chaque catégorie (PAYOUT_LADDER + prison, qui n'y
 // figure pas puisqu'il ne coûte jamais rien).
@@ -6794,8 +6804,7 @@ const OUTCOME_RECIPE = [
 // la plaque centrale du plateau — le reste (commune) est déduit.
 {
   const odds = {}; let used = 0;
-  OUTCOME_RECIPE.forEach(r=>{ odds[r.cat] = 100*r.n/OUTCOME_BATCH_SIZE; used += r.n; });
-  odds.commune = 100*(OUTCOME_BATCH_SIZE-used)/OUTCOME_BATCH_SIZE;
+  POUCH.forEach(r=>{ odds[r.cat] = 100*r.n/POUCH_SIZE; used += r.n; });
   LOT_ODDS_PCT = odds;
   renderTvLegend();
   const old = centerPlate.material.map;
@@ -6803,181 +6812,79 @@ const OUTCOME_RECIPE = [
   centerPlate.material.needsUpdate = true;
   if(old) old.dispose();
 }
-const OUTCOME_COST = { prison: 0.68 };
+const OUTCOME_COST = { prison: 0.68, chest: 0 };   // Caisse : promos issues des produits ouverts, déjà payées
 PAYOUT_LADDER.forEach(t=>{ OUTCOME_COST[t.cat] = t.cost; });
 
 
-function buildOutcomeBatch(size, recipe, ratio, baseSize){
-  // par défaut : la recette du cycle complet ; le recalibrage passe la
-  // sienne, avec sa pente de reversement réduite
-  recipe   = recipe   || OUTCOME_RECIPE;
-  ratio    = ratio    || CEILING_RATIO;
-  baseSize = baseSize || OUTCOME_BATCH_SIZE;
-  const counts = {};
-  let assigned = 0;
-  recipe.forEach(r=>{
-    const n = Math.round(r.n * size / baseSize);
-    counts[r.cat] = n;
-    assigned += n;
-  });
-  counts.commune = Math.max(0, size-assigned);
-  // garde-fou : le cycle entier doit tenir sous la part reversée
-  {
-    let tot = 0; Object.keys(counts).forEach(c=>{ tot += counts[c]*(OUTCOME_COST[c]||0); });
-    const cap = size*AVG_MISE*ratio;
-    if(tot > cap + 1e-9) throw new Error('OUTCOME_RECIPE : '+tot.toFixed(0)+' € de lots pour un plafond de '+cap.toFixed(0)+' €');
+function shuffleInPlace(a){
+  for(let i=a.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); const t = a[i]; a[i] = a[j]; a[j] = t; }
+  return a;
+}
+/* Mélange complet, à chaque pochette : aucun lot n'a de position fixe.
+   Deux retouches seulement, qui ne changent ni les quantités ni le
+   caractère aléatoire :
+     • Boosters : un mélange est refait tant qu'un quart de la pochette en
+       a moins de 6 ou plus de 15 (10,5 attendus) — ils ne s'agglutinent
+       jamais au début ni ailleurs ;
+     • ETB : placée à une position tirée au sort sur TOUTE la pochette,
+       avec un poids qui croît doucement du premier au dernier coup
+       (×1 à ×1,6) : environ 56 % de chances dans la deuxième moitié,
+       jamais de tour fixe ni de fenêtre. */
+function buildPouch(){
+  const base = [];
+  POUCH.forEach(r=>{ if(r.cat!=='jackpot300') for(let i=0;i<r.n;i++) base.push(r.cat); });
+  const etb = POUCH.find(r=>r.cat==='jackpot300').n;
+  let arr = null;
+  for(let essai=0; essai<500; essai++){
+    arr = shuffleInPlace(base.slice());
+    for(let k=0;k<etb;k++){
+      const L = arr.length + 1;              // positions d'insertion possibles
+      let tot = 0; const w = [];
+      for(let p=0;p<L;p++){ const x = 1 + 0.6*p/(L-1); w.push(x); tot += x; }
+      let r = Math.random()*tot, p = 0;
+      while(p < L-1 && (r -= w[p]) > 0) p++;
+      arr.splice(p, 0, 'jackpot300');
+    }
+    const q = [0,0,0,0];
+    arr.forEach((c,i)=>{ if(c==='booster8') q[Math.min(3, Math.floor(4*i/arr.length))]++; });
+    if(q.every(n=>n>=6 && n<=15)) break;
   }
-
-  /* Deux familles :
-       - les GROS lots (≥ 100 €) : placés à part, à une position tirée au
-         sort parmi toutes celles où les mises déjà encaissées les
-         couvrent — sinon le tirage au hasard les enterre parmi des
-         centaines d'autres cartes et ils finissent systématiquement en
-         toute fin de file (mesuré : jackpot à la partie n° 989 dans 10
-         files sur 10, prévisible) ;
-       - le reste : séquencé avec la règle de rythme ci-dessous. */
-  const BIG = 100;
-  const bigs = [], remaining = [];
-  Object.keys(counts).forEach(cat=>{
-    for(let i=0;i<counts[cat];i++) (OUTCOME_COST[cat] >= BIG ? bigs : remaining).push(cat);
-  });
-  bigs.sort((a,b)=>OUTCOME_COST[b]-OUTCOME_COST[a]);   // le plus cher d'abord
-
-  /* ---- 1. séquence des lots courants, sous contrainte de couverture
-          et de rythme ----
-     Rythme : jamais plus de MAX_SMALL_RUN petits lots (commune) d'affilée,
-     et ce jusqu'à la DERNIÈRE partie de la file. Un simple tirage
-     proportionnel ne suffit pas : le hasard finit par épuiser les vraies
-     cartes quelques dizaines de parties avant la fin (mesuré : série
-     finale de 62 communes). On vérifie donc à chaque position que ce
-     qu'il reste peut ENCORE être disposé sans dépasser la règle :
-       petits restants ≤ (MAX − série en cours) + MAX × vraies cartes restantes
-     et on ne tire au sort qu'entre les choix qui préservent cette
-     garantie. Couverture : un lot n'est éligible que si les mises
-     encaissées jusqu'ici le paient sous le plafond. */
-  const isSmall = cat => cat==='commune' || cat==='prison';
-  let goodsLeft = remaining.filter(c=>!isSmall(c)).length;
-  let smallsLeft = remaining.length - goodsLeft;
-  // série maximale de communes : la plus courte que la recette permet
-  const MAX_SMALL_RUN = Math.max(2, Math.ceil(smallsLeft / Math.max(1, goodsLeft)));
-  const seq = [];
-  let cumMise = 0, cumPaid = 0, smallRun = 0;
-  const nSeq = remaining.length;
-  for(let pos=0; pos<nSeq; pos++){
-    cumMise += AVG_MISE;
-    const headroom = cumMise*ratio - cumPaid;
-    const affGood = [], affSmall = [];
-    for(let i=0;i<remaining.length;i++){
-      if(OUTCOME_COST[remaining[i]] > headroom) continue;
-      (isSmall(remaining[i]) ? affSmall : affGood).push(i);
-    }
-    // ce qui reste possible SANS casser la règle de rythme jusqu'au bout
-    const okSmall = affSmall.length && smallRun < MAX_SMALL_RUN
-                 && (smallsLeft-1) <= (MAX_SMALL_RUN-smallRun-1) + MAX_SMALL_RUN*goodsLeft;
-    const okGood  = affGood.length
-                 && smallsLeft <= MAX_SMALL_RUN*goodsLeft;   // après ce lot, série remise à 0
-    let pool;
-    if(okSmall && okGood) pool = Math.random() < goodsLeft/remaining.length ? affGood : affSmall;
-    else if(okGood)  pool = affGood;
-    else if(okSmall) pool = affSmall;
-    else pool = affGood.length ? affGood : affSmall;   // filet : on préserve au moins la couverture
-    let pickAt;
-    if(pool.length){
-      pickAt = pool[Math.floor(Math.random()*pool.length)];
-    } else {
-      // rien de couvert (ne devrait pas arriver) : le moins cher restant
-      pickAt = 0;
-      for(let i=1;i<remaining.length;i++){
-        if(OUTCOME_COST[remaining[i]] < OUTCOME_COST[remaining[pickAt]]) pickAt = i;
-      }
-    }
-    const cat = remaining.splice(pickAt,1)[0];
-    cumPaid += OUTCOME_COST[cat];
-    if(isSmall(cat)){ smallRun++; smallsLeft--; } else { smallRun = 0; goodsLeft--; }
-    seq.push(cat);
-  }
-
-  /* ---- 2. insertion des gros lots ----
-     Pour chaque gros lot, on liste TOUTES les positions où, une fois
-     inséré, chaque préfixe de la file reste sous le plafond (le lot est
-     donc payé par des mises déjà encaissées, jamais avancé), et on en
-     tire une au sort. Le jackpot peut ainsi tomber n'importe quand
-     entre le moment où il est couvert et la fin — plus jamais toujours
-     au même endroit. */
-  const prefixOK = (arr)=>{
-    let mise=0, paid=0;
-    for(let k=0;k<arr.length;k++){
-      mise += AVG_MISE; paid += OUTCOME_COST[arr[k]];
-      if(paid > mise*ratio + 1e-9) return false;
-    }
-    return true;
-  };
-  const arr = seq;
-  bigs.forEach(cat=>{
-    const cost = OUTCOME_COST[cat];
-    // position minimale : premier préfixe dont la réserve couvre le lot
-    const candidates = [];
-    let mise=0, paid=0;
-    for(let p=0; p<=arr.length; p++){
-      // insérer à p = payer `cost` à la partie p+1, avant les suivantes
-      if((mise+AVG_MISE)*ratio - paid >= cost) candidates.push(p);
-      if(p<arr.length){ mise += AVG_MISE; paid += OUTCOME_COST[arr[p]]; }
-    }
-    // on garde celles qui laissent TOUS les préfixes suivants sous le plafond
-    const ok = [];
-    for(const p of candidates){
-      const trial = arr.slice(0,p).concat([cat], arr.slice(p));
-      if(prefixOK(trial)) ok.push(p);
-    }
-    const p = ok.length ? ok[Math.floor(Math.random()*ok.length)] : arr.length;
-    arr.splice(p, 0, cat);
-  });
   return arr;
+}
+function buildMysteryQueue(){
+  const q = [];
+  for(let i=0;i<MYSTERY_MIX.carte;i++) q.push('carte');
+  for(let i=0;i<MYSTERY_MIX.booster;i++) q.push('booster');
+  return shuffleInPlace(q);
 }
 
 /* Version de la file. Une file laissée en mémoire du navigateur par une
    version précédente du jeu (autre recette, autre ordonnancement) n'a
    pas les mêmes garanties : elle est reconstruite. */
-const OUTCOME_BATCH_VERSION = 'v9-lot-mystere';
+const OUTCOME_BATCH_VERSION = 'v10-pochette-245';
 function loadOutcomeState(){
   try{
     const raw = safeGetItem(OUTCOME_BATCH_KEY);
     if(raw){
       const parsed = JSON.parse(raw);
       if(parsed && parsed.version===OUTCOME_BATCH_VERSION && Array.isArray(parsed.batch)
-         && typeof parsed.pos==='number' && parsed.pos < parsed.batch.length){
+         && typeof parsed.pos==='number' && parsed.pos < parsed.batch.length
+         && Array.isArray(parsed.myst) && typeof parsed.mystPos==='number'){
         return parsed;
       }
     }
   }catch(e){}
   return newOutcomeState();
 }
-/* ---------- Lot mystère ----------
-   La case « Lot Mystère » (catégorie alternative) donne soit un booster,
-   soit une carte rare. L'hôte n'a que MYSTERY_BOOSTERS boosters par
-   cycle : le tirage booster/carte est calibré pour en donner EXACTEMENT
-   ce nombre sur les lots mystère du cycle (probabilité = boosters
-   restants / lots mystère restants), jamais plus. Compteurs persistés
-   avec la file. */
-/* Stock réel au 21/09/2026 : il ne reste que 7 boosters pour les lots
-   mystère (stock séparé du « Booster du Marchand »). Jamais plus de 7
-   par pochette, quelle que soit la pochette. */
-const MYSTERY_BOOSTERS = 7;
 function newOutcomeState(){
-  const batch = buildOutcomeBatch(OUTCOME_BATCH_SIZE);
-  const mystN = batch.filter(c=>c==='alternative').length;
-  return { version: OUTCOME_BATCH_VERSION, batch, pos: 0, mystN, mystB: Math.min(MYSTERY_BOOSTERS, mystN) };
+  return { version: OUTCOME_BATCH_VERSION, batch: buildPouch(), pos: 0, myst: buildMysteryQueue(), mystPos: 0 };
 }
+/* Lot Mystère : le contenu (EX ou booster japonais) est pris dans la
+   sous-file mélangée de la pochette — exactement 60 EX et 30 boosters. */
 function drawMysterySub(){
   const st = outcomeState;
-  if(typeof st.mystN !== 'number' || typeof st.mystB !== 'number'){
-    st.mystN = st.batch.slice(st.pos).filter(c=>c==='alternative').length + 1;
-    st.mystB = Math.min(MYSTERY_BOOSTERS, st.mystN);
-  }
-  const p = st.mystN > 0 ? st.mystB/st.mystN : 0;
-  const sub = Math.random() < p ? 'booster' : 'carte';
-  st.mystN = Math.max(0, st.mystN - 1);
-  if(sub === 'booster') st.mystB = Math.max(0, st.mystB - 1);
+  const sub = st.mystPos < st.myst.length ? st.myst[st.mystPos] : (Math.random() < 1/3 ? 'booster' : 'carte');
+  st.mystPos++;
   saveOutcomeState();
   return sub;
 }
@@ -6985,33 +6892,13 @@ let outcomeState = loadOutcomeState();
 function saveOutcomeState(){
   try{ localStorage.setItem(OUTCOME_BATCH_KEY, JSON.stringify(outcomeState)); }catch(e){}
 }
-/* Application unique du recalibrage (voir RECAL) : les compteurs sont
-   posés à l'état réel et la file est reconstruite pour le reste du
-   cycle. Aucune trace en mémoire = premier chargement depuis le
-   recalibrage ; une trace (appliqué ou effacé) = plus rien à faire. */
+saveOutcomeState();
+/* Recalibrage du 18/09 : ses compteurs restent en mémoire à titre
+   d'information, mais il ne construit plus de file — la pochette de 245
+   coups la remplace. */
 if(!recalRec){
-  totalMise = RECAL.miseBase;
-  totalPaid = RECAL.paidBase;
-  saveTotals();
   recal = { id: RECAL.id, at: Date.now() };
   try{ localStorage.setItem(RECAL_KEY, JSON.stringify(recal)); }catch(e){}
-  const batch = buildOutcomeBatch(RECAL.games, RECAL.recipe, RECAL.ratio, RECAL.games);
-  const mystN = batch.filter(c=>c==='alternative').length;
-  outcomeState = { version: OUTCOME_BATCH_VERSION, batch, pos: 0, mystN, mystB: Math.min(RECAL.mystB, mystN) };
-  saveOutcomeState();
-}
-/* La pochette déjà en mémoire du navigateur garde son propre compteur de
-   boosters mystère (mystB), posé à sa construction — changer la constante
-   ne la touche pas. On le remet donc UNE fois au stock réel (7, ou moins
-   s'il reste moins de lots mystère), sans toucher aux compteurs de
-   cagnotte ni à la file. Clé datée : ne se rejoue pas. */
-const MYST_CAP_KEY = 'pika_myst_cap';
-if(safeGetItem(MYST_CAP_KEY) !== '2026-09-21'){
-  const restants = outcomeState.batch.slice(outcomeState.pos).filter(c=>c==='alternative').length;
-  outcomeState.mystN = restants;
-  outcomeState.mystB = Math.min(MYSTERY_BOOSTERS, restants);
-  saveOutcomeState();
-  try{ localStorage.setItem(MYST_CAP_KEY, '2026-09-21'); }catch(e){}
 }
 // Un nouveau lot de résultats est régénéré automatiquement à
 // l'épuisement du précédent (jamais de rupture de stock) et à chaque
@@ -7023,9 +6910,7 @@ if(safeGetItem(MYST_CAP_KEY) !== '2026-09-21'){
    valider, validation anticipée, ancienne file…) : ce contrôle en direct
    est la garantie finale. */
 function outcomeCovered(cat){
-  const cost = OUTCOME_COST[cat];
-  if(cost===undefined) return true;
-  return totalPaid + cost <= ceilingFor(totalMise) + 1e-9;
+  return true;   // pochette exacte : aucun plafond ne décale un lot
 }
 /* ---------- Repère discret de l'animateur ----------
    Un point de 5 px, presque invisible, en bas à gauche de l'écran
@@ -7035,14 +6920,14 @@ function outcomeCovered(cat){
    connu), reste pendant les lancers, et passe au lot suivant dès la
    validation, avant même « Recommencer ». */
 const cueDot = document.getElementById('cueDot');
+function pouchHas(cat){
+  const b = outcomeState.batch;
+  for(let j=outcomeState.pos;j<b.length;j++) if(b[j]===cat) return true;
+  return false;
+}
 function peekNextOutcome(){
   if(outcomeState.pos >= outcomeState.batch.length) return null;
-  const b = outcomeState.batch, pos = outcomeState.pos;
-  // même règle de couverture qu'au tirage, la mise de la partie à venir comprise
-  const covered = cat => { const c = OUTCOME_COST[cat]; return c===undefined || totalPaid + c <= ceilingFor(totalMise + AVG_MISE) + 1e-9; };
-  if(covered(b[pos])) return b[pos];
-  for(let j=pos+1;j<b.length;j++) if(covered(b[j])) return b[j];
-  return 'commune';
+  return outcomeState.batch[outcomeState.pos];
 }
 /* Le repère principal est dans le titre « ★ PIKAPOLY ★ » tout en haut :
    l'étoile garde sa forme, seule sa teinte devient un peu plus claire.
@@ -7074,17 +6959,7 @@ function nextPredeterminedOutcome(){
   if(outcomeState.pos >= outcomeState.batch.length){
     outcomeState = newOutcomeState();
   }
-  const b = outcomeState.batch, pos = outcomeState.pos;
-  if(!outcomeCovered(b[pos])){
-    // pas encore assez de cagnotte pour ce lot : on l'échange avec le
-    // premier lot couvert plus loin dans la file (il reste dans la file,
-    // il tombera plus tard) — la composition de la file ne change pas
-    let j = pos+1;
-    while(j < b.length && !outcomeCovered(b[j])) j++;
-    if(j < b.length){ const t = b[pos]; b[pos] = b[j]; b[j] = t; }
-    else b[pos] = 'commune';   // file épuisée sans lot couvert : commune
-  }
-  const cat = b[pos];
+  const cat = outcomeState.batch[outcomeState.pos];
   outcomeState.pos++;
   saveOutcomeState();
   return cat;
@@ -7538,9 +7413,10 @@ function updateWinButton(){
   // Chance) y ramène le joueur plus tard en cours de partie.
   const onPrize = currentIndex>0 && !moving;
   const cat = onPrize ? tiles[currentIndex].catKey : null;
-  // Chance / Caisse Communautaire se révèlent tout seuls (pas de
-  // bouton à cliquer, la partie continue automatiquement après).
-  const autoResolved = cat==='chance' || cat==='chest';
+  // Chance se révèle toute seule (pas de bouton à cliquer, la partie
+  // continue automatiquement après). La Caisse Communautaire, elle, est
+  // un LOT de la pochette depuis le 23/09 : elle se garde comme les autres.
+  const autoResolved = cat==='chance';
   winBtn.hidden = !onPrize || autoResolved;
   if(onPrize && !autoResolved){
     winBtn.disabled = false;
@@ -7595,7 +7471,7 @@ async function move(forcedCount, forcedCard){
   // SUITE (avant l'animation) pour pouvoir l'envoyer d'un coup à
   // l'écran public : les deux écrans doivent afficher la même carte.
   let card = forcedCard || null;
-  if(!card && (destCat==='chance' || destCat==='chest')){
+  if(!card && destCat==='chance'){
     card = drawCard(destCat==='chance' ? CHANCE_DECK : CHEST_DECK);
   }
   broadcastSync({type:'move', count, card});
@@ -7626,7 +7502,7 @@ async function move(forcedCount, forcedCard){
   updatePlaceBanner(currentIndex, false);
 
   const arrivedCat = currentIndex>=0 ? tiles[currentIndex].catKey : null;
-  if(!finished && (arrivedCat==='chance' || arrivedCat==='chest')){
+  if(!finished && arrivedCat==='chance'){
     await resolveChanceChest(myGen, card);
     if(myGen!==generation) return;
   }
@@ -7658,7 +7534,7 @@ async function move(forcedCount, forcedCard){
   }
   const rollsExhausted = rollsUsed>=rollsAllowed;
   const finalCat = currentIndex>=0 ? tiles[currentIndex].catKey : null;
-  const canClaim = currentIndex>0 && finalCat!=='chance' && finalCat!=='chest';
+  const canClaim = currentIndex>0 && finalCat!=='chance';
   if(finalCat==='jackpot300' && finished && canClaim && !(winBtn && winBtn.disabled)){
     // jackpot final : validé automatiquement, comme la fin des lancers
     rollsUsed = rollsAllowed;
@@ -7814,6 +7690,7 @@ async function drawAndMove(){
   clearWinUndo();
   validate.disabled = true;
   // rollsLeft compte le lancer en cours (rollsUsed n'est pas encore incrémenté)
+  if(rollsUsed === 0){ prevGameTotals = curGameTotals; curGameTotals = []; }
   const plan = planTotal(currentIndex, rollsAllowed - rollsUsed, pendingOutcome);
   plannedCardDelta = (plan && plan.cardDelta != null) ? plan.cardDelta : null;
   const draw = computeCardDraw(plan ? plan.total : null, plan ? plan.wantDouble : false);
@@ -7822,6 +7699,7 @@ async function drawAndMove(){
   // joueur pourrait enchaîner les lancers sans jamais les épuiser tant
   // qu'il ne valide rien.
   rollsUsed++;
+  curGameTotals.push(draw.total);
   if(draw.isDouble) rollsAllowed++;
   broadcastSync({type:'draw', draw});
   topNum.textContent = draw.total;
@@ -7873,7 +7751,8 @@ const NEUTRAL_FORBIDDEN = new Set(['chance','chest','prison']);
 // des arrivées qui passent par un détour quand c'est possible
 const CARD_DELTAS = [1,2,3,4,5,6,-1,-2,-3];
 const INTERMEDIATE_MAX_COST = 17;  // booster (17 €) au maximum en cours de route
-let CARD_ROUTE_P = 0.08;
+let CARD_ROUTE_P = 0.12;
+const EARLY_LANDING_P = 0.22;   // part des lancers intermédiaires qui posent déjà sur le lot prévu
 const DICE_W = {2:1,3:2,4:3,5:4,6:5,7:6,8:5,9:4,10:3,11:2,12:1};
 function landable(idx, targetCat){
   if(idx===0) return false;                 // Départ : jamais de lot
@@ -7882,13 +7761,16 @@ function landable(idx, targetCat){
   if(cat==='prison' || cat==='chance' || cat==='chest') return false;
   if(cat===targetCat) return true;
   if(NEUTRAL_FORBIDDEN.has(cat)) return false;
+  // pochette exacte : s'arrêter ici doit correspondre à un lot encore en stock
+  if(!pouchHas(cat)) return false;
   const c = OUTCOME_COST[cat], t = OUTCOME_COST[targetCat];
   if(c===undefined || t===undefined) return false;
   // En cours de route, seulement des petits lots (commune, alternative,
   // booster 8 €), et jamais plus cher que le lot visé : le joueur peut
   // choisir de s'arrêter dessus (règle « je garde ou je relance »), ça ne
   // doit jamais lui donner un gros lot qui n'était pas prévu.
-  return c <= t && c <= INTERMEDIATE_MAX_COST;
+  // (une commune reste toujours possible : la Caisse, visée, ne coûte rien)
+  return c <= Math.max(t, OUTCOME_COST.commune) && c <= INTERMEDIATE_MAX_COST;
 }
 /* Peut-on poser le pion sur une case du lot visé EXACTEMENT au dernier
    des k lancers restants, en ne posant que des cases neutres avant ?
@@ -7908,7 +7790,13 @@ function canReachTarget(pos, rollsLeft, targetCat, memo){
   memo.set(key, ok);
   return ok;
 }
+/* Pas deux parties identiques d'affilée : au même lancer, on évite le total
+   tiré à la partie précédente dès qu'un autre total fait l'affaire. Le
+   résultat (la case du lot) n'en dépend pas, seul le chemin change. */
+let prevGameTotals = [], curGameTotals = [];
 function pickWeightedTotal(list){
+  const avoid = prevGameTotals[curGameTotals.length];
+  if(list.length > 1 && list.includes(avoid)) list = list.filter(t=>t!==avoid);
   let sum = 0; list.forEach(t=>{ sum += DICE_W[t]; });
   let r = Math.random()*sum;
   for(const t of list){ r -= DICE_W[t]; if(r<=0) return t; }
@@ -7929,7 +7817,7 @@ function planTotal(pos, rollsLeft, targetCat){
       const idx = landingIndex(pos,t);
       if(idx!==0 && tiles[idx].catKey===targetCat){ now.push(t); continue; }
       const c = tiles[idx].catKey;
-      if(c==='chance' || c==='chest'){
+      if(c==='chance'){   // la Caisse est un lot, plus un détour
         for(const d of CARD_DELTAS){
           const j = landingIndex(idx, d);
           if(j>0 && tiles[j].catKey===targetCat) via.push({ t, d });
@@ -7955,19 +7843,31 @@ function planTotal(pos, rollsLeft, targetCat){
     // Un double (lancer bonus) est décidé ICI, une fois sur trois sur un
     // total pair comme avec deux vrais dés, et le plan compte alors un
     // lancer de plus — sinon le lancer bonus faisait rater la case.
-    const single = [], double = [];
+    const single = [], double = [], early = [];
     for(let t=3;t<=11;t++){
       const idx = landingIndex(pos, t);
+      /* Arrivée anticipée : le pion peut se poser TÔT sur une case du lot
+         prévu, à condition qu'un relancer puisse l'y ramener. L'hôte peut
+         garder (le résultat est le même) ou relancer : le nombre de
+         lancers et de cases parcourues varie d'une partie à l'autre. */
+      if(idx!==0 && tiles[idx].catKey===targetCat && t%2===1 && canReachTarget(idx, rollsLeft-1, targetCat, memo)) early.push(t);
       if(tiles[idx].catKey===targetCat || !landable(idx, targetCat)) continue;
       if(canReachTarget(idx, rollsLeft-1, targetCat, memo)) single.push(t);
       if(t%2===0 && canReachTarget(idx, rollsLeft, targetCat, memo)) double.push(t);
     }
+    if(early.length && Math.random() < EARLY_LANDING_P) return { total: pickWeightedTotal(early), onTarget: true, wantDouble: false };
     if(double.length && (!single.length || Math.random() < 1/3)) return { total: pickWeightedTotal(double), onTarget: false, wantDouble: true };
     if(single.length) return { total: pickWeightedTotal(single), onTarget: false, wantDouble: false };
   }
   // repli : une commune (jamais Chance, Caisse, Prison ni Départ)
   const neutral = [];
   for(let t=2;t<=12;t++){ const idx = landingIndex(pos,t); if(idx!==0 && tiles[idx].catKey==='commune') neutral.push(t); }
+  if(!pouchHas('commune')){
+    // plus de commune en stock : un lot de passage encore disponible, si possible
+    const alt = [];
+    for(let t=2;t<=12;t++){ const idx = landingIndex(pos,t); if(landable(idx, targetCat) && tiles[idx].catKey!==targetCat) alt.push(t); }
+    if(alt.length) return { total: pickWeightedTotal(alt), onTarget: false, wantDouble: false };
+  }
   if(neutral.length) return { total: pickWeightedTotal(neutral), onTarget: false, wantDouble: false };
   return null;
 }
@@ -7988,26 +7888,34 @@ async function claimCurrentLot(){
   // jamais après un lancer.
   const realCat = tiles[currentIndex].catKey;
   const pendingBefore = pendingOutcome;
-  let requeued = null;
   const forced = forcedGame;
   forcedGame = false;
+  let swap = null;
   if(pendingOutcome && realCat !== pendingOutcome && !forced){
     /* Le joueur s'arrête avant que les dés aient amené le pion sur la
-       case prévue (règle « je garde ou je relance »). Le lot de sa case
-       est moins cher, par construction. Le lot décidé d'avance :
-         • retourne en tête de file s'il est un PRODUIT SCELLÉ du stock
-           (≥ 30 € : duopack, tripack, coffret, ETB) — il doit tomber quoi
-           qu'il arrive — ou si le joueur n'a pris qu'une commune ;
-         • est consommé sinon : le joueur a préféré un booster sûr à une
-           chance de gradée. Le remettre en file ferait payer les deux,
-           et la marge ne tiendrait plus. */
-    const big = (OUTCOME_COST[pendingOutcome]||0) >= 30;
-    const cheap = (OUTCOME_COST[realCat]||0) < 5;
-    if(big || cheap){
-      outcomeState.batch.splice(outcomeState.pos, 0, pendingOutcome);
-      saveOutcomeState();
-      requeued = pendingOutcome;
+       case prévue (règle « je garde ou je relance »). Il gagne le lot de
+       SA case. Pochette exacte : ce lot est retiré de la suite de la
+       pochette (une de ses occurrences, tirée au hasard) et le lot prévu
+       y est réinséré à une position au hasard. Les quantités des 245
+       coups ne bougent donc pas. Les cases de passage ne proposent que
+       des lots encore en stock (voir landable). */
+    const b = outcomeState.batch, pos = outcomeState.pos;
+    const occ = [];
+    for(let j=pos;j<b.length;j++) if(b[j]===realCat) occ.push(j);
+    if(occ.length){
+      const j = occ[Math.floor(Math.random()*occ.length)];
+      b.splice(j, 1);
+      const at = pos + Math.floor(Math.random()*(b.length - pos + 1));
+      b.splice(at, 0, pendingOutcome);
+      swap = { removedAt: j, insertedAt: at, kept: realCat, pending: pendingOutcome };
+    } else {
+      // (ne devrait pas arriver) plus de ce lot dans la pochette : le lot
+      // prévu est tout de même rendu à la pochette pour ne pas être perdu
+      const at = pos + Math.floor(Math.random()*(b.length - pos + 1));
+      b.splice(at, 0, pendingOutcome);
+      swap = { removedAt: -1, insertedAt: at, kept: realCat, pending: pendingOutcome };
     }
+    saveOutcomeState();
   }
   pendingOutcome = null;
   updateCue();
@@ -8025,7 +7933,7 @@ async function claimCurrentLot(){
   const mystery = realCat === 'alternative' ? (forced ? (Math.random() < 0.5 ? 'booster' : 'carte') : drawMysterySub()) : null;
   celebrate(realCat, null, {locked:true, mystery});
   broadcastSync({type:'celebrate', catKey:realCat, mystery});
-  lastWinUndo = { amountAdded: totalPaid - paidBefore, rollsUsedBefore, requeued, pending: pendingBefore, mystery, forced };
+  lastWinUndo = { amountAdded: totalPaid - paidBefore, rollsUsedBefore, swap, pending: pendingBefore, mystery, forced };
   if(undoBtn) undoBtn.hidden = false;
   // Un lot gardé épuise le tour : plus aucun lancer sur cette mise.
   rollsUsed = rollsAllowed;
@@ -8047,15 +7955,15 @@ if(undoBtn) undoBtn.addEventListener('click', ()=>{
   // réellement été gardé.
   rollsUsed = lastWinUndo.rollsUsedBefore;
   if(lastWinUndo.mystery){
-    // le lot mystère annulé rend son booster (ou sa carte) au compteur
-    outcomeState.mystN = (outcomeState.mystN||0) + 1;
-    if(lastWinUndo.mystery === 'booster') outcomeState.mystB = (outcomeState.mystB||0) + 1;
-    saveOutcomeState();
+    // le lot mystère annulé rend son contenu à la sous-file (hors partie-bonus)
+    if(!lastWinUndo.forced && outcomeState.mystPos > 0){ outcomeState.mystPos--; saveOutcomeState(); }
   }
-  if(lastWinUndo.requeued && outcomeState.batch[outcomeState.pos]===lastWinUndo.requeued){
-    // le lot décidé d'avance avait été remis en file : on le reprend
-    // pour cette mise, les prochains lancers viseront de nouveau sa case
-    outcomeState.batch.splice(outcomeState.pos, 1);
+  const sw = lastWinUndo.swap;
+  if(sw && outcomeState.batch[sw.insertedAt]===sw.pending){
+    // l'échange dans la pochette est défait : le lot prévu revient à
+    // cette mise, le lot gardé retrouve sa place
+    outcomeState.batch.splice(sw.insertedAt, 1);
+    if(sw.removedAt >= 0) outcomeState.batch.splice(sw.removedAt, 0, sw.kept);
     saveOutcomeState();
   }
   // dans tous les cas la mise reprend son lot décidé d'avance : les
@@ -8759,6 +8667,8 @@ const CATEGORY_MESSAGES = {
   booster50:   '🎁 TRIPACK 30 ANS GAGNÉ ! 🎁',
   etb:         '🎁 COFFRET 30 ANS GAGNÉ ! 🎁',
   jackpot300:  '👑 ETB 30 ANS GAGNÉ ! 👑',
+  // contenu inconnu du jeu : remis physiquement par l'animateur
+  chest:       '🗃️ CAISSE COMMUNAUTAIRE GAGNÉE ! 🗃️',
 };
 
 /* ---------- Animation du lot mystère ----------
@@ -8833,7 +8743,7 @@ async function playMysteryReveal(sub){
   }
   mysteryCards[winIdx].classList.add('win');
   mysteryCards[1-winIdx].classList.add('lose');
-  if(mysteryResult) mysteryResult.textContent = sub === 'booster' ? '🎁 BOOSTER !' : '🌟 CARTE RARE !';
+  if(mysteryResult) mysteryResult.textContent = sub === 'booster' ? '🎁 BOOSTER JAPONAIS !' : '🌟 MYSTÈRE EX !';
   playFanfare(3);
   triggerImpactFlash();
   cameraPunch(1.2);
@@ -8920,8 +8830,8 @@ function revealCelebration(catKey, forcedCard, level, extra){
   if(level>=4) celeb.classList.add('shake');
 
   let rareCardDrawn = false;
-  if(catKey==='chance' || catKey==='chest'){
-    const deck = catKey==='chance' ? CHANCE_DECK : CHEST_DECK;
+  if(catKey==='chance'){
+    const deck = CHANCE_DECK;
     const card = forcedCard || drawCard(deck);
     rareCardDrawn = !!card.rare;
     if(celebMain) celebMain.textContent = rareCardDrawn
@@ -8963,7 +8873,7 @@ function revealCelebration(catKey, forcedCard, level, extra){
   } else {
     const myst = extra && extra.mystery;
     if(celebMain) celebMain.textContent = myst
-      ? (myst==='booster' ? '🎁 LOT MYSTÈRE : BOOSTER GAGNÉ ! 🎁' : '🌟 LOT MYSTÈRE : CARTE RARE GAGNÉE ! 🌟')
+      ? (myst==='booster' ? '🎁 LOT MYSTÈRE : BOOSTER JAPONAIS ! 🎁' : '🌟 LOT MYSTÈRE : MYSTÈRE EX ! 🌟')
       : (CATEGORY_MESSAGES[catKey] || '🎉 Lot remporté !');
     if(celebSub) celebSub.hidden = true;
     // le cœur de la demande : on ne se contente plus d'un texte,

@@ -32,14 +32,14 @@ cp board3d.js /tmp/c.mjs && node --check /tmp/c.mjs         # vérification de s
 Les `import` ES ne marchent pas en `file://` : **toujours livrer le bundle**, jamais
 les sources. Pour donner un lien : publier `dist/pikajackpot.html` en Artifact.
 
-Il n'y a pas de suite de tests. Après toute modification de recette, de prix ou de
-plafond, charger le bundle dans un navigateur et vérifier qu'il n'y a **aucune erreur
-console** : `buildOutcomeBatch` lève une exception si les lots dépassent le plafond,
-et la page ne se charge pas. Un script Playwright suffit (lire `localStorage` après chargement).
+Il n'y a pas de suite de tests. Après toute modification de la pochette, charger le
+bundle dans un navigateur et vérifier qu'il n'y a **aucune erreur console** : `POUCH`
+et `MYSTERY_MIX` lèvent une exception si les quantités ne font pas 245 coups (dont
+90 Lots Mystère), et la page ne se charge pas. Un script Playwright suffit (lire `localStorage` après chargement).
 
 Clés `localStorage` (tout l'état vit dans le navigateur de la machine de diffusion) :
-`pika_total_mise` / `pika_total_paid` (cagnotte et lots comptés), `pika_outcome_batch`
-(file des lots décidés + position), `pika_recal` (recalibrage appliqué ou effacé),
+`pika_total_mise` / `pika_total_paid` (cagnotte et lots comptés, pour information),
+`pika_outcome_batch` (pochette de 245 coups + position + sous-file des Lots Mystère), `pika_recal` (recalibrage appliqué ou effacé),
 `pika_pity_counter` (compteur anti-malchance), `pika_q_forced` (mode éco imposé après
 une perte de contexte WebGL), `pika_rot` (pivot de l'image mémorisé).
 
@@ -59,21 +59,32 @@ Z / 1–6 = **lot forcé** avant le premier lancer · M affiche la **bulle de r�
 `TIER_LEVEL` (intensité de la célébration), `LOT_IMAGE_URLS`, `CATEGORY_MESSAGES`.
 Catégories : `jackpot300` (ETB 30 ans), `etb` (coffret ex), `booster50` (tripack),
 `gradee` (duopack), `booster8` (booster), `alternative` (lot mystère : booster ou carte),
-`commune`, `prison`, plus `chance` / `chest` qui sont des détours, pas des lots.
+`commune`, `chest` (Caisse Communautaire, un lot depuis le 23/09), `prison` (hors pochette), plus `chance` qui est un détour, pas un lot.
 
-**Rentabilité** (section « Règle métier de rentabilité ») : `AVG_MISE` (9 €), `CA_CYCLE`
-(4 500 €), `MARGIN_TARGET` (0,26) → `CEILING_RATIO`. À tout instant
-`totalPaid ≤ ceilingFor(totalMise)`. `fundedCategory()` fait redescendre un lot non
-couvert au palier inférieur. `OUTCOME_RECIPE` = nombre de chaque lot par cycle de
-500 parties ; `buildOutcomeBatch()` construit la file mélangée qui respecte le plafond
-à chaque préfixe. `nextPredeterminedOutcome()` la consomme ; les dés amènent ensuite le
-pion sur une case du lot déjà décidé (section « Dés pipés »).
+**Pochette de 245 coups** (depuis le 23/09, décision de l'hôte) : `POUCH` = 1 ETB, 2 coffrets,
+2 tripacks, 1 duopack, 42 boosters, 90 Lots Mystère, 7 Caisses Communautaires, 100 communes.
+Un coup = une partie (une mise = un lot, même en plusieurs lancers). Quantités **exactes** :
+plus aucun plafond de rentabilité ne retire ni ne décale un lot (`outcomeCovered` renvoie
+toujours vrai ; l'hôte calcule sa rentabilité sur ses coûts réels, `PAYOUT_LADDER` ne sert
+plus qu'au suivi). `buildPouch()` mélange tout à chaque pochette (boosters : 6 à 15 par quart ;
+ETB : poids croissant ×1 → ×1,6, ~56 % en 2e moitié, jamais de fenêtre fixe).
+`MYSTERY_MIX` : 60 « Mystère EX » (`carte`) + 30 « booster japonais » (`booster`), sous-file
+mélangée `myst` / `mystPos`. `nextPredeterminedOutcome()` consomme la pochette ; les dés amènent
+ensuite le pion sur une case du lot déjà décidé (section « Dés pipés », `planTotal`).
+Si l'hôte garde un lot avant la case prévue, `claimCurrentLot` **échange** dans la pochette
+(le lot gardé est retiré plus loin, le lot prévu réinséré au hasard) : les quantités tiennent ;
+les cases de passage n'offrent que des lots encore en stock (`pouchHas`).
 
-**Recalibrage** (`RECAL`, `ceilingFor`, `recalRec`) : bloc appliqué **une seule fois**
-au chargement (clé `pika_recal`, comparée à `RECAL.id`). Il pose les compteurs, une
-recette et une pente de reversement propres jusqu'à `RECAL.miseEnd`, puis le plan
-standard reprend. Pour recalibrer à nouveau : changer `RECAL.id`, les compteurs et la
-recette, vérifier que la recette tient sous `games × AVG_MISE × ratio`.
+**Caisse Communautaire** : un LOT de la pochette (plus un détour). Le jeu n'en connaît pas le
+contenu (promos des coffrets et tripacks ouverts, remises physiquement). Seule Chance reste un
+détour (carte déplacement pipée, `CARD_ROUTE_P`).
+
+**Chemins variés** : le résultat est décidé avant l'animation. Allure de marche ±15 %, rampes,
+anticipation et stabilisation tirées au sort (`startWalk`) ; arrivée anticipée possible sur la
+bonne case (`EARLY_LANDING_P`) ; au même lancer, jamais le total de la partie précédente
+(`prevGameTotals`).
+
+**Recalibrage** (`RECAL`) : historique ; il ne construit plus de file depuis la pochette de 245.
 
 **Lots forcés** (`forcedCat`, `takeForcedLot`) sont **hors comptabilité** : ni la mise ni
 le lot ne comptent. C'est voulu (partie-bonus), et c'est la première cause de dérive
@@ -115,8 +126,9 @@ décoration). Le contexte WebGL perdu est rattrapé (`webglcontextlost`).
 - Le lot affiché est **toujours** celui de la case où le pion est posé.
 - Les pourcentages de chance ne s'affichent pas à l'écran.
 - Aucun texte à l'écran quand une touche forcée est pressée (le public ne doit rien voir).
-- Le plafond de reversement est tenu **à chaque partie**, pas seulement en fin de cycle.
-- Toute recette doit tenir sous le plafond, sinon la page ne se charge pas.
+- La pochette fait **exactement 245 coups** avec les quantités de `POUCH` : rien ne s'y ajoute,
+  rien ne s'en retire (sauf les lots forcés, hors pochette).
+- Le résultat est décidé avant l'animation ; l'animation ne change jamais les quantités.
 
 ## Historique utile
 
