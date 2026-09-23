@@ -7389,13 +7389,17 @@ let outcomeState = loadOutcomeState();
    reconstruits avec ces quantités exactes ; les places restantes sont
    partagées entre Lot Mystère, Carte gratuite et Pioche dans les
    proportions de la pochette (90 / 7 / 100), les Lots Mystère gardant
-   2 EX pour 1 booster japonais. Coups déjà joués et compteur inchangés. */
+   2 EX pour 1 booster japonais. Coups déjà joués et compteur inchangés.
+   2e relevé, un coup plus tard : 21 boosters, 3 tripacks, 2 coffrets,
+   1 ETB, 1 duopack ; boosters japonais : 26 au plus ; Mystère EX et
+   Cartes gratuites sans limite. Nouveau drapeau : s'applique même si le
+   1er relevé l'a déjà été. */
 {
-  const AJUST_KEY = 'pika_ajust_stock_2309';
+  const AJUST_KEY = 'pika_ajust_stock_2309b';   // 2e relevé du stock (voir plus bas)
   const st = outcomeState;
   if(!isDisplay && !window.PIKA_DEMO_JACKPOT && !safeGetItem(AJUST_KEY)){
     const reste = st.batch.length - st.pos;
-    const fixes = { booster8:22, booster50:3, etb:2, jackpot300:1, gradee:1 };
+    const fixes = { booster8:21, booster50:3, etb:2, jackpot300:1, gradee:1 };
     const nFix = Object.values(fixes).reduce((a,b)=>a+b, 0);
     if(st.pos >= 20 && st.pos <= 80 && reste > nFix + 20){
       const libres = reste - nFix;
@@ -7408,7 +7412,7 @@ let outcomeState = loadOutcomeState();
       shuffleInPlace(q);
       st.batch = st.batch.slice(0, st.pos).concat(q);
       const mq = [];
-      const jp = Math.round(alt/3);
+      const jp = Math.min(26, Math.round(alt/3));   // 26 boosters japonais en stock, EX sans limite
       for(let i=0;i<alt-jp;i++) mq.push('carte');
       for(let i=0;i<jp;i++) mq.push('booster');
       st.myst = st.myst.slice(0, st.mystPos).concat(shuffleInPlace(mq));
