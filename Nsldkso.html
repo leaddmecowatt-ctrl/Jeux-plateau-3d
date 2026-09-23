@@ -373,13 +373,6 @@ button:active:not(:disabled){transform:translateY(1px)}
   opacity:0;transition:opacity .2s ease;pointer-events:none;
 }
 .key-hint.show{ opacity:1; }
-/* Repère discret animateur (voir updateCue) : 5 px, à peine visible */
-.cue-dot{
-  position:fixed;left:7px;bottom:7px;width:5px;height:5px;border-radius:50%;
-  opacity:0;pointer-events:none;z-index:80;transition:opacity .8s ease;
-}
-.brand-star{ transition:color .8s ease; }
-.brand-star.cue{ color:#fff1c8; }
 .screen-btns{
   position:fixed;right:10px;bottom:10px;z-index:96;display:flex;gap:8px;
   opacity:0;transition:opacity .4s ease;pointer-events:none;
@@ -392,10 +385,6 @@ button:active:not(:disabled){transform:translateY(1px)}
 }
 .screen-btns button:hover{ background:rgba(40,30,8,.95); }
 html.display-mode .screen-btns{ display:none; }
-.cue-dot.etb{ background:#ffd27a; opacity:.22; }
-.cue-dot.coffret{ background:#9db8ff; opacity:.22; }
-.cue-dot.forced{ background:#ffffff; opacity:.26; }
-html.display-mode .cue-dot{ display:none; }
 
 .lots-gallery{
   background:linear-gradient(180deg,#1a1406,#0d0a03);
@@ -1328,7 +1317,6 @@ if(new URLSearchParams(location.search).get('view')==='display'){
     <div class="coup-count" id="coupCount">0 coup sur 245</div>
     <div class="place-banner-wrap"><div class="place-banner" id="placeBanner">Départ</div></div>
     <div class="key-hint" id="keyHint" aria-live="polite"></div>
-    <div class="cue-dot" id="cueDot" aria-hidden="true"></div>
     <span id="topNum" hidden></span>
   </div>
 

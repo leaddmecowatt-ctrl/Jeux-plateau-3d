@@ -7305,14 +7305,6 @@ if(!recalRec){
 function outcomeCovered(cat){
   return true;   // pochette exacte : aucun plafond ne décale un lot
 }
-/* ---------- Repère discret de l'animateur ----------
-   Un point de 5 px, presque invisible, en bas à gauche de l'écran
-   animateur (jamais sur l'écran public) : doré quand le prochain lot
-   décidé est l'ETB, bleuté quand c'est un coffret. Il s'affiche dès que
-   la partie précédente est terminée (le lot de la suivante est déjà
-   connu), reste pendant les lancers, et passe au lot suivant dès la
-   validation, avant même « Recommencer ». */
-const cueDot = document.getElementById('cueDot');
 function pouchHas(cat){
   const b = outcomeState.batch;
   for(let j=outcomeState.pos;j<b.length;j++) if(b[j]===cat) return true;
@@ -7322,14 +7314,6 @@ function peekNextOutcome(){
   if(outcomeState.pos >= outcomeState.batch.length) return null;
   return outcomeState.batch[outcomeState.pos];
 }
-/* Le repère principal est dans le titre « ★ PIKAPOLY ★ » tout en haut :
-   l'étoile garde sa forme, seule sa teinte devient un peu plus claire.
-   Les deux étoiles changent, que le prochain lot soit l'ETB ou un
-   coffret (pas de distinction demandée). Un spectateur n'y voit qu'un ornement ; l'animateur, qui
-   sait où regarder, le voit au premier coup d'œil. Jamais sur l'écran
-   public (isDisplay). */
-const brandStarL = document.getElementById('brandStarL');
-const brandStarR = document.getElementById('brandStarR');
 /* Compteur « N coups sur 245 » en haut de l'écran : coups (parties) déjà
    joués dans la pochette. Le coup en cours ne compte qu'une fois son lot
    gagné ; il repart de 0 avec une nouvelle pochette. */
@@ -7346,21 +7330,9 @@ function updateCoupCount(n, total){
 function updateCue(){
   if(isDisplay) return;
   updateCoupCount();
-  {
-    const cat = pendingOutcome || peekNextOutcome();
-    // même forme ★, juste une teinte un peu plus claire (classe .cue)
-    const big = (cat==='jackpot300' || cat==='etb');   // ETB ou coffret : même signal
-    if(brandStarL) brandStarL.classList.toggle('cue', big);
-    if(brandStarR) brandStarR.classList.toggle('cue', big);
-  }
-  if(!cueDot) return;
-  // Pendant une partie : le lot de cette partie. Dès qu'il est validé
-  // (ou avant le premier lancer) : le lot de la partie SUIVANTE, déjà
-  // en tête de file — l'animateur le sait avant d'appuyer sur C.
-  const cat = pendingOutcome || peekNextOutcome();
-  // point blanc = partie hors pochette (page de démonstration seulement)
-  const forcedNow = forcedGame;
-  cueDot.className = 'cue-dot' + (cat==='jackpot300' ? ' etb' : cat==='etb' ? ' coffret' : '') + (forcedNow ? ' forced' : '');
+  /* Plus AUCUN indice du lot à venir à l'écran (23/09, l'animateur : « on
+     peut prédire les lots ») : l'étoile du titre qui s'éclaircissait avant
+     un ETB ou un coffret et le point coloré en bas à gauche sont retirés. */
 }
 function nextPredeterminedOutcome(){
   if(outcomeState.pos >= outcomeState.batch.length){
