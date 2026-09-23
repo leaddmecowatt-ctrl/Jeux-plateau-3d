@@ -6579,8 +6579,12 @@ const cardGrid = document.getElementById('cardGrid');
 const cardDrawTotal = document.getElementById('cardDrawTotal');
 const impactFlash = document.getElementById('impactFlash');
 const lightningBolt = document.getElementById('lightningBolt');
+/* Pas d'éclair dessiné par-dessus la photo de l'ETB (jackpot) : demande de
+   l'animateur, il gênait la révélation. La finale a déjà sa vraie foudre en
+   3D ; les secousses et l'impact du show restent. */
+let lightningOff = false;
 function triggerLightning(){
-  if(!lightningBolt || reduceMotion) return;
+  if(!lightningBolt || reduceMotion || lightningOff) return;
   lightningBolt.classList.remove('strike'); void lightningBolt.offsetWidth;
   lightningBolt.classList.add('strike');
   setTimeout(()=>lightningBolt.classList.remove('strike'), 850);
@@ -8889,6 +8893,7 @@ function celebrate(catKey, forcedCard, opts){
 
 function revealCelebration(catKey, forcedCard, level, extra){
   resizeCelebCanvas();
+  lightningOff = (catKey === 'jackpot300');
   if(celebMain) celebMain.hidden = false;
   celeb.dataset.level = String(level);
   // état repris à zéro : sans ça le halo "carte rare" d'une pioche
