@@ -8206,17 +8206,20 @@ function clearWinUndo(){
    case prévue, le joueur gagne le lot de sa case (moins cher, par
    construction) et le lot décidé d'avance retourne en tête de file : la
    rentabilité est préservée, le pion ne bouge jamais après un lancer. */
-const NEUTRAL_FORBIDDEN = new Set(['chance','chest','prison']);
 // Détours par Chance/Caisse : déplacements possibles de la carte, et part
 // des arrivées qui passent par un détour quand c'est possible
 const CARD_DELTAS = [1,2,3,4,5,6,-1,-2,-3];
 const INTERMEDIATE_MAX_COST = 17;  // booster (17 €) au maximum en cours de route
 let CARD_ROUTE_P = 0.40;   // dernier lancer : détour par Chance quand il est possible
 const EARLY_LANDING_P = 0.30;
-const TEMPTING_P = 0.45;
-const CHANCE_MID_P = 0.55;
-const NEAR_MISS_P = 0.35;       // lancer intermédiaire : arrêt juste à côté d'un gros lot
-const BIG_LOTS = new Set(['gradee','booster50','etb','jackpot300']);      // lancer intermédiaire : passage par Chance quand il est possible        // part des lancers intermédiaires posés sur une case tentante   // part des lancers intermédiaires qui posent déjà sur le lot prévu
+// lancers intermédiaires : bonus de poids (voir planTotal) pour un arrêt sur
+// Chance/Caisse, sur une case tentante, ou juste à côté d'un gros lot
+let CHANCE_MID_W = 2.2;
+let TEMPTING_W = 2.0;
+let NEAR_MISS_W = 1.8;
+// « raté de peu » : seulement près du Tripack, du Coffret et de l'ETB — avec
+// les 3 Duopacks, 89 % des parties en avaient un et l'effet se diluait
+const NEAR_MISS_LOTS = new Set(['booster50','etb','jackpot300']);
 const DICE_W = {2:1,3:2,4:3,5:4,6:5,7:6,8:5,9:4,10:3,11:2,12:1};
 function landable(idx, targetCat){
   if(idx===0) return false;                 // Départ : jamais de lot
@@ -8270,17 +8273,18 @@ let prevGameTotals = [], curGameTotals = [];
    « c'est toujours la même combinaison pour arriver au même endroit ».
    Toutes les parties partent de Départ, et les poids de vrais dés (7 six fois
    plus fréquent que 2) faisaient ressortir sans cesse les mêmes totaux.
-   Désormais : poids aplatis (racine des poids de dés), et chaque case déjà
+   Désormais : poids proches des vrais dés (puissance 0,8), et chaque case déjà
    utilisée AU MÊME LANCER dans les RECENT_PATHS dernières parties voit son
    poids divisé (×0,35 par répétition). Le lot, lui, ne change pas. */
 const RECENT_PATHS = 8;
 let pathMemory = [], curPath = [];
-function pickWeightedTotal(list, pos){
+function pickWeightedTotal(list, pos, bonus){
   const k = curGameTotals.length;
   const avoid = prevGameTotals[k];
   if(list.length > 1 && list.includes(avoid)) list = list.filter(t=>t!==avoid);
   const poids = t=>{
-    let x = Math.sqrt(DICE_W[t]);
+    let x = Math.pow(DICE_W[t], 0.8);   // presque les vrais poids : le 7 reste le plus fréquent
+    if(bonus) x *= bonus(t);
     if(pos != null){
       const j = landingIndex(pos, t);
       let n = 0;
@@ -8342,12 +8346,12 @@ function planTotal(pos, rollsLeft, targetCat){
          prévu, à condition qu'un relancer puisse l'y ramener. L'hôte peut
          garder (le résultat est le même) ou relancer : le nombre de
          lancers et de cases parcourues varie d'une partie à l'autre. */
-      if(idx!==0 && tiles[idx].catKey===targetCat && t%2===1 && canReachTarget(idx, rollsLeft-1, targetCat, memo)) early.push(t);
+      if(idx!==0 && tiles[idx].catKey===targetCat && canReachTarget(idx, rollsLeft-1, targetCat, memo)) early.push(t);   // pairs aussi : computeCardDraw tire alors une paire non double
       /* Chance EN COURS DE ROUTE : la carte (déplacement pipé) pose le pion
          sur une case de passage d'où le lot prévu reste atteignable. Avant,
          Chance n'était possible qu'au tout dernier lancer : on ne la voyait
          presque jamais. */
-      if((tiles[idx].catKey==='chance' || tiles[idx].catKey==='chest') && t%2===1){
+      if(tiles[idx].catKey==='chance' || tiles[idx].catKey==='chest'){
         for(const d of CARD_DELTAS){
           const j = landingIndex(idx, d);
           if(j>0 && tiles[j].catKey!==targetCat && tiles[j].catKey!=='chance' && tiles[j].catKey!=='chest' && landable(j, targetCat) && canReachTarget(j, rollsLeft-1, targetCat, memo)) viaChance.push({ t, d });
@@ -8357,10 +8361,6 @@ function planTotal(pos, rollsLeft, targetCat){
       if(canReachTarget(idx, rollsLeft-1, targetCat, memo)) single.push(t);
       if(t%2===0 && canReachTarget(idx, rollsLeft, targetCat, memo)) double.push(t);
     }
-    if(viaChance.length && Math.random() < CHANCE_MID_P){
-      const pick = viaChance[Math.floor(Math.random()*viaChance.length)];
-      return { total: pick.t, onTarget: false, wantDouble: false, cardDelta: pick.d };
-    }
     /* Cases de passage : d'abord celles dont le lot est encore EN STOCK. Une
        commune épuisée n'est prise que s'il n'y a pas d'autre chemin (fin de
        pochette) — sinon « garder » y était souvent refusé (audit 2). */
@@ -8368,29 +8368,55 @@ function planTotal(pos, rollsLeft, targetCat){
     { const a = single.filter(enStock); if(a.length) single.splice(0, single.length, ...a); }
     { const a = double.filter(enStock); if(a.length) double.splice(0, double.length, ...a); }
     if(early.length && Math.random() < EARLY_LANDING_P) return { total: pickWeightedTotal(early, pos), onTarget: true, wantDouble: false };
-    if(double.length && (!single.length || Math.random() < 1/3)) return { total: pickWeightedTotal(double, pos), onTarget: false, wantDouble: true };
-    if(single.length){
-      /* Case « tentante » : un lot de passage qui n'est ni une commune ni
-         le lot prévu (Lot Mystère, booster, Parc gratuit). Une fois sur trois
-         environ, quand il y en a une sur le chemin, le pion s'y arrête : le
-         joueur hésite, relance pour tenter mieux… et le tirage continue. */
-      const tempting = single.filter(t=>{ const c = tiles[landingIndex(pos,t)].catKey; return c!=='commune' && c!==targetCat; });
-      /* « Raté de peu » : arrêt JUSTE à côté d'une case de gros lot
-         (Duopack, Tripack, Coffret, ETB). Ces cases ne peuvent pas être un
-         arrêt de passage (le joueur garderait un gros lot non prévu) : sans
-         ça, le pion ne s'en approchait jamais et tournait toujours sur les
-         mêmes cases — « le jeu fait robot », constaté par l'animateur. */
-      const presque = single.filter(t=>{ const j = landingIndex(pos,t); return BIG_LOTS.has(tiles[(j+1)%N_TILES].catKey) || BIG_LOTS.has(tiles[(j+N_TILES-1)%N_TILES].catKey); });
-      const r = Math.random();
-      const pool = (tempting.length && r < TEMPTING_P) ? tempting
-                 : (presque.length && r < TEMPTING_P + NEAR_MISS_P) ? presque
-                 : single;
-      return { total: pickWeightedTotal(pool, pos), onTarget: false, wantDouble: false };
+    // un double à la fréquence de vrais dés (1 sur 6), sauf s'il est le seul chemin
+    if(double.length && (!single.length || Math.random() < 1/6)) return { total: pickWeightedTotal(double, pos), onTarget: false, wantDouble: true };
+    if(single.length || viaChance.length){
+      /* UN SEUL tirage pondéré (audit 3) parmi tous les totaux possibles :
+         poids de vrais dés × mémoire des chemins × un bonus pour les arrêts
+         qui font vivre la partie. Avant, Chance était tirée en premier
+         (55 %) : depuis Départ, le 6 (case Chance) sortait dans plus de la
+         moitié des parties.
+         - Chance/Caisse en cours de route (×CHANCE_MID_W) : la carte
+           (déplacement pipé) pose le pion sur une case de passage d'où le
+           lot prévu reste atteignable ;
+         - case « tentante » (×TEMPTING_W) : un lot de passage qui n'est ni
+           une commune ni le lot prévu — le joueur hésite, relance… ;
+         - « raté de peu » (×NEAR_MISS_W) : arrêt juste à côté d'une case de
+           gros lot (Tripack, Coffret, ETB), sinon le pion ne s'en
+           approchait jamais — « le jeu fait robot », constaté par l'animateur. */
+      const chanceT = new Set(viaChance.map(v=>v.t));
+      /* Avant-dernier lancer : on préfère les cases d'où le lot tombe sur un
+         total COURANT (6, 7, 8) au dernier lancer. Sans ça, la géométrie du
+         plateau faisait sortir 3, 10 et 11 deux fois plus que de vrais dés. */
+      const suite = j=>{
+        if(rollsLeft!==2) return 1;
+        let w = 0;
+        for(let t2=3;t2<=11;t2++){ const k = landingIndex(j,t2); if(k!==0 && tiles[k].catKey===targetCat) w += DICE_W[t2]; }
+        return Math.max(1, w);
+      };
+      const bonus = t=>{
+        if(chanceT.has(t)) return CHANCE_MID_W * 3;   // la carte choisit sa case d'arrivée : poids moyen
+        const j = landingIndex(pos,t), c = tiles[j].catKey;
+        const b = suite(j);
+        if(c!=='commune' && c!==targetCat) return TEMPTING_W * b;
+        if(NEAR_MISS_LOTS.has(tiles[(j+1)%N_TILES].catKey) || NEAR_MISS_LOTS.has(tiles[(j+N_TILES-1)%N_TILES].catKey)) return NEAR_MISS_W * b;
+        return b;
+      };
+      const t = pickWeightedTotal([...new Set([...single, ...chanceT])], pos, bonus);
+      if(chanceT.has(t)){
+        const cartes = viaChance.filter(v=>v.t===t);
+        return { total: t, onTarget: false, wantDouble: false, cardDelta: cartes[Math.floor(Math.random()*cartes.length)].d };
+      }
+      return { total: t, onTarget: false, wantDouble: false };
     }
+    // ni passage, ni Chance, ni double possible : l'arrivée anticipée, obligatoirement
+    if(early.length) return { total: pickWeightedTotal(early, pos), onTarget: true, wantDouble: false };
   }
   // repli : une commune (jamais Chance, Prison ni Départ)
   const neutral = [];
   for(let t=2;t<=12;t++){ const idx = landingIndex(pos,t); if(idx!==0 && tiles[idx].catKey==='commune') neutral.push(t); }
+  // 2 et 12 sont forcément des doubles (lancer de plus) : évités s'il y a mieux
+  { const a = neutral.filter(t=>t!==2 && t!==12); if(a.length) neutral.splice(0, neutral.length, ...a); }
   if(!pouchHas('commune')){
     // plus de commune en stock : un lot de passage encore disponible, si possible
     const alt = [];
