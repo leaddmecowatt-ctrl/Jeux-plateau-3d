@@ -7336,7 +7336,24 @@ function updateCoupCount(n, total){
     total = outcomeState.batch.length;
     broadcastSync({type:'coups', n, total});
   }
-  coupCountEl.textContent = n + (n > 1 ? ' coups' : ' coup') + ' sur ' + total;
+  const reste = Math.max(0, total - n);
+  const nEl = document.getElementById('ccN'), tEl = document.getElementById('ccT');
+  const restEl = document.getElementById('ccRest'), fillEl = document.getElementById('ccFill');
+  const labelEl = document.getElementById('ccLabel');
+  if(!nEl){ coupCountEl.textContent = n + ' / ' + total; return; }
+  const avant = parseInt(nEl.textContent, 10);
+  nEl.textContent = n; tEl.textContent = total;
+  if(fillEl) fillEl.style.width = (total ? (100*n/total) : 0).toFixed(1) + '%';
+  const urgent = reste > 0 && reste <= 30;
+  coupCountEl.classList.toggle('urgent', urgent);
+  coupCountEl.classList.toggle('last10', urgent && reste <= 10);
+  if(labelEl) labelEl.textContent = urgent ? 'DERNIERS COUPS !' : 'COUPS JOUÉS';
+  if(restEl) restEl.textContent = reste === 0 ? 'Pochette terminée' : reste === 1 ? 'Dernier coup !' : reste + ' coups restants';
+  // un coup de plus : le chiffre saute (pas au chargement ni en reculant)
+  if(coupCountEl.dataset.pret && !isNaN(avant) && n > avant){
+    coupCountEl.classList.remove('tick'); void coupCountEl.offsetWidth; coupCountEl.classList.add('tick');
+  }
+  coupCountEl.dataset.pret = '1';
 }
 function updateCue(){
   if(isDisplay) return;

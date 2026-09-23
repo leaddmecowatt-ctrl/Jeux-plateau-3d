@@ -113,12 +113,85 @@ html.storm #bgGlow{ display:none; }
   padding:max(10px,calc(env(safe-area-inset-top) + 6px)) 12px 4px;
   position:relative;z-index:5;
 }
-/* Compteur de la pochette : « 12 coups sur 245 », sous le titre. */
+/* Compteur de la pochette, façon enseigne de casino (23/09, l'animateur :
+   « 0/245 on ne le voit pas assez, il faut que les joueurs le voient »).
+   Plaque noire, rampe d'ampoules qui défile, gros chiffres dorés, barre de
+   progression de la pochette ; chaque coup joué fait « sauter » le chiffre.
+   Derniers coups (30 et moins) : l'enseigne passe au rouge et pulse.
+   Les chiffres sont toujours les vrais (position dans la pochette). */
 .coup-count{
-  margin-top:3px;font-size:13px;font-weight:900;letter-spacing:.08em;color:var(--gold-bright);
-  text-shadow:0 0 8px rgba(255,226,122,.45),0 1px 3px rgba(0,0,0,.85);pointer-events:none;
-  font-variant-numeric:tabular-nums;
+  --cc-u:1vw;
+  position:relative;margin:calc(var(--cc-u)*1.3) 0 calc(var(--cc-u)*.6);padding:calc(var(--cc-u)*.7) calc(var(--cc-u)*2.4) calc(var(--cc-u)*.8);
+  display:flex;flex-direction:column;align-items:center;gap:calc(var(--cc-u)*.25);
+  background:linear-gradient(180deg,#1a1204 0%,#070503 100%);
+  border-radius:calc(var(--cc-u)*1.4);
+  box-shadow:0 0 0 2px #7a5a12, 0 0 0 4px #e9c34a, 0 0 22px rgba(255,200,60,.45), inset 0 0 18px rgba(0,0,0,.9);
+  pointer-events:none;font-variant-numeric:tabular-nums;
 }
+/* rampe d'ampoules : un pointillé lumineux qui tourne autour de la plaque */
+.coup-count::before{
+  content:"";position:absolute;inset:calc(var(--cc-u)*-.55);border-radius:calc(var(--cc-u)*1.9);
+  padding:calc(var(--cc-u)*.32);
+  background:repeating-linear-gradient(90deg,#fff3c0 0 calc(var(--cc-u)*.45),transparent calc(var(--cc-u)*.45) calc(var(--cc-u)*1.1));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;
+  filter:drop-shadow(0 0 4px #ffd35a);opacity:.9;
+  animation:ccBulbs 1.1s linear infinite;
+}
+@keyframes ccBulbs{ to{ background-position:calc(var(--cc-u)*1.1) 0; } }
+.cc-label{
+  font-size:calc(var(--cc-u)*1.05);font-weight:900;letter-spacing:.32em;color:#f6dc86;
+  text-shadow:0 0 6px rgba(255,210,90,.7);
+}
+.cc-digits{ display:flex;align-items:baseline;gap:calc(var(--cc-u)*.5);line-height:1; }
+.cc-n{
+  font:900 calc(var(--cc-u)*5.2)/1 "Arial Black",Impact,"Helvetica Neue",Arial,sans-serif;
+  color:#fff4c4;
+  background:linear-gradient(180deg,#fffbe6 0%,#ffe07a 45%,#d69a17 55%,#ffe8a0 100%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 0 10px rgba(255,200,60,.85)) drop-shadow(0 2px 0 #5a3d05);
+  display:inline-block;
+}
+.cc-sep,.cc-t{
+  font:900 calc(var(--cc-u)*2.6)/1 "Arial Black",Impact,"Helvetica Neue",Arial,sans-serif;
+  color:#e9c34a;text-shadow:0 0 8px rgba(255,200,60,.6);
+}
+.cc-bar{
+  width:calc(var(--cc-u)*18);height:calc(var(--cc-u)*.55);border-radius:99px;
+  background:#2a1d05;box-shadow:inset 0 0 0 1px #7a5a12;overflow:hidden;
+}
+.cc-bar i{
+  display:block;height:100%;width:0%;border-radius:99px;
+  background:linear-gradient(90deg,#b8860b,#ffe07a,#fff6cf,#ffe07a);background-size:200% 100%;
+  box-shadow:0 0 10px rgba(255,210,90,.9);
+  animation:ccShine 1.6s linear infinite;transition:width .6s cubic-bezier(.2,.9,.3,1.2);
+}
+@keyframes ccShine{ to{ background-position:-200% 0; } }
+.cc-rest{
+  font-size:calc(var(--cc-u)*1.15);font-weight:900;letter-spacing:.12em;color:#ffe9a8;
+  text-transform:uppercase;text-shadow:0 0 6px rgba(255,210,90,.6);
+}
+/* chaque coup joué : le chiffre saute et flashe */
+.coup-count.tick .cc-n{ animation:ccTick .7s cubic-bezier(.2,1.6,.4,1) 1; }
+.coup-count.tick{ animation:ccFlash .7s ease-out 1; }
+@keyframes ccTick{ 0%{transform:scale(1)} 30%{transform:scale(1.35) translateY(-6%)} 100%{transform:scale(1)} }
+@keyframes ccFlash{ 0%{box-shadow:0 0 0 2px #7a5a12,0 0 0 4px #fff6cf,0 0 60px rgba(255,230,120,1),inset 0 0 18px rgba(0,0,0,.9)} 100%{} }
+/* derniers coups : enseigne rouge qui pulse */
+.coup-count.urgent{
+  background:linear-gradient(180deg,#2a0404 0%,#0a0202 100%);
+  box-shadow:0 0 0 2px #7a1010,0 0 0 4px #ff4d4d,0 0 30px rgba(255,40,40,.7),inset 0 0 18px rgba(0,0,0,.9);
+  animation:ccUrgent 1s ease-in-out infinite;
+}
+.coup-count.urgent::before{ background:repeating-linear-gradient(90deg,#ffd0d0 0 calc(var(--cc-u)*.45),transparent calc(var(--cc-u)*.45) calc(var(--cc-u)*1.1)); filter:drop-shadow(0 0 5px #ff3030); animation-duration:.5s; }
+.coup-count.urgent .cc-label,.coup-count.urgent .cc-rest{ color:#ffd6d6;text-shadow:0 0 8px rgba(255,60,60,.9); }
+.coup-count.urgent .cc-sep,.coup-count.urgent .cc-t{ color:#ff7070; }
+.coup-count.urgent .cc-bar i{ background:linear-gradient(90deg,#a00,#ff4d4d,#ffd0d0,#ff4d4d);background-size:200% 100%; }
+.coup-count.urgent.last10{ animation-duration:.55s; }
+@keyframes ccUrgent{ 0%,100%{ transform:scale(1) } 50%{ transform:scale(1.04) } }
+@media (prefers-reduced-motion: reduce){
+  .coup-count,.coup-count::before,.cc-bar i,.coup-count.tick .cc-n{ animation:none !important; }
+}
+html.eco .coup-count::before,html.eco .cc-bar i{ animation:none; }
 .brand{
   font-size:10px;font-weight:900;letter-spacing:.14em;color:var(--gold-bright);
   opacity:.8;
@@ -1050,6 +1123,7 @@ html.storm #bgFill{ filter:blur(22px) brightness(.10) saturate(.8); }
 html:not(.rotated) #app{font-size:clamp(14px,1.15vw,26px);}
 html:not(.rotated) .top-hud{padding:1vh 2vw .3vh;}
 html:not(.rotated) .brand{font-size:clamp(12px,1vw,20px);}
+html:not(.rotated) .coup-count{--cc-u:clamp(6px,.8vw,15px);}
 html:not(.rotated) .place-banner-wrap{height:clamp(48px,6.4vh,88px); margin:.3vh 0 .2vh;}
 html:not(.rotated) .place-banner{font-size:clamp(26px,3.4vw,58px);}
 html:not(.rotated) .main-row{padding:.3vh 1.2vw 1vh;}
@@ -1118,6 +1192,7 @@ html:not(.rotated) .key-hint{font-size:clamp(14px,1.1vw,24px); bottom:1.6vh;}
   #app{ font-size:clamp(16px,2vw,34px); }
   .top-hud{ padding:1.2vh 3vw .4vh; }
   .brand{ font-size:clamp(14px,1.7vw,30px); }
+  .coup-count{ --cc-u:clamp(7px,1.35vw,22px); }
   .place-banner-wrap{ height:clamp(56px,6.5vh,120px); margin:.4vh 0 .2vh; }
   .place-banner{ font-size:clamp(30px,5.4vw,84px); }
   .main-row{ padding:.3vh 2vw 1vh; }
@@ -1202,6 +1277,7 @@ html.rotated #bgFill{ display:block; }
 html.rotated #app{font-size:clamp(16px,2vh,34px);}
 html.rotated .top-hud{padding:1.2vw 3vh .4vw;}
 html.rotated .brand{font-size:clamp(14px,1.7vh,30px);}
+html.rotated .coup-count{--cc-u:clamp(7px,1.35vh,22px);}
 html.rotated .place-banner-wrap{height:clamp(56px,6.5vw,120px); margin:.4vw 0 .2vw;}
 html.rotated .place-banner{font-size:clamp(30px,5.4vh,84px);}
 html.rotated .main-row{padding:.3vw 2vh 1vw;}
@@ -1316,7 +1392,12 @@ if(new URLSearchParams(location.search).get('view')==='display'){
   <div id="bgGlow" aria-hidden="true"></div>
   <div class="top-hud">
     <div class="brand"><span class="brand-star" id="brandStarL">★</span> PIKAPOLY <span class="brand-star" id="brandStarR">★</span></div>
-    <div class="coup-count" id="coupCount">0 coup sur 245</div>
+    <div class="coup-count" id="coupCount" aria-live="polite">
+      <div class="cc-label" id="ccLabel">COUPS JOUÉS</div>
+      <div class="cc-digits"><span class="cc-n" id="ccN">0</span><span class="cc-sep">/</span><span class="cc-t" id="ccT">245</span></div>
+      <div class="cc-bar"><i id="ccFill"></i></div>
+      <div class="cc-rest" id="ccRest">245 coups restants</div>
+    </div>
     <div class="place-banner-wrap"><div class="place-banner" id="placeBanner">Départ</div></div>
     <div class="key-hint" id="keyHint" aria-live="polite"></div>
     <span id="topNum" hidden></span>
