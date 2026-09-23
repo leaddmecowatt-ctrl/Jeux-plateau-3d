@@ -486,7 +486,208 @@ function drawFittedSerif(ctx, text, cx, cy, maxW, maxF, minF, maxH){
   ctx.fillText(l1, cx, cy - f*0.56); ctx.fillText(l2, cx, cy + f*0.56);
 }
 /* Médaillon des cases sans photo (Chance, Caisse, Prison, visite). */
+/* ---------- Illustrations des cases spéciales (23/09) ----------
+   Demande de l'animateur : la Prison en rouge avec des barreaux, comme au
+   Monopoly ; un vrai « ? » pour Chance (l'ancien point dans une bulle ne
+   plaisait pas) ; un coffre au trésor pour la Caisse Communautaire.
+   Chaque dessin remplit le rectangle donné (fenêtre de case ou billet
+   d'angle) ; les pictos seuls servent aussi aux médaillons flottants. */
+function fondRayonne(ctx, x, y, w, h, c0, c1, rayons){
+  const cx = x+w/2, cy = y+h/2;
+  const g = ctx.createRadialGradient(cx, cy, 10, cx, cy, Math.max(w,h)*0.72);
+  g.addColorStop(0, c0); g.addColorStop(1, c1);
+  ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
+  if(rayons){
+    ctx.save(); ctx.translate(cx, cy);
+    ctx.fillStyle = rayons;
+    const R = Math.max(w,h);
+    for(let k=0;k<16;k++){
+      const a = k*Math.PI/8;
+      ctx.beginPath(); ctx.moveTo(0,0);
+      ctx.arc(0, 0, R, a, a + Math.PI/20); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+function etincelle(ctx, x, y, r, col){
+  ctx.save(); ctx.translate(x, y); ctx.fillStyle = col || '#fff6d0';
+  ctx.shadowColor = 'rgba(255,240,180,.9)'; ctx.shadowBlur = r*1.2;
+  ctx.beginPath();
+  for(let k=0;k<8;k++){ const rr = k%2 ? r*0.22 : r; const a = k*Math.PI/4 - Math.PI/2; ctx.lineTo(Math.cos(a)*rr, Math.sin(a)*rr); }
+  ctx.closePath(); ctx.fill(); ctx.restore();
+}
+function orVertical(ctx, y0, y1){
+  const g = ctx.createLinearGradient(0, y0, 0, y1);
+  g.addColorStop(0, '#fff4b8'); g.addColorStop(0.35, '#f5cf4a'); g.addColorStop(0.7, '#c98f17'); g.addColorStop(1, '#8a5a07');
+  return g;
+}
+/* « ? » doré en relief */
+function drawGoldQuestion(ctx, cx, cy, H){
+  ctx.save();
+  ctx.font = '900 '+H+'px Georgia,"Times New Roman",serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  // ombre portée et lueur
+  ctx.shadowColor = 'rgba(255,214,90,.75)'; ctx.shadowBlur = H*0.18;
+  ctx.lineWidth = H*0.10; ctx.strokeStyle = '#2a0d4a'; ctx.strokeText('?', cx, cy + H*0.04);
+  ctx.shadowBlur = 0;
+  // tranche (relief) : le même glyphe décalé, plus sombre
+  ctx.fillStyle = '#7a4a06'; ctx.fillText('?', cx + H*0.025, cy + H*0.07);
+  ctx.fillStyle = orVertical(ctx, cy - H*0.45, cy + H*0.45);
+  ctx.fillText('?', cx, cy + H*0.04);
+  // reflet
+  ctx.lineWidth = H*0.012; ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.strokeText('?', cx - H*0.01, cy + H*0.03);
+  ctx.restore();
+}
+/* coffre au trésor : W = largeur du coffre, (cx, cy) = centre du coffre */
+function drawChestIcon(ctx, cx, cy, W, lueur){
+  const bw = W, bh = W*0.46, lidH = W*0.30;
+  const x0 = cx - bw/2, yTop = cy - bh*0.15, yBot = yTop + bh;
+  ctx.save();
+  if(lueur){
+    const gl = ctx.createRadialGradient(cx, yTop, 4, cx, yTop, W*0.95);
+    gl.addColorStop(0, 'rgba(255,236,150,.85)'); gl.addColorStop(0.4, 'rgba(255,210,90,.30)'); gl.addColorStop(1, 'rgba(255,210,90,0)');
+    ctx.fillStyle = gl; ctx.fillRect(cx - W, yTop - W, W*2, W*2);
+  }
+  ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = W*0.08; ctx.shadowOffsetY = W*0.03;
+  // corps en bois
+  const wood = ctx.createLinearGradient(0, yTop, 0, yBot);
+  wood.addColorStop(0, '#9a5a28'); wood.addColorStop(1, '#4e270d');
+  roundRectPath(ctx, x0, yTop, bw, bh, W*0.04); ctx.fillStyle = wood; ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.strokeStyle = 'rgba(40,18,4,.55)'; ctx.lineWidth = Math.max(1, W*0.012);
+  for(let k=1;k<3;k++){ const yy = yTop + bh*k/3; ctx.beginPath(); ctx.moveTo(x0+W*0.02, yy); ctx.lineTo(x0+bw-W*0.02, yy); ctx.stroke(); }
+  // couvercle bombé
+  const woodL = ctx.createLinearGradient(0, yTop - lidH, 0, yTop);
+  woodL.addColorStop(0, '#b8743a'); woodL.addColorStop(1, '#6a3714');
+  ctx.beginPath(); ctx.moveTo(x0, yTop);
+  ctx.bezierCurveTo(x0, yTop - lidH*1.25, x0 + bw, yTop - lidH*1.25, x0 + bw, yTop);
+  ctx.closePath(); ctx.fillStyle = woodL; ctx.fill();
+  // cerclages d'or
+  const gold = orVertical(ctx, yTop - lidH, yBot);
+  ctx.fillStyle = gold;
+  const band = W*0.075;
+  for(const f of [0.2, 0.8]){
+    const bx = x0 + bw*f - band/2;
+    ctx.fillRect(bx, yTop, band, bh);
+    ctx.save(); ctx.beginPath(); ctx.moveTo(x0, yTop);
+    ctx.bezierCurveTo(x0, yTop - lidH*1.25, x0 + bw, yTop - lidH*1.25, x0 + bw, yTop); ctx.closePath(); ctx.clip();
+    ctx.fillRect(bx, yTop - lidH*1.3, band, lidH*1.3); ctx.restore();
+  }
+  ctx.fillRect(x0 - W*0.01, yTop - W*0.025, bw + W*0.02, W*0.05);           // jonction
+  ctx.fillRect(x0 - W*0.01, yBot - W*0.045, bw + W*0.02, W*0.045);          // pied
+  // serrure
+  const lw = W*0.16, lh = W*0.2;
+  roundRectPath(ctx, cx - lw/2, yTop - W*0.02, lw, lh, W*0.03); ctx.fillStyle = gold; ctx.fill();
+  ctx.lineWidth = Math.max(1, W*0.012); ctx.strokeStyle = '#7a4a06'; ctx.stroke();
+  ctx.fillStyle = '#2a1405';
+  ctx.beginPath(); ctx.arc(cx, yTop + lh*0.35, lw*0.13, 0, Math.PI*2); ctx.fill();
+  ctx.fillRect(cx - lw*0.06, yTop + lh*0.38, lw*0.12, lh*0.3);
+  // contour
+  ctx.lineWidth = Math.max(1.5, W*0.018); ctx.strokeStyle = 'rgba(30,12,2,.9)';
+  roundRectPath(ctx, x0, yTop, bw, bh, W*0.04); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x0, yTop); ctx.bezierCurveTo(x0, yTop - lidH*1.25, x0 + bw, yTop - lidH*1.25, x0 + bw, yTop); ctx.stroke();
+  ctx.restore();
+}
+function drawCoin(ctx, x, y, r){
+  ctx.save();
+  ctx.beginPath(); ctx.ellipse(x, y, r, r*0.62, 0, 0, Math.PI*2);
+  ctx.fillStyle = orVertical(ctx, y - r*0.6, y + r*0.6); ctx.fill();
+  ctx.lineWidth = Math.max(1, r*0.12); ctx.strokeStyle = '#8a5a07'; ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(x, y, r*0.62, r*0.36, 0, 0, Math.PI*2);
+  ctx.strokeStyle = 'rgba(255,248,210,.7)'; ctx.lineWidth = Math.max(1, r*0.07); ctx.stroke();
+  ctx.restore();
+}
+/* cadenas doré */
+function drawPadlock(ctx, cx, cy, S){
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = S*0.12; ctx.shadowOffsetY = S*0.04;
+  ctx.lineWidth = S*0.13; ctx.lineCap = 'round';
+  const sg = ctx.createLinearGradient(cx - S*0.3, 0, cx + S*0.3, 0);
+  sg.addColorStop(0, '#6b6b72'); sg.addColorStop(0.5, '#e8e8ee'); sg.addColorStop(1, '#55555c');
+  ctx.strokeStyle = sg;
+  ctx.beginPath(); ctx.arc(cx, cy - S*0.12, S*0.26, Math.PI, 0); ctx.lineTo(cx + S*0.26, cy + S*0.05);
+  ctx.moveTo(cx - S*0.26, cy - S*0.12); ctx.lineTo(cx - S*0.26, cy + S*0.05); ctx.stroke();
+  roundRectPath(ctx, cx - S*0.42, cy, S*0.84, S*0.66, S*0.12);
+  ctx.fillStyle = orVertical(ctx, cy, cy + S*0.66); ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.lineWidth = S*0.04; ctx.strokeStyle = '#7a4a06'; ctx.stroke();
+  ctx.fillStyle = '#2a1405';
+  ctx.beginPath(); ctx.arc(cx, cy + S*0.27, S*0.09, 0, Math.PI*2); ctx.fill();
+  ctx.fillRect(cx - S*0.04, cy + S*0.3, S*0.08, S*0.2);
+  ctx.restore();
+}
+function drawPrisonArt(ctx, x, y, w, h){
+  // mur de briques rouges
+  fondRayonne(ctx, x, y, w, h, '#e0453c', '#5e0a0a', null);
+  ctx.save();
+  ctx.strokeStyle = 'rgba(40,0,0,.35)'; ctx.lineWidth = Math.max(2, w*0.006);
+  const bh = h/9, bw = w/5;
+  for(let r=0;r<10;r++){
+    const yy = y + r*bh; ctx.beginPath(); ctx.moveTo(x, yy); ctx.lineTo(x+w, yy); ctx.stroke();
+    for(let c=0;c<6;c++){ const xx = x + c*bw + (r%2 ? bw/2 : 0); ctx.beginPath(); ctx.moveTo(xx, yy); ctx.lineTo(xx, yy+bh); ctx.stroke(); }
+  }
+  ctx.restore();
+  // fenêtre de cellule
+  const fx = x + w*0.15, fy = y + h*0.12, fw = w*0.70, fh = h*0.66;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,.7)'; ctx.shadowBlur = w*0.04;
+  const inside = ctx.createLinearGradient(0, fy, 0, fy+fh);
+  inside.addColorStop(0, '#1b0404'); inside.addColorStop(1, '#3d0909');
+  roundRectPath(ctx, fx, fy, fw, fh, w*0.02); ctx.fillStyle = inside; ctx.fill();
+  ctx.restore();
+  // barreaux
+  const metal = (x0, x1)=>{ const g = ctx.createLinearGradient(x0, 0, x1, 0);
+    g.addColorStop(0, '#1d1d22'); g.addColorStop(0.35, '#b9bac2'); g.addColorStop(0.55, '#6d6e76'); g.addColorStop(1, '#141418'); return g; };
+  const n = 6, bwid = fw*0.055;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = w*0.015; ctx.shadowOffsetX = w*0.006;
+  for(let k=0;k<n;k++){
+    const bx = fx + fw*(k+0.5)/n - bwid/2;
+    ctx.fillStyle = metal(bx, bx+bwid); ctx.fillRect(bx, fy - h*0.03, bwid, fh + h*0.06);
+  }
+  const traverse = (yy)=>{ const g = ctx.createLinearGradient(0, yy, 0, yy+bwid);
+    g.addColorStop(0, '#1d1d22'); g.addColorStop(0.4, '#b9bac2'); g.addColorStop(1, '#141418');
+    ctx.fillStyle = g; ctx.fillRect(fx - w*0.02, yy, fw + w*0.04, bwid); };
+  traverse(fy + fh*0.06); traverse(fy + fh*0.94 - bwid);
+  ctx.shadowColor = 'transparent';
+  ctx.fillStyle = '#d8d9df';
+  for(let k=0;k<n;k++){ const rx = fx + fw*(k+0.5)/n;
+    for(const ry of [fy + fh*0.06 + bwid/2, fy + fh*0.94 - bwid/2]){ ctx.beginPath(); ctx.arc(rx, ry, bwid*0.22, 0, Math.PI*2); ctx.fill(); } }
+  ctx.restore();
+  // cadenas accroché à la traverse du bas
+  drawPadlock(ctx, x + w/2, fy + fh*0.80, Math.min(w, h)*0.20);
+}
+function drawChanceArt(ctx, x, y, w, h){
+  fondRayonne(ctx, x, y, w, h, '#9a5cf0', '#240a4d', 'rgba(255,255,255,.07)');
+  drawGoldQuestion(ctx, x + w/2, y + h*0.50, h*0.82);
+  for(const [fx, fy, fr] of [[0.18,0.22,0.05],[0.83,0.28,0.04],[0.22,0.78,0.035],[0.8,0.74,0.05],[0.66,0.12,0.03]])
+    etincelle(ctx, x + w*fx, y + h*fy, Math.min(w,h)*fr);
+}
+function drawChestArt(ctx, x, y, w, h){
+  fondRayonne(ctx, x, y, w, h, '#3fcf7f', '#0a3d23', 'rgba(255,255,255,.07)');
+  const W = Math.min(w*0.62, h*0.95);
+  drawChestIcon(ctx, x + w/2, y + h*0.56, W, true);
+  const r = W*0.07, by = y + h*0.56 + W*0.36;
+  for(const [dx, dy] of [[-0.42,0.02],[-0.30,0.06],[0.34,0.04],[0.45,0.0],[0.26,0.08]]) drawCoin(ctx, x + w/2 + W*dx, by + W*dy, r);
+  for(const [fx, fy, fr] of [[0.2,0.2,0.045],[0.8,0.24,0.04],[0.5,0.1,0.035],[0.14,0.62,0.03],[0.87,0.6,0.035]])
+    etincelle(ctx, x + w*fx, y + h*fy, Math.min(w,h)*fr);
+}
+function drawSpecialArt(ctx, x, y, w, h, rad, kind){
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 22; ctx.shadowOffsetY = 6;
+  roundRectPath(ctx, x, y, w, h, rad); ctx.fillStyle = '#0b1334'; ctx.fill();
+  ctx.restore();
+  ctx.save(); roundRectPath(ctx, x, y, w, h, rad); ctx.clip();
+  if(kind === 'prison') drawPrisonArt(ctx, x, y, w, h);
+  else if(kind === 'chance') drawChanceArt(ctx, x, y, w, h);
+  else drawChestArt(ctx, x, y, w, h);
+  ctx.restore();
+  roundRectPath(ctx, x, y, w, h, rad);
+  ctx.lineWidth = 5; ctx.strokeStyle = goldLeafStroke(ctx, x, y, x+w, y+h); ctx.stroke();
+}
 function drawMedallion(ctx, x, y, w, h, rad, kind, accent){
+  if(kind === 'chance' || kind === 'chest' || kind === 'prison'){ drawSpecialArt(ctx, x, y, w, h, rad, kind); return; }
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 22; ctx.shadowOffsetY = 6;
   roundRectPath(ctx, x, y, w, h, rad); ctx.fillStyle = '#0b1334'; ctx.fill();
@@ -780,6 +981,12 @@ function getGlyphTexture(kind, accentColor){
   if(kind==='visite'){
     ctx.shadowColor = 'rgba(255,255,255,.6)'; ctx.shadowBlur = size*0.12;
     drawVectorIcon(ctx, 'unlock', cx, cy+size*0.02, size*0.22, '#fff9e6');
+  } else if(kind==='chance'){
+    drawGoldQuestion(ctx, cx, cy, size*0.80);          // plus de bulle : le « ? » seul, doré
+  } else if(kind==='chest'){
+    drawChestIcon(ctx, cx, cy + size*0.06, size*0.72, true);
+  } else if(kind==='prison'){
+    drawPadlock(ctx, cx, cy - size*0.10, size*0.62);
   } else {
     const medal = accentColor || GOLD;
     // liseré sombre + anneau blanc épais autour du médaillon : sans ça,
@@ -1624,14 +1831,9 @@ function makeCenterPlateTexture(){
     ctx.beginPath(); ctx.arc(bx,badgeY,badgeR,0,Math.PI*2);
     ctx.fillStyle = '#0c0f16'; ctx.fill();
     ctx.restore();
-    if(b.icon==='question'){
-      ctx.font = '900 '+(badgeR*1.3)+'px Arial,Helvetica,sans-serif';
-      ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillStyle = '#fff9e6';
-      ctx.fillText('?', bx, badgeY+badgeR*0.05);
-    } else {
-      drawVectorIcon(ctx, b.icon, bx, badgeY, badgeR*0.85, '#fff9e6');
-    }
+    // mêmes pictos que les cases (« ? » doré, coffre au trésor)
+    if(b.icon==='question') drawGoldQuestion(ctx, bx, badgeY, badgeR*1.55);
+    else drawChestIcon(ctx, bx, badgeY + badgeR*0.12, badgeR*1.35, false);
     ctx.lineWidth = size*0.0045; ctx.strokeStyle = color;
     ctx.beginPath(); ctx.arc(bx,badgeY,badgeR,0,Math.PI*2); ctx.stroke();
     ctx.textAlign='left'; ctx.textBaseline='middle';
