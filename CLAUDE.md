@@ -50,7 +50,7 @@ les animations, confettis et timings **ne se vérifient pas** — seul un vrai a
 ## Concepts — où chercher (`grep` sur ces noms)
 
 **Commandes clavier** (`addEventListener('keydown'`) : A démarrer · B tirer les cartes ·
-D garder le lot · C recommencer · F plein écran · R pivoter l'image ·
+D garder le lot · U annuler le dernier lot gardé · C recommencer · F plein écran · R pivoter l'image ·
 M affiche la **bulle de règles** (M ou Échap pour fermer). Les touches programmées
 (Z, 1–6 = lot forcé) sont **supprimées du code** depuis le 23/09 : aucune touche ne décide
 d'un lot, tout sort de la pochette.

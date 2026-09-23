@@ -35,7 +35,7 @@ python3 tools/build.py --out dist/pikajackpot.html
 Toujours donner ce fichier (ou le publier en lien), jamais les sources : les sources ne
 fonctionnent pas ouvertes directement.
 
-**Commandes** : A démarrer · B tirer · D garder le lot · C recommencer ·
+**Commandes** : A démarrer · B tirer · D garder le lot · U annuler le dernier lot gardé · C recommencer ·
 F plein écran · R pivoter · **M** affiche les règles en grand au milieu de l'écran
 (M ou Échap pour refermer). Les touches qui forçaient un lot (Z, 1 à 6) sont
 **supprimées** depuis le 23/09 : tous les lots sortent de la pochette de 245 coups.

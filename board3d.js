@@ -7880,6 +7880,16 @@ function showKeyHint(text){
   keyHintTimer = setTimeout(()=>keyHintEl.classList.remove('show'), 2600);
 }
 
+/* Écran public : un lot annoncé par la régie PENDANT que le pion public
+   marche encore (allure tirée au sort, fenêtre en arrière-plan) est gardé
+   de côté et joué à l'arrivée. Sinon la lecture d'une carte Chance/Caisse
+   l'effaçait (clearCelebration) : il ne restait que l'aperçu (audit 4). */
+let celebDiffere = null;
+function jouerCelebDifferee(){
+  if(!celebDiffere) return;
+  const m = celebDiffere; celebDiffere = null;
+  celebrate(m.catKey, null, {locked:true, mystery: m.mystery});
+}
 async function move(forcedCount, forcedCard){
   if(moving || finished) return;
   moving = true;
@@ -7932,6 +7942,7 @@ async function move(forcedCount, forcedCard){
 
   moving = false;
   updateWinButton();
+  if(isDisplay) jouerCelebDifferee();
   /* Partie programmée à la touche : on accorde les lancers nécessaires
      pour atteindre la case demandée, AVANT de conclure que les lancers
      sont épuisés (sinon le lot de la case d'arrivée serait validé
@@ -8678,6 +8689,14 @@ window.addEventListener('keydown', (e)=>{
     else if(winBtn && winBtn.disabled && currentIndex>0) showKeyHint('Lot déjà validé — C pour recommencer');
     else if(currentIndex<=0) showKeyHint('Aucun lot à garder : tirez d’abord les cartes (B)');
   }
+  /* U : annuler le dernier lot gardé (D appuyé par erreur). Le bouton
+     « Annuler » est dans le panneau latéral, masqué dans toutes les mises
+     en page : sans cette touche, l'annulation était impossible (audit 4). */
+  else if(k==='u'){
+    if(lastWinUndo && undoBtn && !moving && !drawInProgress) undoBtn.click();
+    else if(moving || drawInProgress) showKeyHint('⏳ Attendez la fin du déplacement pour annuler (U)');
+    else showKeyHint('Aucun lot à annuler');
+  }
   else if(k==='f'){ toggleFullscreen(); }
   else if(k==='r'){ cycleRotation(); }
 });
@@ -8724,11 +8743,13 @@ if(syncChannel && isDisplay){
   syncChannel.onmessage = (e)=>{
     const m = e.data || {};
     if(m.type==='draw'){
+      celebDiffere = null;
       topNum.textContent = m.draw.total; clearCelebration();
       if(typeof m.rollsUsed === 'number'){ rollsUsed = m.rollsUsed; rollsAllowed = m.rollsAllowed; }   // « Lancer N / 3 » à jour
       playCardDrawAnimation(m.draw);
     }
     else if(m.type==='undo'){
+      celebDiffere = null;
       clearCelebration(); stopStorm();
       if(m.retirer && lastResults.length){ lastResults.shift(); renderResultsTicker(); }
       updateWinButton();   // l'aperçu de la case revient, comme sur la régie
@@ -8739,7 +8760,7 @@ if(syncChannel && isDisplay){
          recale sur la case de départ de la régie avant de le faire marcher
          (audit 23/09 : sinon il restait décalé pour toute la suite). */
       if(m.from !== undefined && (moving || currentIndex !== m.from)){
-        generation++; moving = false; walk = null;
+        generation++; moving = false; walk = null; celebDiffere = null;
         currentIndex = m.from; placeTokenInstant(m.from); setActive(m.from, false);
       }
       move(m.count, m.card);
@@ -8749,8 +8770,11 @@ if(syncChannel && isDisplay){
     // (qui arrive ici par le message 'restart'). Sans ce verrou, l'écran
     // public effaçait le lot dès la fin des confettis, soit à peine plus
     // de deux secondes sur un petit lot.
-    else if(m.type==='celebrate') celebrate(m.catKey, null, {locked:true, mystery: m.mystery});
-    else if(m.type==='restart') restart();
+    else if(m.type==='celebrate'){
+      if(moving) celebDiffere = m;   // joué à l'arrivée du pion public
+      else celebrate(m.catKey, null, {locked:true, mystery: m.mystery});
+    }
+    else if(m.type==='restart'){ celebDiffere = null; restart(); }
     else if(m.type==='start') startGame();
     else if(m.type==='coups') updateCoupCount(m.n, m.total);
   };
