@@ -1217,6 +1217,13 @@ THREE.Texture.DEFAULT_ANISOTROPY = renderer.capabilities.getMaxAnisotropy();
    Si la machine peine, l'échelle de qualité automatique redescend d'elle-
    même. */
 const DPR_MAX = Math.min(window.devicePixelRatio||1, 2);
+/* Écran de diffusion (ordinateur, télé) : la RÉSOLUTION n'y baisse jamais
+   (23/09, « la qualité baisse quand le jeu tourne »). Si la machine peine,
+   l'échelle automatique coupe le flou lumineux, les ombres et la
+   décoration (mode éco), jamais la finesse de l'image. Seuls téléphones et
+   petits écrans gardent la baisse de résolution. */
+const ECRAN_DIFFUSION = !(Math.min(window.innerWidth, window.innerHeight) <= 520
+  || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || ''));
 renderer.setPixelRatio(DPR_MAX);
 
 /* ---------- Perte du contexte WebGL ----------
@@ -6714,7 +6721,7 @@ function applyQuality(level){
        cran 4   : 1,5x + mode éco
        cran 5   : 1x + mode éco */
   const mid = Math.min(DPR_MAX, 1.5);
-  const dpr = level>=5 ? Math.min(DPR_MAX, 1) : level>=3 ? mid : DPR_MAX;
+  const dpr = ECRAN_DIFFUSION ? DPR_MAX : level>=5 ? Math.min(DPR_MAX, 1) : level>=3 ? mid : DPR_MAX;
   const eco = level >= 4;
   const bs  = bloomScaleForLevel(level);
   /* Rien de reellement different : on ne touche a rien. Les crans 1 et 2
