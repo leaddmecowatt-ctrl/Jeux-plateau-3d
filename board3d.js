@@ -7322,6 +7322,31 @@ function shuffleInPlace(a){
        avec un poids qui croît doucement du premier au dernier coup
        (×1 à ×1,6) : environ 56 % de chances dans la deuxième moitié,
        jamais de tour fixe ni de fenêtre. */
+/* FENÊTRES DE PASSAGE (version 99 coups, 24/09) : l'animateur veut le
+   coffret « entre le 40e et le 70e coup ». window.PIKA_POCHETTE.fenetres =
+   { cat:[premierCoup, dernierCoup] } (coups numérotés à partir de 1).
+   recalerFenetres() remet dans sa fenêtre toute occurrence encore à venir
+   qui en serait sortie (échange quand le joueur garde en chemin, annulation) ;
+   si la fenêtre est déjà passée, le lot tombe au coup suivant. `force` :
+   placement au hasard dans la fenêtre, à la construction de la pochette. */
+function recalerFenetres(b, pos, force){
+  const f = POCHETTE_PERSO && POCHETTE_PERSO.fenetres;
+  if(!f) return;
+  for(const cat in f){
+    const lo = f[cat][0]-1, hi = Math.min(f[cat][1]-1, b.length-1);
+    // occurrences à venir hors fenêtre (toutes, si `force`), retirées de la fin vers le début
+    const aDeplacer = [];
+    for(let i=pos;i<b.length;i++) if(b[i]===cat && (force || i < lo || i > hi)) aDeplacer.push(i);
+    for(let k=aDeplacer.length-1;k>=0;k--) b.splice(aDeplacer[k], 1);
+    // puis remises une à une : au hasard dans la fenêtre, ou au coup suivant si elle est passée
+    aDeplacer.forEach(()=>{
+      let t;
+      if(pos > hi) t = pos;
+      else { const a = Math.max(pos, lo); t = a + Math.floor(Math.random()*(Math.min(hi, b.length) - a + 1)); }
+      b.splice(t, 0, cat);
+    });
+  }
+}
 function buildPouch(){
   const base = [];
   POUCH.forEach(r=>{ if(r.cat!=='jackpot300') for(let i=0;i<r.n;i++) base.push(r.cat); });
@@ -7343,6 +7368,7 @@ function buildPouch(){
     const attendu = POUCH.find(r=>r.cat==='booster8').n / 4;
     if(q.every(n=>n>=Math.round(attendu*0.57) && n<=Math.round(attendu*1.43))) break;
   }
+  recalerFenetres(arr, 0, true);
   return arr;
 }
 function buildMysteryQueue(){
@@ -8681,6 +8707,7 @@ async function claimCurrentLot(){
       b.splice(at, 0, pendingOutcome);
       swap = { removedAt: -1, insertedAt: at, kept: realCat, pending: pendingOutcome };
     }
+    recalerFenetres(b, pos, false);
     saveOutcomeState();
   }
   pendingOutcome = null;
@@ -8735,6 +8762,7 @@ if(undoBtn) undoBtn.addEventListener('click', ()=>{
     // cette mise, le lot gardé retrouve sa place
     outcomeState.batch.splice(sw.insertedAt, 1);
     if(sw.removedAt >= 0) outcomeState.batch.splice(sw.removedAt, 0, sw.kept);
+    recalerFenetres(outcomeState.batch, outcomeState.pos, false);
     saveOutcomeState();
   }
   // dans tous les cas la mise reprend son lot décidé d'avance : les
