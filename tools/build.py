@@ -337,8 +337,10 @@ def build(out_path, demo_jackpot=False, pochette99=False):
         # Version 99 coups (24/09) : fin de la pochette entamée (146 coups
         # joués sur 245), avec le stock réel restant. 3 « Caisses » = 3 Cartes
         # gratuites (Parc gratuit) ; 2 Prison ; le reste en Pioches.
-        cfg = ('{"taille":99,"lots":{"jackpot300":0,"etb":1,"booster50":0,"gradee":0,'
-               '"booster8":19,"alternative":30,"parc":3,"prison":2,"commune":44},'
+        # « id » change à chaque nouvelle composition : une pochette déjà
+        # enregistrée dans le navigateur avec l'ancienne est alors refaite.
+        cfg = ('{"id":"p99-17b","taille":99,"lots":{"jackpot300":0,"etb":1,"booster50":0,"gradee":0,'
+               '"booster8":17,"alternative":30,"parc":3,"prison":2,"commune":46},'
                '"myst":{"carte":20,"booster":10}}')
         out = out.replace('<head>', '<head><script>window.PIKA_POCHETTE=' + cfg + '</script>', 1)
         out = re.sub(r'<title>[^<]*</title>', '<title>Pikapoly — 99 coups</title>', out, count=1)

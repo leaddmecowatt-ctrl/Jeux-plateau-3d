@@ -7355,7 +7355,7 @@ function buildMysteryQueue(){
 /* Version de la file. Une file laissée en mémoire du navigateur par une
    version précédente du jeu (autre recette, autre ordonnancement) n'a
    pas les mêmes garanties : elle est reconstruite. */
-const OUTCOME_BATCH_VERSION = POCHETTE_PERSO ? 'v12-pochette-'+TAILLE_POCHETTE : 'v11-parc-gratuit';
+const OUTCOME_BATCH_VERSION = POCHETTE_PERSO ? 'v12-'+(POCHETTE_PERSO.id || 'pochette-'+TAILLE_POCHETTE) : 'v11-parc-gratuit';
 function loadOutcomeState(){
   try{
     const raw = safeGetItem(OUTCOME_BATCH_KEY);
