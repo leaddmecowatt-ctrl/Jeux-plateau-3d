@@ -148,7 +148,7 @@ def inline_glb_images(raw):
     print('build.py: %d image(s) du modèle 3D converties en data: URI' % n)
     return header + out
 
-def build(out_path, demo_jackpot=False):
+def build(out_path, demo_jackpot=False, pochette99=False):
     html = load('Nsldkso.html')
     # The previous version of this script kept only the <style> block and
     # hand-reconstructed a Google Fonts <link> separately, silently
@@ -333,6 +333,15 @@ def build(out_path, demo_jackpot=False):
         # jackpot (voir PIKA_DEMO_JACKPOT dans board3d.js). Jamais pour le direct.
         out = out.replace('<head>', '<head><script>window.PIKA_DEMO_JACKPOT=1</script>', 1)
         out = re.sub(r'<title>[^<]*</title>', '<title>Pikapoly — Démo finale jackpot</title>', out, count=1)
+    if pochette99:
+        # Version 99 coups (24/09) : fin de la pochette entamée (146 coups
+        # joués sur 245), avec le stock réel restant. 3 « Caisses » = 3 Cartes
+        # gratuites (Parc gratuit) ; 2 Prison ; le reste en Pioches.
+        cfg = ('{"taille":99,"lots":{"jackpot300":0,"etb":1,"booster50":0,"gradee":0,'
+               '"booster8":19,"alternative":30,"parc":3,"prison":2,"commune":44},'
+               '"myst":{"carte":20,"booster":10}}')
+        out = out.replace('<head>', '<head><script>window.PIKA_POCHETTE=' + cfg + '</script>', 1)
+        out = re.sub(r'<title>[^<]*</title>', '<title>Pikapoly — 99 coups</title>', out, count=1)
     os.makedirs(os.path.dirname(os.path.abspath(out_path)) or '.', exist_ok=True)
     with open(out_path, 'w', encoding='utf-8') as f:
         f.write(out)
@@ -345,5 +354,7 @@ if __name__ == '__main__':
     ap.add_argument('--out', required=True, help='output HTML path')
     ap.add_argument('--demo-jackpot', action='store_true',
                     help='page de démo : un toucher sur l’écran joue la finale du jackpot')
+    ap.add_argument('--pochette99', action='store_true',
+                    help='version 99 coups : pochette du stock restant (voir build())')
     args = ap.parse_args()
-    build(args.out, demo_jackpot=args.demo_jackpot)
+    build(args.out, demo_jackpot=args.demo_jackpot, pochette99=args.pochette99)

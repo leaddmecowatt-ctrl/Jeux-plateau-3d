@@ -1824,6 +1824,11 @@ function fmtOddsPct(p){
   const s = p >= 10 ? String(Math.round(p)) : p.toFixed(1).replace('.', ',');
   return s + ' %';
 }
+/* Pochette PERSONNALISÉE (version 99 coups, 24/09) : posée par build.py
+   (--pochette99) dans window.PIKA_POCHETTE = { taille, lots:{cat:n}, myst:{carte,booster} }.
+   Sans elle, la pochette standard de 245 coups. */
+const POCHETTE_PERSO = window.PIKA_POCHETTE || null;
+const TAILLE_POCHETTE = POCHETTE_PERSO ? POCHETTE_PERSO.taille : 245;
 const CENTER_LEGEND_ROWS = [
   {swatch:'jackpot', catKey:'jackpot300'},
   {swatch:'orange',  catKey:'etb'},
@@ -1832,7 +1837,7 @@ const CENTER_LEGEND_ROWS = [
   {swatch:'blue',    catKey:'booster8'},
   {swatch:'red',     catKey:'alternative'},
   {swatch:'bronze',  catKey:'commune'},
-];
+].filter(r => !POCHETTE_PERSO || (POCHETTE_PERSO.lots[r.catKey]||0) > 0);   // version 99 coups : seulement les lots en jeu
 /* Finition des sept barres de la plaque centrale (et d'elles seules : les
    cases gardent SWATCH_COLORS). Les trois premiers lots sont en MÉTAL —
    or, argent, bronze : bandes claires/sombres qui imitent un reflet — les
@@ -1989,7 +1994,10 @@ function makeCenterPlateTexture(){
   // teinté + barre d'accent + médaillon (vraie photo du lot) — pour
   // retrouver le côté vif/coloré du visuel de référence au lieu de
   // lignes uniformément grises, avec une couleur dédiée par lot.
-  const rowsTop = size*0.335, rowH = (0.93-0.335)*size/CENTER_LEGEND_ROWS.length, rowW = size*0.85, rowX = size*0.075;
+  // moins de 7 lignes (version 99 coups) : même hauteur de ligne, bloc centré
+  const nLig = Math.max(CENTER_LEGEND_ROWS.length, 7);
+  const rowH = (0.93-0.335)*size/nLig, rowW = size*0.85, rowX = size*0.075;
+  const rowsTop = size*0.335 + (nLig - CENTER_LEGEND_ROWS.length)*rowH/2;
   CENTER_LEGEND_ROWS.forEach((r,i)=>{
     const y = rowsTop + i*rowH;
     const rh = rowH*0.82;
@@ -2171,7 +2179,7 @@ const ccMesh = (()=>{
   boardGroup.add(m);
   return m;
 })();
-let ccPulseAt = 0, ccReste = 245;
+let ccPulseAt = 0, ccReste = TAILLE_POCHETTE;
 function drawCoupPlate(n, total){
   const c = ccCvs.getContext('2d'), w = ccCvs.width, h = ccCvs.height;
   const reste = Math.max(0, total - n), urgent = reste > 0 && reste <= 30;
@@ -2230,7 +2238,7 @@ function drawCoupPlate(n, total){
   c.fillText(reste === 0 ? 'POCHETTE TERMINÉE' : reste === 1 ? 'DERNIER COUP !' : reste + ' COUPS RESTANTS', w/2, h*0.905);
   ccTex.needsUpdate = true;
 }
-drawCoupPlate(0, 245);
+drawCoupPlate(0, TAILLE_POCHETTE);
 
 /* ---------- Intégration du plateau dans le décor (polish final) ----------
    Deux voiles posés SOUS la dalle, dans la scène 3D : la photo de fond de la
@@ -7187,7 +7195,7 @@ if(resetBankBtn) resetBankBtn.addEventListener('click', ()=>{
   // audit 23/09 : un clic en pleine partie ajoutait le lot en cours à la
   // nouvelle pochette (246 coups), et un clic accidentel jetait la pochette
   if(pendingOutcome || moving || drawInProgress){ showKeyHint('Terminez la partie (C) avant de repartir sur une nouvelle pochette'); return; }
-  if(!window.confirm('Repartir sur une NOUVELLE pochette de 245 coups ? La pochette en cours sera abandonnée.')) return;
+  if(!window.confirm('Repartir sur une NOUVELLE pochette de '+TAILLE_POCHETTE+' coups ? La pochette en cours sera abandonnée.')) return;
   totalMise = 0;
   totalPaid = 0;
   saveTotals();
@@ -7261,7 +7269,10 @@ const OUTCOME_BATCH_KEY = 'pika_outcome_batch';
        contenu). Jusqu'au 23/09 au soir, c'était la Caisse Communautaire.
    Chance et Caisse Communautaire ne sont pas des lots : ce sont des
    détours (une carte pipée) qui amènent sur la case du lot. */
-const POUCH = [
+const POUCH = POCHETTE_PERSO
+  ? ['jackpot300','etb','booster50','gradee','booster8','alternative','parc','prison','commune']
+      .map(cat => ({ cat, n: POCHETTE_PERSO.lots[cat] || 0 }))
+  : [
   { cat:'jackpot300',  n:1   },   // ETB 30 ans (gagnée fermée)
   { cat:'etb',         n:2   },   // Coffret 30 ans (gagné fermé)
   { cat:'booster50',   n:2   },   // Tripack 30 ans (gagné fermé)
@@ -7272,8 +7283,8 @@ const POUCH = [
   { cat:'commune',     n:100 },   // Carte commune
 ];
 const POUCH_SIZE = POUCH.reduce((s,r)=>s+r.n, 0);
-if(POUCH_SIZE !== 245) throw new Error('POUCH : '+POUCH_SIZE+' coups au lieu de 245');
-const MYSTERY_MIX = { carte:60, booster:30 };   // carte = Mystère EX, booster = booster japonais
+if(POUCH_SIZE !== TAILLE_POCHETTE) throw new Error('POUCH : '+POUCH_SIZE+' coups au lieu de '+TAILLE_POCHETTE);
+const MYSTERY_MIX = POCHETTE_PERSO ? POCHETTE_PERSO.myst : { carte:60, booster:30 };   // carte = Mystère EX, booster = booster japonais
 if(MYSTERY_MIX.carte + MYSTERY_MIX.booster !== POUCH.find(r=>r.cat==='alternative').n)
   throw new Error('MYSTERY_MIX ne correspond pas au nombre de Lots Mystère');
 const OUTCOME_BATCH_SIZE = POUCH_SIZE;
@@ -7328,7 +7339,9 @@ function buildPouch(){
     }
     const q = [0,0,0,0];
     arr.forEach((c,i)=>{ if(c==='booster8') q[Math.min(3, Math.floor(4*i/arr.length))]++; });
-    if(q.every(n=>n>=6 && n<=15)) break;
+    // 6 à 15 par quart pour 42 boosters ; proportionnel pour une autre pochette
+    const attendu = POUCH.find(r=>r.cat==='booster8').n / 4;
+    if(q.every(n=>n>=Math.round(attendu*0.57) && n<=Math.round(attendu*1.43))) break;
   }
   return arr;
 }
@@ -7342,7 +7355,7 @@ function buildMysteryQueue(){
 /* Version de la file. Une file laissée en mémoire du navigateur par une
    version précédente du jeu (autre recette, autre ordonnancement) n'a
    pas les mêmes garanties : elle est reconstruite. */
-const OUTCOME_BATCH_VERSION = 'v11-parc-gratuit';
+const OUTCOME_BATCH_VERSION = POCHETTE_PERSO ? 'v12-pochette-'+TAILLE_POCHETTE : 'v11-parc-gratuit';
 function loadOutcomeState(){
   try{
     const raw = safeGetItem(OUTCOME_BATCH_KEY);
@@ -7397,7 +7410,7 @@ let outcomeState = loadOutcomeState();
 {
   const AJUST_KEY = 'pika_ajust_stock_2309b';   // 2e relevé du stock (voir plus bas)
   const st = outcomeState;
-  if(!isDisplay && !window.PIKA_DEMO_JACKPOT && !safeGetItem(AJUST_KEY)){
+  if(!isDisplay && !window.PIKA_DEMO_JACKPOT && !POCHETTE_PERSO && !safeGetItem(AJUST_KEY)){
     const reste = st.batch.length - st.pos;
     const fixes = { booster8:21, booster50:3, etb:2, jackpot300:1, gradee:1 };
     const nFix = Object.values(fixes).reduce((a,b)=>a+b, 0);

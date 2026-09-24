@@ -75,6 +75,11 @@ Si l'hôte garde un lot avant la case prévue, `claimCurrentLot` **échange** da
 (le lot gardé est retiré plus loin, le lot prévu réinséré au hasard) : les quantités tiennent ;
 les cases de passage n'offrent que des lots encore en stock (`pouchHas`).
 
+**Version 99 coups** (24/09) : `python3 tools/build.py --out dist/pikapoly-99.html --pochette99`
+pose `window.PIKA_POCHETTE` (taille 99 : 1 coffret, 19 boosters, 30 Lots Mystère dont 10 JP et 20 EX,
+3 Cartes gratuites, 2 Prison, 44 Pioches) → `POCHETTE_PERSO`, `TAILLE_POCHETTE` ; la légende ne montre
+que les lots présents ; le recalage de stock du 23/09 ne s'y applique jamais. Lien à part.
+
 **Parc gratuit** (case 28, angle, depuis le 23/09 au soir) : le LOT des cartes promo des
 coffrets et tripacks ouverts (7 coups), remises physiquement ; le jeu n'en affiche pas le contenu.
 Une pochette `v10` en mémoire est convertie au chargement (ses `chest` deviennent `parc`, position
