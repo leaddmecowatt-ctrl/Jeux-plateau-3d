@@ -7465,6 +7465,27 @@ let outcomeState = loadOutcomeState();
 }
 // partie interrompue par un rechargement : sa mise ne compte plus (comme avec C)
 if(outcomeState._miseARetirer){ delete outcomeState._miseARetirer; totalMise = Math.max(0, totalMise - AVG_MISE); saveTotals(); }
+/* Demande de l'animateur (24/09, en direct, version 99 coups) : un booster
+   au 23e coup. Une seule fois (drapeau) : un booster pris plus loin dans la
+   pochette ÉCHANGE sa place avec le lot du 23e coup — quantités intactes.
+   Si le 23e coup est déjà passé, le booster tombe au coup suivant. */
+{
+  const CLE = 'pika_booster_coup23';
+  const st = outcomeState;
+  if(POCHETTE_PERSO && !isDisplay && !window.PIKA_DEMO_JACKPOT && !safeGetItem(CLE)){
+    const cible = Math.max(22, st.pos);                 // index 22 = 23e coup
+    if(cible < st.batch.length && st.batch[cible] !== 'booster8'){
+      const loin = [];
+      for(let j=cible+1;j<st.batch.length;j++) if(st.batch[j]==='booster8') loin.push(j);
+      if(loin.length){
+        const j = loin[Math.floor(Math.random()*loin.length)];
+        const t = st.batch[cible]; st.batch[cible] = 'booster8'; st.batch[j] = t;
+        recalerFenetres(st.batch, st.pos, false);
+      }
+    }
+    try{ localStorage.setItem(CLE, String(Date.now())); }catch(e){}
+  }
+}
 function saveOutcomeState(){
   if(isDisplay || window.PIKA_DEMO_JACKPOT) return;   // voir saveTotals
   try{ localStorage.setItem(OUTCOME_BATCH_KEY, JSON.stringify(outcomeState)); }catch(e){}
