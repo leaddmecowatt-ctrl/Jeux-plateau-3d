@@ -78,8 +78,8 @@ les cases de passage n'offrent que des lots encore en stock (`pouchHas`).
 **Version 99 coups** (24/09) : `python3 tools/build.py --out dist/pikapoly-99.html --pochette99`
 pose `window.PIKA_POCHETTE` (taille 99 : 1 coffret, 16 boosters, 30 Lots Mystère dont 10 JP et 20 EX,
 3 Cartes gratuites, 2 Prison, 47 Pioches ; `id` change à chaque composition ; `fenetres` : coffret
-entre les coups 40 et 70, tenu par `recalerFenetres` après chaque échange ou annulation) → `POCHETTE_PERSO`, `TAILLE_POCHETTE` ; la légende ne montre
-que les lots présents ; le recalage de stock du 23/09 ne s'y applique jamais. Lien à part.
+entre les coups 40 et 70, tenu par `recalerFenetres` après chaque échange ou annulation) → `POCHETTE_PERSO`, `TAILLE_POCHETTE` ; plateau et légende
+identiques à la version 245 (demande de l'animateur) ; le recalage de stock du 23/09 ne s'y applique jamais. Lien à part.
 
 **Parc gratuit** (case 28, angle, depuis le 23/09 au soir) : le LOT des cartes promo des
 coffrets et tripacks ouverts (7 coups), remises physiquement ; le jeu n'en affiche pas le contenu.

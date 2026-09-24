@@ -1837,7 +1837,7 @@ const CENTER_LEGEND_ROWS = [
   {swatch:'blue',    catKey:'booster8'},
   {swatch:'red',     catKey:'alternative'},
   {swatch:'bronze',  catKey:'commune'},
-].filter(r => !POCHETTE_PERSO || (POCHETTE_PERSO.lots[r.catKey]||0) > 0);   // version 99 coups : seulement les lots en jeu
+];
 /* Finition des sept barres de la plaque centrale (et d'elles seules : les
    cases gardent SWATCH_COLORS). Les trois premiers lots sont en MÉTAL —
    or, argent, bronze : bandes claires/sombres qui imitent un reflet — les
@@ -1994,10 +1994,7 @@ function makeCenterPlateTexture(){
   // teinté + barre d'accent + médaillon (vraie photo du lot) — pour
   // retrouver le côté vif/coloré du visuel de référence au lieu de
   // lignes uniformément grises, avec une couleur dédiée par lot.
-  // moins de 7 lignes (version 99 coups) : même hauteur de ligne, bloc centré
-  const nLig = Math.max(CENTER_LEGEND_ROWS.length, 7);
-  const rowH = (0.93-0.335)*size/nLig, rowW = size*0.85, rowX = size*0.075;
-  const rowsTop = size*0.335 + (nLig - CENTER_LEGEND_ROWS.length)*rowH/2;
+  const rowsTop = size*0.335, rowH = (0.93-0.335)*size/CENTER_LEGEND_ROWS.length, rowW = size*0.85, rowX = size*0.075;
   CENTER_LEGEND_ROWS.forEach((r,i)=>{
     const y = rowsTop + i*rowH;
     const rh = rowH*0.82;
@@ -7342,7 +7339,13 @@ function recalerFenetres(b, pos, force){
     aDeplacer.forEach(()=>{
       let t;
       if(pos > hi) t = pos;
-      else { const a = Math.max(pos, lo); t = a + Math.floor(Math.random()*(Math.min(hi, b.length) - a + 1)); }
+      else {
+        // à la construction, 4 coups de marge avant la fin de la fenêtre :
+        // un joueur qui garde un autre lot pendant la partie du coffret le
+        // repousse d'un coup (voir claimCurrentLot)
+        const h = force ? Math.max(lo, hi - 4) : hi;
+        const a = Math.max(pos, lo); t = a + Math.floor(Math.random()*(Math.min(h, b.length) - a + 1));
+      }
       b.splice(t, 0, cat);
     });
   }
@@ -8655,7 +8658,12 @@ async function claimCurrentLot(){
      lancers le pion est toujours sur le lot prévu. */
   {
     const cat = tiles[currentIndex].catKey;
-    if(!forcedGame && pendingOutcome && cat !== pendingOutcome && !pouchHas(cat) && rollsUsed < rollsAllowed && !finished){
+    /* Lot à fenêtre (coffret, version 99 coups) : garder un autre lot le
+       repousse au coup suivant ; au DERNIER coup de sa fenêtre, c'est
+       refusé — le coffret ne sort jamais de sa fenêtre. */
+    const fen = POCHETTE_PERSO && POCHETTE_PERSO.fenetres && POCHETTE_PERSO.fenetres[pendingOutcome];
+    const finFenetre = fen && outcomeState.pos >= fen[1];      // coup en cours = pos : le 70e ou au-delà
+    if(!forcedGame && pendingOutcome && cat !== pendingOutcome && (!pouchHas(cat) || finFenetre) && rollsUsed < rollsAllowed && !finished){
       showKeyHint('Lot indisponible : relancez (B)');
       return;
     }
@@ -8697,7 +8705,10 @@ async function claimCurrentLot(){
     if(occ.length){
       const j = occ[Math.floor(Math.random()*occ.length)];
       b.splice(j, 1);
-      const at = pos + Math.floor(Math.random()*(b.length - pos + 1));
+      // lot à fenêtre (coffret de la version 99 coups) : il tombe au coup
+      // SUIVANT, sans être repoussé au hasard hors de sa fenêtre
+      const aFenetre = POCHETTE_PERSO && POCHETTE_PERSO.fenetres && POCHETTE_PERSO.fenetres[pendingOutcome];
+      const at = aFenetre ? pos : pos + Math.floor(Math.random()*(b.length - pos + 1));
       b.splice(at, 0, pendingOutcome);
       swap = { removedAt: j, insertedAt: at, kept: realCat, pending: pendingOutcome };
     } else {
