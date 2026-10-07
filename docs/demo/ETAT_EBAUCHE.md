@@ -9,7 +9,10 @@ des jouets en plastique. Son retour est également consigné dans
 [le journal de bord, issue 5](https://github.com/leaddmecowatt-ctrl/Jeux-plateau-3d/issues/5#issuecomment-6028725818).
 
 **L’intégration et le recodage sont arrêtés jusqu’à la validation artistique.**
-Les deux propositions sont dans [`../direction-artistique/`](../direction-artistique/README.md).
+Les deux propositions initiales et la maquette corrigée sont dans
+[`../direction-artistique/`](../direction-artistique/README.md). L'ambiance
+Jardins du Soleil est retenue ; le plateau doit reprendre le Golden existant
+avec ses photos de lots. La maquette corrigée attend la validation de l'animateur.
 La PR reste en brouillon ; l’animateur décide seul de toute fusion.
 
 ## Direction à reprendre après validation des images
