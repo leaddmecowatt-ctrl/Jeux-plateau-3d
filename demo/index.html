@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pikapoly Golden — démo (moteur seul)</title>
+<style>
+/* Page VOLONTAIREMENT brute : elle ne sert qu'à vérifier que le moteur
+   joue juste. Tout le visuel de la démo est à reconstruire de zéro. */
+:root{ color-scheme: dark; }
+body{ margin:0; font:14px/1.4 system-ui, sans-serif; background:#111; color:#eee; display:grid; grid-template-columns:auto 320px; gap:16px; padding:16px; }
+#plateau{ display:grid; grid-template-columns:repeat(10, 64px); grid-template-rows:repeat(10, 64px); gap:3px; }
+.case{ border:1px solid #444; border-radius:4px; font-size:10px; padding:3px; overflow:hidden; background:#1c1c1c; position:relative; }
+.case b{ display:block; font-size:9px; color:#999; }
+.case.pion{ outline:3px solid #ffd54a; background:#3a3010; }
+.case.passe{ background:#262626; }
+.c-jackpot300{ border-color:#fff; } .c-etb{ border-color:#ffc400; } .c-booster50{ border-color:#cfd6de; }
+.c-gradee,.c-booster8{ border-color:#e0782e; } .c-chance,.c-chest{ border-color:#ee8c80; } .c-prison{ border-color:#b33; } .c-parc{ border-color:#5c5; }
+#centre{ grid-column:2 / 10; grid-row:2 / 10; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; text-align:center; }
+#tirage{ font-size:28px; } #annonce{ font-size:20px; color:#ffd54a; min-height:1.5em; } #carte{ color:#ee8c80; min-height:1.2em; }
+aside pre{ white-space:pre-wrap; background:#1a1a1a; padding:8px; border-radius:6px; }
+kbd{ background:#333; border-radius:3px; padding:0 4px; }
+</style>
+</head>
+<body>
+<div id="plateau"><div id="centre"><div id="tirage">—</div><div id="carte"></div><div id="annonce"></div></div></div>
+<aside>
+  <h3>Touches</h3>
+  <p><kbd>B</kbd> tirer les cartes · <kbd>D</kbd> garder le lot · <kbd>U</kbd> annuler le dernier lot gardé · <kbd>C</kbd> recommencer<br>
+     <kbd>X</kbd> / <kbd>Y</kbd> / <kbd>Z</kbd> armer l'ETB / le coffret / le tripack (pion sur Départ, aucun message)</p>
+  <h3>État</h3>
+  <pre id="etat"></pre>
+</aside>
+<script type="module">
+import { creerMoteur, PLATEAU, CATEGORIES, LIEUX, positionCase } from './moteur/moteur.js';
+
+const m = creerMoteur();
+const plateau = document.getElementById('plateau');
+const cases = PLATEAU.map((t, i)=>{
+  const el = document.createElement('div');
+  const p = positionCase(i);
+  el.className = 'case c-' + t.catKey;
+  el.style.gridRow = p.r; el.style.gridColumn = p.c;
+  // Départ porte une catégorie dans PLATEAU mais ne distribue jamais de lot
+  el.innerHTML = i===0 ? '<b>case 1</b>Départ' : '<b>case ' + (i+1) + '</b>' + CATEGORIES[t.catKey].label + (t.isVisite ? ' (visite)' : '');
+  el.title = LIEUX[i];
+  plateau.appendChild(el);
+  return el;
+});
+const $ = id => document.getElementById(id);
+
+function afficher(){
+  const e = m.etat();
+  cases.forEach((el, i)=> el.classList.toggle('pion', i === Math.max(0, e.caseIndex)));
+  $('etat').textContent =
+    'Case : ' + e.lieu + (e.lotDeLaCase ? ' — ' + CATEGORIES[e.lotDeLaCase].label : '') + '\n' +
+    'Lancer ' + e.lancersUtilises + ' / ' + e.lancersAutorises + '\n' +
+    'Coups joués : ' + e.coupsJoues + ' / ' + e.coupsTotal + '\n' +
+    'ETB sorties : ' + e.etbSorties + ' / ' + e.etbTotal + '\n' +
+    'Peut garder : ' + (e.peutGarder ? 'oui (D)' : 'non') + ' · peut tirer : ' + (e.peutTirer ? 'oui (B)' : 'non') + '\n' +
+    'Derniers gains : ' + (e.derniersGains.map(c=>CATEGORIES[c].label).join(', ') || '—');
+}
+function annoncerGain(g){
+  $('annonce').textContent = g.prison ? '🔒 Prison — carte de consolation' : '🎉 ' + CATEGORIES[g.lot].label;
+}
+
+document.addEventListener('keydown', ev=>{
+  const k = ev.key.toLowerCase();
+  if(k === 'b'){
+    const r = m.tirer();
+    if(r.refuse){ $('annonce').textContent = 'Partie terminée — C pour recommencer'; return; }
+    $('tirage').textContent = r.cartes.a + ' + ' + r.cartes.b + ' = ' + r.cartes.total + (r.cartes.isDouble ? ' (double : +1 lancer)' : '');
+    $('carte').textContent = r.carte ? (r.carte.type === 'chance' ? 'Chance' : 'Caisse') + ' : ' + r.carte.texte : '';
+    $('annonce').textContent = r.gain ? '' : (m.etat().peutGarder ? CATEGORIES[r.lotDeLaCase].label + ' — garder (D) ou relancer (B) ?' : '');
+    if(r.gain) annoncerGain(r.gain);
+  } else if(k === 'd'){
+    const g = m.garder(); if(!g.refuse) annoncerGain(g);
+  } else if(k === 'u'){
+    if(!m.annuler().refuse) $('annonce').textContent = 'Lot annulé — la partie reprend';
+  } else if(k === 'c'){
+    m.recommencer(); $('tirage').textContent = '—'; $('carte').textContent = ''; $('annonce').textContent = '';
+  } else if(k === 'x' || k === 'y' || k === 'z'){
+    m.armer(k);   // en silence : rien à l'écran
+  } else return;
+  afficher();
+});
+afficher();
+</script>
+</body>
+</html>

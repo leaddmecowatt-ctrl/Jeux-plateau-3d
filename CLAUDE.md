@@ -115,8 +115,22 @@ décoration). Le contexte WebGL perdu est rattrapé (`webglcontextlost`).
   L'affichage des chances calculées sur la pochette réelle et la mention « Cadeau de
   l'animateur » existaient sur `main` au 20/09 (commit 7993561) ; l'animateur ne les a pas
   repris dans sa version. Ne pas les remettre sans qu'il le demande.
-- Le plafond de reversement est tenu **à chaque partie**, pas seulement en fin de cycle.
-- Toute recette doit tenir sous le plafond, sinon la page ne se charge pas.
+- Pochette exacte : chaque lot sort exactement le nombre de fois prévu (`POUCH`). Le
+  plafond de reversement (`ceilingFor`) est encore calculé, mais **n'est plus appliqué**
+  depuis le 23/09 (`outcomeCovered` renvoie toujours vrai, `fundedCategory` n'agit que
+  sur des lots à coût nul). La page refuse de se charger si `POUCH` ne fait pas
+  exactement la taille de la série (130 Golden, 210 Classique).
+- ETB, Coffret et Tripack ne tombent **que** s'ils ont été armés (X / Y / Z) ; sinon ils
+  sont repoussés dans la pochette, et ne sortent seuls qu'en toute fin de série.
+
+## Démo de présentation (`demo/`)
+
+Chantier séparé, **qui ne touche pas au jeu en direct**. `demo/moteur/moteur.js` est le
+moteur du Golden sorti du visuel (même logique, mêmes noms de fonctions, sans DOM ni
+three.js), testé par `node --test demo/moteur/moteur.test.mjs`. Toute évolution des
+règles du Golden doit être reportée dans les deux, et les tests relancés.
+`demo/index.html` est une page brute qui pilote le moteur au clavier ; le nouveau visuel
+se construit par-dessus. Détails : `demo/README.md`.
 
 ## Historique utile
 
