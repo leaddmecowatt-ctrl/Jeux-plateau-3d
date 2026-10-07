@@ -1,8 +1,9 @@
 # Brouillon Golden : direction rejetée, architecture à relire
 
 **État actuel : l’animateur a rejeté cette ébauche sombre et son rendu plastique.
-Le recodage et l’intégration sont arrêtés jusqu’à la validation de trois images
-de direction artistique.** Cette publication conserve le travail pour la
+Le recodage et l’intégration sont arrêtés jusqu’à la validation des images
+de direction artistique.** Les deux concepts sont dans
+[`../direction-artistique/`](../direction-artistique/README.md). Cette publication conserve le travail pour la
 relecture ; elle ne propose pas de fusion ni une démo finale.
 
 Le [retour de Claude dans l’issue 5](https://github.com/leaddmecowatt-ctrl/Jeux-plateau-3d/issues/5#issuecomment-6028725818)

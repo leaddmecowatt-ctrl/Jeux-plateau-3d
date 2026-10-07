@@ -8,9 +8,9 @@ L’animateur a rejeté le décor sombre et le rendu des personnages, perçus co
 des jouets en plastique. Son retour est également consigné dans
 [le journal de bord, issue 5](https://github.com/leaddmecowatt-ctrl/Jeux-plateau-3d/issues/5#issuecomment-6028725818).
 
-**L’intégration et le recodage sont arrêtés jusqu’à la validation de trois images
-de direction artistique.** Les trois concepts sont préparés séparément de cette
-publication. La PR reste en brouillon ; l’animateur décide seul de toute fusion.
+**L’intégration et le recodage sont arrêtés jusqu’à la validation artistique.**
+Les deux propositions sont dans [`../direction-artistique/`](../direction-artistique/README.md).
+La PR reste en brouillon ; l’animateur décide seul de toute fusion.
 
 ## Direction à reprendre après validation des images
 
@@ -59,4 +59,4 @@ Relire l’isolation du stockage et des canaux, la conservation du moteur, la
 construction hors ligne et l’architecture d’intégration des médias. Proposer
 une voie concrète pour des assets vidéo ou 3D photoréalistes, avec leur
 provenance, leur coût et leur compatibilité avec le Mac M1 et Safari. Aucune
-nouvelle intégration avant la validation artistique des trois concepts.
+nouvelle intégration avant la validation artistique des concepts.
