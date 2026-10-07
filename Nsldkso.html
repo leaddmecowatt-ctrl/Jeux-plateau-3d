@@ -3,7 +3,40 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<title>Pikapoly — Plateau Live 3D</title>
+<title>Pikapoly</title>
+<script>
+/* 29/09, l'animateur : deux plateaux dans le même jeu (touche Z ou bouton ⇄).
+   Chaque plateau garde SA pochette et SON compteur, jamais partagés. */
+(function(){
+  var m = null;
+  try{ m = localStorage.getItem('pika_mode'); }catch(e){}
+  if(location.hash === '#vip') m = 'vip';
+  else if(location.hash === '#classique') m = 'classic';
+  if(m !== 'vip') m = 'classic';
+  window.__PIKA_MODE = m;
+  window.__plsVip = {
+    getItem: function(k){ return localStorage.getItem('vip:'+k); },
+    setItem: function(k,v){ return localStorage.setItem('vip:'+k, v); },
+    removeItem: function(k){ return localStorage.removeItem('vip:'+k); }
+  };
+  if(m === 'vip'){ document.documentElement.classList.add('vip'); document.title = 'Pikapoly VIP'; }
+})();
+</script>
+<style>
+html.vip{ --blue:#c9962a; --red:#b8791c; }
+html.vip #app::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:60;
+  background:
+   radial-gradient(120% 90% at 50% 45%, rgba(0,0,0,0) 55%, rgba(150,90,5,.65) 100%),
+   linear-gradient(135deg, rgba(255,226,122,.10), rgba(160,110,20,.08) 50%, rgba(255,226,122,.10));
+  box-shadow: inset 0 0 0 3px #e9c34a, inset 0 0 0 6px #7a5a12, inset 0 0 40px rgba(255,210,90,.35);}
+html.vip #bgGlow{background:rgba(255,205,90,.22)!important}
+#zeroBtn,#resetBankBtn{display:none!important}
+#pikaSwitch{position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);left:8px;z-index:9999;
+  font:800 12px/1 Arial,Helvetica,sans-serif;letter-spacing:.04em;color:#ffe27a;
+  background:rgba(20,14,4,.88);border:1.5px solid #e9c34a;border-radius:999px;padding:7px 12px;
+  box-shadow:0 3px 12px rgba(0,0,0,.5);cursor:pointer}
+html.display-mode #pikaSwitch{display:none}
+</style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;900&display=swap" rel="stylesheet">
@@ -113,6 +146,88 @@ html.storm #bgGlow{ display:none; }
   padding:max(10px,calc(env(safe-area-inset-top) + 6px)) 12px 4px;
   position:relative;z-index:5;
 }
+/* Compteur de la pochette, façon enseigne de casino (23/09, l'animateur :
+   « 0/245 on ne le voit pas assez, il faut que les joueurs le voient »).
+   Plaque noire, rampe d'ampoules qui défile, gros chiffres dorés, barre de
+   progression de la pochette ; chaque coup joué fait « sauter » le chiffre.
+   Derniers coups (30 et moins) : l'enseigne passe au rouge et pulse.
+   Les chiffres sont toujours les vrais (position dans la pochette). */
+.coup-count{
+  --cc-u:1vw;
+  position:relative;margin:calc(var(--cc-u)*1.3) 0 calc(var(--cc-u)*.6);padding:calc(var(--cc-u)*.7) calc(var(--cc-u)*2.4) calc(var(--cc-u)*.8);
+  display:flex;flex-direction:column;align-items:center;gap:calc(var(--cc-u)*.25);
+  background:linear-gradient(180deg,#1a1204 0%,#070503 100%);
+  border-radius:calc(var(--cc-u)*1.4);
+  box-shadow:0 0 0 2px #7a5a12, 0 0 0 4px #e9c34a, 0 0 22px rgba(255,200,60,.45), inset 0 0 18px rgba(0,0,0,.9);
+  pointer-events:none;font-variant-numeric:tabular-nums;
+}
+/* rampe d'ampoules : un pointillé lumineux qui tourne autour de la plaque */
+.coup-count::before{
+  content:"";position:absolute;inset:calc(var(--cc-u)*-.55);border-radius:calc(var(--cc-u)*1.9);
+  padding:calc(var(--cc-u)*.32);
+  background:repeating-linear-gradient(90deg,#fff3c0 0 calc(var(--cc-u)*.45),transparent calc(var(--cc-u)*.45) calc(var(--cc-u)*1.1));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;
+  filter:drop-shadow(0 0 4px #ffd35a);opacity:.9;
+  animation:ccBulbs 1.1s linear infinite;
+}
+@keyframes ccBulbs{ to{ background-position:calc(var(--cc-u)*1.1) 0; } }
+.cc-label{
+  font-size:calc(var(--cc-u)*1.05);font-weight:900;letter-spacing:.32em;color:#f6dc86;
+  text-shadow:0 0 6px rgba(255,210,90,.7);
+}
+.cc-digits{ display:flex;align-items:baseline;gap:calc(var(--cc-u)*.5);line-height:1; }
+.cc-n{
+  font:900 calc(var(--cc-u)*5.2)/1 "Arial Black",Impact,"Helvetica Neue",Arial,sans-serif;
+  color:#fff4c4;
+  background:linear-gradient(180deg,#fffbe6 0%,#ffe07a 45%,#d69a17 55%,#ffe8a0 100%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 0 10px rgba(255,200,60,.85)) drop-shadow(0 2px 0 #5a3d05);
+  display:inline-block;
+}
+.cc-sep,.cc-t{
+  font:900 calc(var(--cc-u)*2.6)/1 "Arial Black",Impact,"Helvetica Neue",Arial,sans-serif;
+  color:#e9c34a;text-shadow:0 0 8px rgba(255,200,60,.6);
+}
+.cc-bar{
+  width:calc(var(--cc-u)*18);height:calc(var(--cc-u)*.55);border-radius:99px;
+  background:#2a1d05;box-shadow:inset 0 0 0 1px #7a5a12;overflow:hidden;
+}
+.cc-bar i{
+  display:block;height:100%;width:0%;border-radius:99px;
+  background:linear-gradient(90deg,#b8860b,#ffe07a,#fff6cf,#ffe07a);background-size:200% 100%;
+  box-shadow:0 0 10px rgba(255,210,90,.9);
+  animation:ccShine 1.6s linear infinite;transition:width .6s cubic-bezier(.2,.9,.3,1.2);
+}
+@keyframes ccShine{ to{ background-position:-200% 0; } }
+.cc-rest{
+  font-size:calc(var(--cc-u)*1.15);font-weight:900;letter-spacing:.12em;color:#ffe9a8;
+  text-transform:uppercase;text-shadow:0 0 6px rgba(255,210,90,.6);
+}
+/* chaque coup joué : le chiffre saute et flashe */
+.coup-count.tick .cc-n{ animation:ccTick .7s cubic-bezier(.2,1.6,.4,1) 1; }
+.coup-count.tick{ animation:ccFlash .7s ease-out 1; }
+@keyframes ccTick{ 0%{transform:scale(1)} 30%{transform:scale(1.35) translateY(-6%)} 100%{transform:scale(1)} }
+@keyframes ccFlash{ 0%{box-shadow:0 0 0 2px #7a5a12,0 0 0 4px #fff6cf,0 0 60px rgba(255,230,120,1),inset 0 0 18px rgba(0,0,0,.9)} 100%{} }
+/* derniers coups : enseigne rouge qui pulse */
+.coup-count.urgent{
+  background:linear-gradient(180deg,#2a0404 0%,#0a0202 100%);
+  box-shadow:0 0 0 2px #7a1010,0 0 0 4px #ff4d4d,0 0 30px rgba(255,40,40,.7),inset 0 0 18px rgba(0,0,0,.9);
+  animation:ccUrgent 1s ease-in-out infinite;
+}
+.coup-count.urgent::before{ background:repeating-linear-gradient(90deg,#ffd0d0 0 calc(var(--cc-u)*.45),transparent calc(var(--cc-u)*.45) calc(var(--cc-u)*1.1)); filter:drop-shadow(0 0 5px #ff3030); animation-duration:.5s; }
+.coup-count.urgent .cc-label,.coup-count.urgent .cc-rest{ color:#ffd6d6;text-shadow:0 0 8px rgba(255,60,60,.9); }
+.coup-count.urgent .cc-sep,.coup-count.urgent .cc-t{ color:#ff7070; }
+.coup-count.urgent .cc-bar i{ background:linear-gradient(90deg,#a00,#ff4d4d,#ffd0d0,#ff4d4d);background-size:200% 100%; }
+.coup-count.urgent.last10{ animation-duration:.55s; }
+@keyframes ccUrgent{ 0%,100%{ transform:scale(1) } 50%{ transform:scale(1.04) } }
+@media (prefers-reduced-motion: reduce){
+  .coup-count,.coup-count::before,.cc-bar i,.coup-count.tick .cc-n{ animation:none !important; }
+}
+html.eco .coup-count::before,html.eco .cc-bar i{ animation:none; }
+/* Le compteur est désormais SUR le plateau (plaque 3D à droite de PIKAPOLY) :
+   l'enseigne du haut reste dans la page pour la synchro, mais masquée. */
+.coup-count{ display:none !important; }
 .brand{
   font-size:10px;font-weight:900;letter-spacing:.14em;color:var(--gold-bright);
   opacity:.8;
@@ -367,13 +482,6 @@ button:active:not(:disabled){transform:translateY(1px)}
   opacity:0;transition:opacity .2s ease;pointer-events:none;
 }
 .key-hint.show{ opacity:1; }
-/* Repère discret animateur (voir updateCue) : 5 px, à peine visible */
-.cue-dot{
-  position:fixed;left:7px;bottom:7px;width:5px;height:5px;border-radius:50%;
-  opacity:0;pointer-events:none;z-index:80;transition:opacity .8s ease;
-}
-.brand-star{ transition:color .8s ease; }
-.brand-star.cue{ color:#fff1c8; }
 .screen-btns{
   position:fixed;right:10px;bottom:10px;z-index:96;display:flex;gap:8px;
   opacity:0;transition:opacity .4s ease;pointer-events:none;
@@ -386,10 +494,6 @@ button:active:not(:disabled){transform:translateY(1px)}
 }
 .screen-btns button:hover{ background:rgba(40,30,8,.95); }
 html.display-mode .screen-btns{ display:none; }
-.cue-dot.etb{ background:#ffd27a; opacity:.22; }
-.cue-dot.coffret{ background:#9db8ff; opacity:.22; }
-.cue-dot.forced{ background:#ffffff; opacity:.26; }
-html.display-mode .cue-dot{ display:none; }
 
 .lots-gallery{
   background:linear-gradient(180deg,#1a1406,#0d0a03);
@@ -442,14 +546,95 @@ html.display-mode .display-badge{ display:block; }
 /* ---------- Overlay de tirage de cartes (remplace les dés) ---------- */
 .card-draw-overlay{
   position:fixed;inset:0;z-index:55;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
-  background:rgba(6,4,1,.86);opacity:0;visibility:hidden;transition:opacity .25s ease;padding:20px;
+  background:rgba(6,4,1,.86);opacity:0;visibility:hidden;padding:20px;
+  transform:translateZ(0);isolation:isolate;backface-visibility:hidden;   /* voir .rules-overlay */
+  /* visibility DOIT etre transitionnee avec un delai egal a la duree du
+     fondu : sans ca elle bascule a hidden instantanement a la fermeture,
+     l'overlay disparait d'un bloc et la transition d'opacite se joue sur
+     un element deja invisible — il n'y avait donc aucun fondu de sortie. */
+  transition:opacity .32s ease, visibility 0s linear .32s;
 }
-.card-draw-overlay.show{opacity:1;visibility:visible}
+.card-draw-overlay.show{opacity:1;visibility:visible;transition:opacity .22s ease, visibility 0s}
+
+/* ---------- Cinematique du tirage ---------- */
+/* Distribution en cascade : les 12 cartes etaient inserees dans la meme
+   frame, donc elles apparaissaient toutes d'un bloc, suivies de 400 ms
+   de vide. Elles tombent maintenant une par une. */
+@keyframes cardDeal{
+  from{ transform:translateY(-46%) scale(.82) rotate(var(--rz,0deg)); opacity:0 }
+  60%{ opacity:1 }
+  to{ transform:none; opacity:1 }
+}
+.mini-card.dealing{ animation:cardDeal .32s cubic-bezier(.2,.95,.3,1) backwards; animation-delay:var(--d,0ms) }
+
+
+/* Le total apparaissait d'un coup, sans la moindre animation. */
+@keyframes totalStamp{
+  0%{ transform:scale(2.3); opacity:0; filter:blur(.14em) }
+  55%{ transform:scale(.93); opacity:1; filter:blur(0) }
+  100%{ transform:scale(1); opacity:1 }
+}
+.card-draw-total.stamp{ animation:totalStamp .44s cubic-bezier(.2,1.55,.35,1) }
+
+/* Flash de revelation, cale sur le retournement de la seconde carte. */
+.draw-flash{ position:absolute;inset:0;pointer-events:none;background:#fff;opacity:0;z-index:2 }
+@keyframes drawFlash{ from{opacity:.62} to{opacity:0} }
+.draw-flash.on{ animation:drawFlash .36s ease-out }
+
+/* ---------- Bulle de règles plein écran (touche M) ----------
+   Tout est dimensionné en % (du parent) et en em, JAMAIS en vh/vw : sur la
+   télé pivotée, html.rotated pose un transform sur #app, et les unités de
+   viewport restent alignées sur l'écran PHYSIQUE — un vw y devient une
+   hauteur. Le % est relatif au parent, donc il suit le repère tourné.
+   La taille de police de base est posée en pixels par le JS, calculée sur
+   la hauteur du cadre du plateau (mesurée, elle, dans le bon repère). */
+.rules-overlay{
+  position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;
+  background:rgba(4,3,1,.88);opacity:0;visibility:hidden;transition:opacity .22s ease;
+  padding:4%;font-size:18px;
+  /* Même remède que .celebration : un overlay fixe à l'intérieur de #app
+     pivoté, sans couche de composition propre, est peint DERRIÈRE le
+     canvas WebGL du plateau par Safari, quel que soit son z-index. Vu en
+     vidéo le 21/09 : la bulle passait sous le plateau. La couche est
+     rendue permanente. */
+  transform:translateZ(0);
+  isolation:isolate;
+  backface-visibility:hidden;
+}
+.rules-overlay.show{opacity:1;visibility:visible}
+.rules-bubble{
+  position:relative;width:min(88%,980px);max-height:90%;overflow:auto;
+  background:linear-gradient(180deg, rgba(28,21,9,.975), rgba(11,8,4,.985));
+  border:0.16em solid #d8ac48;border-radius:1.3em;
+  box-shadow:0 0 0 0.06em rgba(0,0,0,.7), 0 1.1em 3em rgba(0,0,0,.78), 0 0 4em rgba(216,172,72,.30);
+  padding:1.5em 1.7em 1.3em;text-align:center;
+}
+.rules-bubble h2{
+  margin:0 0 .7em;font-size:2.15em;letter-spacing:.05em;color:#ffd86b;
+  text-shadow:0 0 .5em rgba(255,200,90,.45), 0 .08em .12em rgba(0,0,0,.85);
+}
+.rules-bubble ul{margin:0;padding:0;list-style:none;text-align:left}
+.rules-bubble li{
+  position:relative;margin:0 0 .65em;padding:.62em .8em .62em 2.5em;
+  font-size:1.32em;line-height:1.35;color:#fff4dd;
+  background:rgba(255,222,140,.055);border:0.06em solid rgba(216,172,72,.34);border-radius:.6em;
+}
+.rules-bubble li::before{
+  content:attr(data-n);position:absolute;left:.72em;top:50%;transform:translateY(-50%);
+  width:1.35em;height:1.35em;line-height:1.35em;text-align:center;
+  background:#d8ac48;color:#1a1204;border-radius:50%;font-weight:900;font-size:.85em;
+}
+.rules-bubble .rules-keys{
+  margin-top:1em;padding-top:.85em;border-top:0.06em solid rgba(216,172,72,.3);
+  font-size:1.02em;color:#e6c98a;
+}
+.rules-bubble .rules-close{margin-top:.5em;font-size:.95em;color:#b39560}
 
 /* ---------- Lot mystère : deux cartes noires, une ombre qui choisit ---------- */
 .mystery-overlay{
   position:fixed;inset:0;z-index:56;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
   background:rgba(6,4,1,.9);opacity:0;visibility:hidden;transition:opacity .25s ease;padding:20px;
+  transform:translateZ(0);isolation:isolate;backface-visibility:hidden;   /* voir .rules-overlay */
 }
 .mystery-overlay.show{opacity:1;visibility:visible}
 .mystery-stage{ position:relative;display:flex;gap:min(6vw,34px);perspective:1000px; }
@@ -522,6 +707,14 @@ html.display-mode .display-badge{ display:block; }
    cartes choisies. */
 .mini-card.dim{ filter:brightness(.4) saturate(.55); opacity:.7; transform:scale(.93); }
 .mini-card.suspense{ z-index:2; animation:cardLift .5s ease-in-out infinite alternate; }
+/* Curseur de choix : saute de carte en carte avant de s'arrêter */
+.mini-card.pointe{ z-index:2; transform:translateY(-6px) scale(1.07); transition:transform .07s ease-out; }
+.mini-card.pointe .back{ box-shadow:0 0 0 3px var(--gold-bright),0 0 22px rgba(255,226,122,.9); }
+/* Fin du tirage : le reste du paquet se retourne, sans fanfare */
+/* filter et opacity sur la carte 3D l'aplatiraient (preserve-3d) : on
+   verrait le dos en miroir. La pénombre se pose donc sur la face. */
+.mini-card.dim.montre{ transform:rotateY(180deg) scale(.9); filter:none; opacity:1; transition:transform .5s ease; }
+.mini-card.dim.montre .front{ filter:brightness(.62) saturate(.7); opacity:.9; }
 @keyframes cardLift{
   from{ transform:translateY(0) scale(1); }
   to  { transform:translateY(-7px) scale(1.07); }
@@ -966,6 +1159,7 @@ html.storm #bgFill{ filter:blur(22px) brightness(.10) saturate(.8); }
 html:not(.rotated) #app{font-size:clamp(14px,1.15vw,26px);}
 html:not(.rotated) .top-hud{padding:1vh 2vw .3vh;}
 html:not(.rotated) .brand{font-size:clamp(12px,1vw,20px);}
+html:not(.rotated) .coup-count{--cc-u:clamp(6px,.8vw,15px);}
 html:not(.rotated) .place-banner-wrap{height:clamp(48px,6.4vh,88px); margin:.3vh 0 .2vh;}
 html:not(.rotated) .place-banner{font-size:clamp(26px,3.4vw,58px);}
 html:not(.rotated) .main-row{padding:.3vh 1.2vw 1vh;}
@@ -1034,6 +1228,7 @@ html:not(.rotated) .key-hint{font-size:clamp(14px,1.1vw,24px); bottom:1.6vh;}
   #app{ font-size:clamp(16px,2vw,34px); }
   .top-hud{ padding:1.2vh 3vw .4vh; }
   .brand{ font-size:clamp(14px,1.7vw,30px); }
+  .coup-count{ --cc-u:clamp(7px,1.35vw,22px); }
   .place-banner-wrap{ height:clamp(56px,6.5vh,120px); margin:.4vh 0 .2vh; }
   .place-banner{ font-size:clamp(30px,5.4vw,84px); }
   .main-row{ padding:.3vh 2vw 1vh; }
@@ -1084,7 +1279,7 @@ html:not(.rotated) .key-hint{font-size:clamp(14px,1.1vw,24px); bottom:1.6vh;}
   .tv-rules{ grid-column:1 / 3; grid-row:3; padding:.6vh 1.4vw; }
   .tv-rules .tv-title{ display:none; }
   .tv-rules ul{ margin:0;padding:0;list-style:none;display:flex;flex-wrap:wrap;justify-content:center;gap:.4vh 2.2vw;font-size:clamp(12px,1.45vw,26px);color:#f3e6c4; }
-  .tv-rules li{ margin:0; white-space:nowrap; }
+  .tv-rules li{ margin:0; white-space:normal; text-align:center; max-width:100%; }
   .tv-keys{ display:none; }
   .board-row{ grid-template-rows:1fr auto auto; }
   /* écrans superposés : en fraction de l'écran */
@@ -1118,6 +1313,7 @@ html.rotated #bgFill{ display:block; }
 html.rotated #app{font-size:clamp(16px,2vh,34px);}
 html.rotated .top-hud{padding:1.2vw 3vh .4vw;}
 html.rotated .brand{font-size:clamp(14px,1.7vh,30px);}
+html.rotated .coup-count{--cc-u:clamp(7px,1.35vh,22px);}
 html.rotated .place-banner-wrap{height:clamp(56px,6.5vw,120px); margin:.4vw 0 .2vw;}
 html.rotated .place-banner{font-size:clamp(30px,5.4vh,84px);}
 html.rotated .main-row{padding:.3vw 2vh 1vw;}
@@ -1159,7 +1355,7 @@ html.rotated .tv-results img{width:100%;height:100%;object-fit:cover;display:blo
 html.rotated .tv-rules{grid-column:1 / 3; grid-row:3; padding:.6vw 1.4vh;}
 html.rotated .tv-rules .tv-title{display:none;}
 html.rotated .tv-rules ul{margin:0;padding:0;list-style:none;display:flex;flex-wrap:wrap;justify-content:center;gap:.4vw 2.2vh;font-size:clamp(12px,1.45vh,26px);color:#f3e6c4;}
-html.rotated .tv-rules li{margin:0; white-space:nowrap;}
+html.rotated .tv-rules li{margin:0; white-space:normal; text-align:center; max-width:100%;}
 html.rotated .tv-keys{display:none;}
 html.rotated .board-row{grid-template-rows:1fr auto auto;}
 
@@ -1232,9 +1428,14 @@ if(new URLSearchParams(location.search).get('view')==='display'){
   <div id="bgGlow" aria-hidden="true"></div>
   <div class="top-hud">
     <div class="brand"><span class="brand-star" id="brandStarL">★</span> PIKAPOLY <span class="brand-star" id="brandStarR">★</span></div>
+    <div class="coup-count" id="coupCount" aria-live="polite">
+      <div class="cc-label" id="ccLabel">COUPS JOUÉS</div>
+      <div class="cc-digits"><span class="cc-n" id="ccN">0</span><span class="cc-sep">/</span><span class="cc-t" id="ccT">210</span></div>
+      <div class="cc-bar"><i id="ccFill"></i></div>
+      <div class="cc-rest" id="ccRest">210 coups restants</div>
+    </div>
     <div class="place-banner-wrap"><div class="place-banner" id="placeBanner">Départ</div></div>
     <div class="key-hint" id="keyHint" aria-live="polite"></div>
-    <div class="cue-dot" id="cueDot" aria-hidden="true"></div>
     <span id="topNum" hidden></span>
   </div>
 
@@ -1323,7 +1524,7 @@ if(new URLSearchParams(location.search).get('view')==='display'){
           <div class="tv-title">Règles</div>
           <ul>
             <li>3 lancers par partie, +1 lancer par double</li>
-            <li>Après chaque lancer : je garde le lot ou je relance</li>
+            <li>Possibilité de garder le lot ou de continuer jusqu’à épuisement des lancers : vous gardez alors le lot sur lequel vous arrivez</li>
             <li>Prison : fin de partie, carte de consolation</li>
             <li>Chance et Caisse déplacent le pion</li>
           </ul>
@@ -1331,6 +1532,7 @@ if(new URLSearchParams(location.search).get('view')==='display'){
         </div>
       </div>
       <div class="side-panel">
+        <button class="resetbank" id="zeroBtn" type="button">✖ Remise à 0 du plateau (X)</button>
         <button class="resetbank" id="resetBankBtn" type="button">🔄 Démarrage cagnotte (remise à 0€)</button>
         <button class="startbtn" id="startBtn" type="button">▶ DÉMARRER LA PARTIE</button>
         <div class="controls-panel">
@@ -1383,9 +1585,24 @@ if(new URLSearchParams(location.search).get('view')==='display'){
   </div>
 
   <div class="card-draw-overlay" id="cardDrawOverlay" aria-hidden="true">
-    <div class="card-draw-title">Tirage en cours…</div>
+    <div class="draw-flash" id="drawFlash"></div>
+    <div class="card-draw-title" id="cardDrawTitle">Tirage en cours…</div>
     <div class="card-grid" id="cardGrid"></div>
     <div class="card-draw-total" id="cardDrawTotal"></div>
+  </div>
+
+  <div class="rules-overlay" id="rulesOverlay" aria-hidden="true">
+    <div class="rules-bubble">
+      <h2>RÈGLES DU JEU</h2>
+      <ul>
+        <li data-n="1">3 lancers par partie, +1 lancer par double</li>
+        <li data-n="2">Possibilité de garder le lot ou de continuer jusqu’à épuisement des lancers : vous gardez alors le lot sur lequel vous arrivez</li>
+        <li data-n="3">Prison : fin de partie, carte de consolation</li>
+        <li data-n="4">Chance et Caisse déplacent le pion</li>
+      </ul>
+      <div class="rules-keys">F : plein écran · R : pivoter l'image</div>
+      <div class="rules-close">M ou Échap pour fermer</div>
+    </div>
   </div>
 
   <div class="mystery-overlay" id="mysteryOverlay" aria-hidden="true">
@@ -1393,11 +1610,11 @@ if(new URLSearchParams(location.search).get('view')==='display'){
     <div class="mystery-stage" id="mysteryStage">
       <div class="mystery-card" id="mysteryCard0">
         <div class="face back"><span>?</span></div>
-        <div class="face front"><img alt=""><div class="mystery-label">Booster</div></div>
+        <div class="face front"><img alt=""><div class="mystery-label">Booster japonais</div></div>
       </div>
       <div class="mystery-card" id="mysteryCard1">
         <div class="face back"><span>?</span></div>
-        <div class="face front"><img alt=""><div class="mystery-label">Carte rare</div></div>
+        <div class="face front"><img alt=""><div class="mystery-label">Mystère EX</div></div>
       </div>
       <div class="mystery-shade" id="mysteryShade"></div>
     </div>
@@ -1483,13 +1700,42 @@ if(new URLSearchParams(location.search).get('view')==='display'){
   if(window.ResizeObserver){ new ResizeObserver(layout).observe(document.getElementById('app')); }
   img.onload = layout;
   imgWide.onload = layout;
-  img.src = './assets/bg/dragon_sky.jpg';
-  imgWide.src = './assets/bg/dragon_sky_wide.jpg';
+  img.src = "./assets/bg/dragon_sky.jpg";
+  imgWide.src = "./assets/bg/dragon_sky_wide.jpg";
 })();
 </script>
 <script type="importmap">
 { "imports": { "three": "./vendor/three/three.module.min.js" } }
 </script>
 <script type="module" src="./board3d.js"></script>
+<script>
+(function(){
+  if(document.documentElement.classList.contains('display-mode')) return;
+  var vip = window.__PIKA_MODE === 'vip';
+  var b = document.createElement('button');
+  b.id = 'pikaSwitch'; b.type = 'button';
+  b.textContent = vip ? '⇄ Classique (G)' : '⇄ Golden (G)';
+  document.body.appendChild(b);
+  function basculer(){
+    if(window.__pikaPeutBasculer && !window.__pikaPeutBasculer()){
+      if(window.__pikaHint) window.__pikaHint('⏳ Terminez la partie avant de changer de plateau (G)');
+      return;
+    }
+    var next = vip ? 'classic' : 'vip';
+    try{ localStorage.setItem('pika_mode', next); }catch(e){}
+    try{ history.replaceState(null, '', location.pathname + location.search + (next === 'vip' ? '#vip' : '#classique')); }catch(e){ location.hash = next === 'vip' ? 'vip' : 'classique'; }
+    location.reload();
+  }
+  b.addEventListener('click', basculer);
+  window.addEventListener('keydown', function(e){
+    var t = (document.activeElement && document.activeElement.tagName) || '';
+    if(t === 'INPUT' || t === 'TEXTAREA' || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+    if(e.key && e.key.toLowerCase() === 'g'){ e.preventDefault(); basculer(); }
+  });
+})();
+</script>
+</body>
+</html>
+
 </body>
 </html>

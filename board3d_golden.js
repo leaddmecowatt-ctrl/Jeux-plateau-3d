@@ -162,10 +162,10 @@ function drawCard(deck){
 // 'commune*' = la commune "Prison, simple visite" (thématique uniquement).
 // Chaque ligne = un côté (coin compris en tête) : 9 cases par côté.
 const BOARD_DATA = [
-  'booster8','alternative','chest','commune','commune','commune','chance','commune','commune*',
-  'gradee','booster8','alternative','gradee','commune','commune','chest','commune','commune',
-  'commune','chance','alternative','commune','commune','gradee','commune','booster50','prison',
-  'parc','commune','commune','booster8','booster8','chance','commune','etb','jackpot300',
+  'booster50','gradee','chest','booster8','booster8','booster8','chance','booster8','booster8*',
+  'booster50','booster50','gradee','booster50','booster8','booster8','chest','booster8','booster8',
+  'booster8','chance','gradee','booster8','booster8','booster50','booster8','etb','prison',
+  'parc','booster8','booster8','booster50','booster50','chance','booster8','etb','jackpot300',
 ].map(tok=>({ cat: tok.replace('*',''), isVisite: tok.endsWith('*') }));
 // Case 21 : Lot Mystère (23/09, accord de l'animateur ; c'était une commune).
 // Le Lot Mystère (90 coups sur 245) n'existait qu'en cases 2 et 12 : la
@@ -218,13 +218,13 @@ await Promise.all(Object.entries(LOT_IMAGE_URLS).map(async ([k,url])=>{ LOT_IMAG
 const GOLD = '#e9c34a';
 const GOLD_BRIGHT = '#ffe27a';
 const SWATCH_COLORS = {
-  bronze:'#243a78', blue:'#2f8ff0', red:'#e0323f', purple:'#9a5fe0',
-  green:'#33b46a', gold:'#e9c34a', danger:'#5e6b80',
+  bronze:'#E0782E', blue:'#E0782E', red:'#b8791c', purple:'#EE8C80',
+  green:'#EE8C80', gold:'#e9c34a', danger:'#6b5a2e',
   // 4 teintes dédiées pour dissocier clairement les 4 gros lots
   // (Duopack/Tripack/Coffret/ETB 30 ans) qui partageaient tous le
   // même "gold" auparavant, sur la légende ET sur les cases du
   // plateau (même swatch = même couleur partout).
-  jackpot:'#ffd700', orange:'#e8863c', rose:'#d6549c', teal:'#2fb8b0',
+  jackpot:'#FFFFFF', orange:'#FFC400', rose:'#D4DBE4', teal:'#E0782E',
 };
 
 /* Éclaircit (percent>0) ou assombrit (percent<0) une couleur hex,
@@ -866,20 +866,20 @@ const CASE_ART_NOM = {
 // métal du cadre de chaque case : podium or / argent / bronze, le reste en argent brillant
 const BIJOU_METAL = {
   argent:     ['#ffffff','#e3e9f1','#8792a3','#f5f8ff','#566273','#ffffff'],
-  jackpot300: ['#fff1ad','#FFE45C','#cca228','#ffe66c','#785f18','#ffee9d'],
-  etb: ['#ffffff','#FFFFFF','#aab2bb','#ffffff','#64696e','#ffffff'],
-  booster50: ['#ffdbbb','#FFB878','#a35f31','#ffbf85','#60381d','#ffd4ae'],
-  gradee: ['#88e2c0','#55D6A5','#16845F','#50a287','#0e553d','#55D6A5'],
-  booster8: ['#8cdaff','#5CCBFF','#176FA3','#5193ba','#0e4869','#5CCBFF'],
-  alternative: ['#ff93a4','#FF657E','#A52D43','#bb6172','#6b1d2b','#FF657E'],
-  commune: ['#e9b8ff','#E09AFF','#8246A8','#a174bd','#542d6d','#E09AFF'],
-  chance:     ['#ecd6ff','#b45cff','#502972','#ce95ff','#361b4c','#f0deff'],
-  chest:      ['#cbe3fb','#2f8ff0','#15406c','#77b6f5','#0e2a48','#d5e8fc'],
+  jackpot300: ['#ffffff','#ffffff','#fff8d8','#ffffff','#ffe9a0','#ffffff'],
+  etb: ['#fff3a0','#ffc400','#b88400','#ffd84a','#6e4e00','#fff3a0'],
+  booster50: ['#ffffff','#d0d6de','#7d8794','#f4f6f9','#4a525d','#ffffff'],
+  gradee: ['#ffb070','#d9722b','#8a3e10','#f08a40','#5a2606','#ffb070'],
+  booster8: ['#ffb070','#d9722b','#8a3e10','#f08a40','#5a2606','#ffb070'],
+  alternative: ['#ffb070','#d9722b','#8a3e10','#f08a40','#5a2606','#ffb070'],
+  commune: ['#ffb070','#d9722b','#8a3e10','#f08a40','#5a2606','#ffb070'],
+  chance:     ['#ffd6d0','#e8867a','#9a3f36','#f4a79c','#5e221c','#ffd6d0'],
+  chest:      ['#ffd6d0','#e8867a','#9a3f36','#f4a79c','#5e221c','#ffd6d0'],
   prison: ['#e6c09c','#ce853e','#824c17','#d89e65','#593410','#e0b386'],
 };
 // couleur des pierres serties
 const BIJOU_PIERRE = {
-  jackpot300:'#FFE45C', etb:'#FFFFFF', booster50:'#FFB878', gradee:'#55D6A5', booster8:'#5CCBFF', alternative:'#FF657E', commune:'#E09AFF', chance:'#b45cff', prison:'#d49354', visite:'#E09AFF', parc:'#ffd54a', chest:'#2f8ff0', depart:'#ffd54a',
+  jackpot300:'#FFFFFF', etb:'#FFC400', booster50:'#D4DBE4', gradee:'#E0782E', booster8:'#E0782E', alternative:'#E0782E', commune:'#E0782E', chance:'#EE8C80', prison:'#d49354', visite:'#E0782E', parc:'#ffd54a', chest:'#EE8C80', depart:'#ffd54a',
 };
 const CASE_ART = {};
 /* 26/09, l'animateur : TOUTES les cases montrent leur illustration à l'arrivée
@@ -931,8 +931,8 @@ try{ CASE_ART.depart = makeDepartArt(); }catch(e){}
    n'affiche jamais deux fois la même photo, la case sous une carte
    flottante montre un socle doré au lieu de la photo (sansPhoto). */
 const SHOW_FLOAT_PHOTOS = true;
-const BORD_V4 = {jackpot300:'#FFE45C', etb:'#FFFFFF', booster50:'#FFB878', gradee:'#55D6A5', booster8:'#5CCBFF', alternative:'#FF657E', commune:'#E09AFF', visite:'#E09AFF'};
-const GEM_V2 = {jackpot300:'#F0BF30', etb:'#C9D2DC', booster50:'#C0703A', gradee:'#16845F', booster8:'#176FA3', alternative:'#A52D43', commune:'#8246A8', visite:'#8246A8'};
+const BORD_V4 = {jackpot300:'#FFFFFF', etb:'#FFC400', booster50:'#D4DBE4', gradee:'#E0782E', booster8:'#E0782E', alternative:'#E0782E', commune:'#E0782E', visite:'#E0782E'};
+const GEM_V2 = {jackpot300:'#FFE9A0', etb:'#C99200', booster50:'#8A95A3', gradee:'#A0501C', booster8:'#A0501C', alternative:'#A0501C', commune:'#A0501C', visite:'#A0501C'};
 function getFlatPhotoFace(catKey, accentColor, badge, sansPhoto){
   const key = catKey+'|'+badge+'|'+(sansPhoto?1:0);
   if(flatFaceCache.has(key)) return flatFaceCache.get(key);
@@ -1862,7 +1862,7 @@ renderer.domElement.addEventListener('pointerdown', ()=>{ cineEnd(); }, {passive
    captent un peu de la teinte froide du ciel en arrière-plan — sans ça,
    un plateau tout chaud posé sur un fond bleu-violet paraissait un peu
    "posé par-dessus" plutôt qu'intégré à la scène. */
-const hemiLight = new THREE.HemisphereLight(0xffdca0, 0x141c33, 0.68);
+const hemiLight = new THREE.HemisphereLight(0xffd08a, 0x3a2408, 0.75);
 scene.add(hemiLight);
 
 /* Petit projecteur chaud au-dessus du centre du plateau : la légende
@@ -1922,7 +1922,7 @@ scene.add(rim);
    ressortir un peu de bleu-violet sur le plateau — cohérent avec le
    ciel nocturne de la photo de fond plutôt qu'un éclairage 100% chaud
    qui ferait paraître le plateau posé par-dessus le décor. */
-const fill = new THREE.DirectionalLight(0x9db8ff, 0.6);
+const fill = new THREE.DirectionalLight(0xffb870, 0.6);
 fill.position.set(-4,2.5,3.2);
 scene.add(fill);
 
@@ -2039,8 +2039,6 @@ const CENTER_LEGEND_ROWS = [
   {swatch:'rose',    catKey:'booster50'},
   {swatch:'teal',    catKey:'gradee'},
   {swatch:'blue',    catKey:'booster8'},
-  {swatch:'red',     catKey:'alternative'},
-  {swatch:'bronze',  catKey:'commune'},
 ];
 /* Finition des sept barres de la plaque centrale (et d'elles seules : les
    cases gardent SWATCH_COLORS). Les trois premiers lots sont en MÉTAL —
@@ -2048,13 +2046,13 @@ const CENTER_LEGEND_ROWS = [
    quatre suivants en néon vif. `bord` = dégradé vertical du contour épais,
    `halo` = lueur autour du bord, `vif` = teinte de la barre d'accent. */
 const LEGEND_FINISH = {
-  jackpot300: { metal:true, bord:['#ffe9ad','#FFE08A','#D4A72C','#e0c16b','#745b18'], halo:'#FFE08A', vif:'#FFE08A' },
-  etb: { metal:true, bord:['#f5f8f9','#F2F5F7','#AEB7C4','#c6ccd5','#5f646b'], halo:'#F2F5F7', vif:'#F2F5F7' },
-  booster50: { metal:true, bord:['#e7bc96','#DDA06A','#9A6038','#b88f73','#54341e'], halo:'#DDA06A', vif:'#DDA06A' },
-  gradee: { bord:['#7fe0bb','#55D6A5','#16845F'], halo:'#55D6A5', vif:'#55D6A5' },
-  booster8: { bord:['#84d8ff','#5CCBFF','#176FA3'], halo:'#5CCBFF', vif:'#5CCBFF' },
-  alternative: { bord:['#ff8b9e','#FF657E','#A52D43'], halo:'#FF657E', vif:'#FF657E' },
-  commune: { bord:['#e7b3ff','#E09AFF','#8246A8'], halo:'#E09AFF', vif:'#E09AFF' },
+  jackpot300: { metal:true, bord:['#ffffff','#ffffff','#fff8d8','#ffffff','#ffe9a0'], halo:'#FFFFFF', vif:'#FFFFFF' },
+  etb: { metal:true, bord:['#fff3a0','#ffc400','#b88400','#ffd84a','#6e4e00'], halo:'#FFC400', vif:'#FFC400' },
+  booster50: { metal:true, bord:['#ffffff','#d0d6de','#7d8794','#f4f6f9','#4a525d'], halo:'#D4DBE4', vif:'#D4DBE4' },
+  gradee: { metal:true, bord:['#ffb070','#d9722b','#8a3e10','#f08a40','#5a2606'], halo:'#E0782E', vif:'#E0782E' },
+  booster8: { metal:true, bord:['#ffb070','#d9722b','#8a3e10','#f08a40','#5a2606'], halo:'#E0782E', vif:'#E0782E' },
+  alternative: { metal:true, bord:['#ffb070','#d9722b','#8a3e10','#f08a40','#5a2606'], halo:'#E0782E', vif:'#E0782E' },
+  commune: { metal:true, bord:['#ffb070','#d9722b','#8a3e10','#f08a40','#5a2606'], halo:'#E0782E', vif:'#E0782E' },
 };
 // Chance / Caisse Communautaire : pas des lots, juste deux petits
 // badges compacts (icône + nom) sous l'en-tête, bien visibles sans
@@ -2908,6 +2906,67 @@ const goldLeafMat = metalLigne(OR_ETB_TEX, 0.78);
 const goldLeafDarkMat = goldLeafMat.clone();
 goldLeafDarkMat.color = new THREE.Color(0x9a7a44);
 goldLeafDarkMat.emissiveIntensity = 0.3;
+/* ---------- VIP : FORTERESSE D'OR 24 carats — tours, remparts, trésor ---------- */
+{
+  const orMat = goldLeafMat, orSombre = goldLeafDarkMat;
+  const orPoli = goldLeafMat.clone(); orPoli.roughness = 0.18; orPoli.emissiveIntensity = 1.0;
+  const rougeMat = new THREE.MeshStandardMaterial({ color:0xc0101e, emissive:0x800812, emissiveIntensity:.7, side:THREE.DoubleSide });
+  const half = (N_SIDE*CELL)/2 + 0.75;
+  // socle-marche sous tout le plateau (plus large, plus épais)
+  {
+    const e = (N_SIDE*CELL)/2 + 1.25;
+    const marche = new THREE.Mesh(new THREE.BoxGeometry(2*e, 0.4, 2*e), orSombre);
+    marche.position.y = -0.72; marche.receiveShadow = true; boardGroup.add(marche);
+    const marche2 = new THREE.Mesh(new THREE.BoxGeometry(2*e+0.5, 0.3, 2*e+0.5), orMat);
+    marche2.position.y = -1.05; boardGroup.add(marche2);
+  }
+  // pièce « € » géante
+  const coinTex = (()=>{ const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+    const g = x.createRadialGradient(110,100,20,128,128,128); g.addColorStop(0,'#fff6c9'); g.addColorStop(.55,'#ffd54a'); g.addColorStop(1,'#8a5a08');
+    x.fillStyle = g; x.beginPath(); x.arc(128,128,126,0,Math.PI*2); x.fill();
+    x.lineWidth = 10; x.strokeStyle = '#a8740a'; x.beginPath(); x.arc(128,128,108,0,Math.PI*2); x.stroke();
+    x.fillStyle = '#7a4d00'; x.font = '900 150px Georgia, serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('€', 128, 138);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
+  const coinFace = new THREE.MeshStandardMaterial({ map:coinTex, metalness:.6, roughness:.25, emissive:0xffffff, emissiveMap:coinTex, emissiveIntensity:.55 });
+  const coinGeo = new THREE.CylinderGeometry(0.34,0.34,0.06,40);
+  const lingotGeo = (()=>{ const g = new THREE.CylinderGeometry(0.07*Math.SQRT2, 0.1*Math.SQRT2, 0.08, 4, 1); g.rotateY(Math.PI/4); g.scale(1.9,1,1); return g; })();
+  for(const [sx,sz] of [[1,1],[-1,1],[-1,-1],[1,-1]]){
+    const g = new THREE.Group();
+    const add = (geo, mat, x, y, z)=>{ const m = new THREE.Mesh(geo, mat); m.position.set(x,y,z); g.add(m); return m; };
+    add(new THREE.CylinderGeometry(0.46,0.54,0.35,32), orSombre, 0, -0.2, 0);                 // soubassement
+    add(new THREE.CylinderGeometry(0.4,0.46,1.25,32), orMat, 0, 0.6, 0);                     // fût
+    add(new THREE.CylinderGeometry(0.5,0.5,0.1,32), orPoli, 0, 1.25, 0);                     // corniche
+    for(let k=0;k<10;k++){ const a = k/10*Math.PI*2; const c = add(new THREE.BoxGeometry(0.13,0.16,0.1), orPoli, Math.sin(a)*0.46, 1.38, Math.cos(a)*0.46); c.rotation.y = a; }
+    add(new THREE.ConeGeometry(0.36,0.75,32), orSombre, 0, 1.78, 0);                          // toit
+    add(new THREE.SphereGeometry(0.06,16,12), orPoli, 0, 2.18, 0);
+    add(new THREE.CylinderGeometry(0.01,0.01,0.35,6), orPoli, 0, 2.35, 0);
+    const d = add(new THREE.PlaneGeometry(0.26,0.15), rougeMat, 0.13, 2.45, 0);
+    for(const yy of [0.35,0.8]){ const f = add(new THREE.BoxGeometry(0.1,0.18,0.02), new THREE.MeshStandardMaterial({color:0x2a1602}), 0, yy, 0.41); }
+    // trésor : lingots empilés + piles de pièces
+    for(let n=0;n<3;n++) for(let m=0;m<3-n;m++) add(lingotGeo, orPoli, -0.55 + m*0.3 + n*0.15, -0.02 + n*0.085, 0.55);
+    for(let p=0;p<3;p++){ const h = 4+p*3; for(let q=0;q<h;q++) add(new THREE.CylinderGeometry(0.08,0.08,0.022,20), orPoli, 0.45+p*0.2, -0.02+q*0.024, 0.45-p*0.12); }
+    // pièce géante qui tourne au-dessus de la tour
+    const coin = add(coinGeo, [orPoli, coinFace, coinFace], 0, 2.95, 0);
+    coin.rotation.x = Math.PI/2;
+    const ph = Math.random()*6;
+    coin.onBeforeRender = ()=>{ const t = performance.now()/1000 + ph; coin.rotation.z = t*1.6; coin.position.y = 2.95 + Math.sin(t*1.3)*0.08; };
+    g.position.set(sx*half, 0, sz*half);
+    g.rotation.y = Math.atan2(-sx, -sz);
+    g.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
+    boardGroup.add(g);
+  }
+  // remparts crénelés entre les tours
+  const L = 2*half - 1.0;
+  for(const [ax, s1] of [['x',1],['x',-1],['z',1],['z',-1]]){
+    const w = new THREE.Group();
+    const mur = new THREE.Mesh(new THREE.BoxGeometry(L, 0.34, 0.2), orMat); mur.position.y = 0.0; w.add(mur);
+    const nC = Math.floor(L/0.3);
+    for(let k=0;k<nC;k++){ const c = new THREE.Mesh(new THREE.BoxGeometry(0.15,0.12,0.22), orPoli); c.position.set(-L/2 + 0.15 + k*(L-0.3)/(nC-1), 0.23, 0); w.add(c); }
+    if(ax==='x'){ w.position.set(0, 0, s1*half); } else { w.position.set(s1*half, 0, 0); w.rotation.y = Math.PI/2; }
+    w.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
+    boardGroup.add(w);
+  }
+}
 /* ---------- Base du plateau en feuille d'or ----------
    Une dalle continue sous la couronne des 40 cases, épaisse et biseautée :
    c'est le socle du plateau, fixe (les cases, elles, ondulent au-dessus).
@@ -2924,7 +2983,7 @@ goldLeafDarkMat.emissiveIntensity = 0.3;
   const hole = new THREE.Path();
   hole.moveTo(-int, -int); hole.lineTo(-int, int); hole.lineTo(int, int); hole.lineTo(int, -int); hole.lineTo(-int, -int);
   sh.holes.push(hole);
-  const H = 0.16, bev = 0.035;
+  const H = 0.5, bev = 0.05;
   const geo = new THREE.ExtrudeGeometry(sh, { depth: H - bev*2, bevelEnabled:true, bevelSize:bev, bevelThickness:bev, bevelSegments:3, curveSegments:6 });
   geo.rotateX(-Math.PI/2);
   normaliserUV(geo);
@@ -2945,7 +3004,7 @@ goldLeafDarkMat.emissiveIntensity = 0.3;
   /* 26/09, l'animateur : le liseré et les rivets en ARGENT BRILLANT.
      Métal miroir peu rugueux, reflets renforcés, et un léger éclat propre
      pour qu'il reste argenté (ni blanc plat, ni noir) face au ciel sombre. */
-  const chromeMat = metalLigne(ARGENT_ETB_TEX, 0.72);   // argent de la ligne Coffret
+  const chromeMat = orPoliMat;   // VIP : tout en or
   const b0 = ext - 0.045, b1 = ext - 0.005;
   const bande = new THREE.Shape();
   bande.moveTo(-b1,-b1); bande.lineTo(b1,-b1); bande.lineTo(b1,b1); bande.lineTo(-b1,b1); bande.lineTo(-b1,-b1);
@@ -3054,7 +3113,7 @@ goldLeafDarkMat.emissiveIntensity = 0.3;
     const pointeGeo = new THREE.ConeGeometry(0.03, 0.1, 10);
     const perleCGeo = new THREE.SphereGeometry(0.02, 12, 8);
     const perleCMat = new THREE.MeshStandardMaterial({ color:0xffffff, metalness:0.3, roughness:0.15, emissive:0xdfe8ff, emissiveIntensity:0.6 });
-    const saphirMat = new THREE.MeshStandardMaterial({ color:0x2a7bff, metalness:0.3, roughness:0.08, envMapIntensity:2.2, emissive:0x1f5fff, emissiveIntensity:0.9 });
+    const saphirMat = new THREE.MeshStandardMaterial({ color:0x19c26a, metalness:0.3, roughness:0.08, envMapIntensity:2.2, emissive:0x0f8a48, emissiveIntensity:0.9 });   // VIP : émeraude royale
     const saphirGeo = new THREE.OctahedronGeometry(0.03, 0);
     for(const [sx,sz] of [[1,1],[-1,1],[-1,-1],[1,-1]]){
       const x = sx*(ext - 0.03), z = sz*(ext - 0.03), yb = 0.1;
@@ -3096,7 +3155,7 @@ const tileGoldMat = new THREE.MeshStandardMaterial({
   roughnessMap: GOLD_MAPS.roughnessMap,
 });
 const tileBezelMat = new THREE.MeshStandardMaterial({
-  color:0x0a0a0a, roughness:.5, metalness:.25,
+  color:0x7a5a12, roughness:.3, metalness:.9, emissive:0x3a2800, emissiveIntensity:.4,
   normalMap: TILE_MAPS.normalMap, roughnessMap: TILE_MAPS.roughnessMap,
 });
 /* TILE+0.115 et non TILE+0.09 : le biseau rentre les faces superieure et
@@ -3175,7 +3234,7 @@ function facettedBox(w, h, d, amp, seed){
 }
 const tileBodyGeo = facettedBox(TILE, 0.14, TILE, 0.04, 20260928);
 const baseTileMat = new THREE.MeshStandardMaterial({
-  color:0x050505, roughness:.6, metalness:.3,
+  color:0xc9962a, roughness:.32, metalness:.92, emissive:0x5a3e06, emissiveIntensity:.35,
   normalMap: TILE_MAPS.normalMap, roughnessMap: TILE_MAPS.roughnessMap,
 });
 const tileRivetGeo = new THREE.CylinderGeometry(0.035,0.035,0.02,8);
@@ -3204,15 +3263,16 @@ const tileCorpsArgentMat = metalLigne(ARGENT_ETB_TEX, 0.36);
 const RUBIS_TEX = makeMetalGradTex(['#ffd0d6','#ff2a40','#7a0614','#ff6a7a','#40020a']);
 const tileCorpsRubisMat = metalLigne(RUBIS_TEX, 0.8);
 const TILE_CORPS_MATS = {
-  jackpot300: metalLigne(makeMetalGradTex(['#ffec8c','#FFE45C','#F0BF30','#ffe874','#9c7c1f']), 1.0),
-  etb: metalLigne(makeMetalGradTex(['#ffffff','#FFFFFF','#C9D2DC','#ffffff','#82888f']), 1.0),
-  booster50: metalLigne(makeMetalGradTex(['#ffcda0','#FFB878','#C0703A','#ffc28c','#7c4825']), 1.0),
-  gradee: metalLigne(makeMetalGradTex(['#55D6A5','#16845F','#0f5c42','#449c7f','#0c4834']), 0.72),
-  booster8: metalLigne(makeMetalGradTex(['#5CCBFF','#176FA3','#104d72','#458bb5','#0c3d59']), 0.72),
-  alternative: metalLigne(makeMetalGradTex(['#FF657E','#A52D43','#731f2e','#b75768','#5a1824']), 0.72),
-  commune: metalLigne(makeMetalGradTex(['#E09AFF','#8246A8','#5b3175','#9b6bb9','#47265c']), 0.8),
-  chance: metalLigne(makeMetalGradTex(['#ecd6ff','#b45cff','#502972','#ce95ff','#361b4c']), 0.5),
-  chest: metalLigne(makeMetalGradTex(['#cbe3fb','#2f8ff0','#15406c','#77b6f5','#0e2a48']), 0.5),
+  // 29/09, l'animateur : code couleur métal, tout brille (émissif fort, pas de contre-jour)
+  jackpot300: metalLigne(makeMetalGradTex(['#ffffff','#ffffff','#fff8d8','#ffffff','#ffe9a0']), 1.8),   // ETB : lumière divine
+  etb: metalLigne(makeMetalGradTex(['#fff3a0','#ffc400','#b88400','#ffd84a','#6e4e00']), 1.1),            // Coffret : or
+  booster50: metalLigne(makeMetalGradTex(['#ffffff','#d0d6de','#7d8794','#f4f6f9','#4a525d']), 1.0),    // Tripack : argent
+  gradee: metalLigne(makeMetalGradTex(['#ffb070','#d9722b','#8a3e10','#f08a40','#5a2606']), 1.0),      // Duopack : bronze
+  booster8: metalLigne(makeMetalGradTex(['#ffb070','#d9722b','#8a3e10','#f08a40','#5a2606']), 1.0),    // Booster : bronze
+  alternative: metalLigne(makeMetalGradTex(['#ffb070','#d9722b','#8a3e10','#f08a40','#5a2606']), 1.0),
+  commune: metalLigne(makeMetalGradTex(['#ffb070','#d9722b','#8a3e10','#f08a40','#5a2606']), 1.0),
+  chance: metalLigne(makeMetalGradTex(['#ffd6d0','#e8867a','#9a3f36','#f4a79c','#5e221c']), 0.9),
+  chest: metalLigne(makeMetalGradTex(['#ffd6d0','#e8867a','#9a3f36','#f4a79c','#5e221c']), 0.9),
   prison: metalLigne(makeMetalGradTex(['#d08944','#b46920','#643a12','#ca7b2e','#46280c']), 0.45),
 };
 /* 28/09 : matière « sculpture polie » pour les flancs à facettes — ombrage
@@ -3263,7 +3323,7 @@ boardGroup.add(tileCollarInst);
    Pioche violet ; Chance violet et Caisse vert comme leurs pastilles). Matériau
    non éclairé : la couleur brille comme les néons de la plaque. */
 const COULEUR_REBORD = {
-  jackpot300:'#FFE45C', etb:'#FFFFFF', booster50:'#FFB878', gradee:'#55D6A5', booster8:'#5CCBFF', alternative:'#FF657E', commune:'#E09AFF', chance:'#b45cff', chest:'#2f8ff0', prison:'#d49354', parc:'#ffd54a', depart:'#ffd54a', visite:'#E09AFF',
+  jackpot300:'#FFFFFF', etb:'#FFC400', booster50:'#D4DBE4', gradee:'#E0782E', booster8:'#E0782E', alternative:'#E0782E', commune:'#E0782E', chance:'#EE8C80', chest:'#EE8C80', prison:'#d49354', parc:'#ffd54a', depart:'#ffd54a', visite:'#E0782E',
 };
 const tileBezelNeonMat = new THREE.MeshBasicMaterial({ color:0xffffff, toneMapped:false });
 const tileBezelInst = new THREE.InstancedMesh(tileBezelGeo, tileBezelNeonMat, N_TILES);
@@ -5373,8 +5433,9 @@ const LUFFY_DESIGN = { scale: 0.28682, offY: -0.20285 };   // repère de mesure
    court anthracite, ceinture-écharpe rubis, cheveux turquoise, bottes de cuir,
    chapeau d'explorateur en cuir à bande d'or, grands yeux ambrés. */
 const LUFFY_COL = {
-  peau:0xf1c29b, gilet:0xc9252b, short:0x5d84d9, revers:0xfbf8f0, echarpe:0xf3c230,
-  cheveux:0x17171c, bouton:0xf8d23e, semelle:0xb58a52, laniere:0x5b3a1f, cicatrice:0xe39c96,
+  peau:0xf1c29b, gilet:0xe9b93a, short:0xb07d1a, revers:0xfff1b8, echarpe:0x8a5a08,
+  cheveux:0x17171c, bouton:0xfff6c9, semelle:0x7a5a12, laniere:0xd4a72c, cicatrice:0xe39c96,
+  couronne:0xffd54a, lunettes:0x121014, chaine:0xffe27a, rubis:0xe0102c, cape:0x9a0f1c, hermine:0xfffaf0,
 };
 function luffyGradient(){
   const d = new Uint8Array([90, 175, 255]);
@@ -5631,6 +5692,60 @@ function buildLuffy(model, pivot){
   };
   // calotte (couvre le crâne sous le chapeau)
   luffyEllipsoid(hair, HC.clone().add(v3(0, 0.022, -0.012)), 0.256, 0.236, 0.228, 40, 24, white, d=> (d.z < -0.05 && d.y > -0.78) ? 1.025 : (d.y > -0.05 ? 1 : 0.9));   // tout l'arrière du crâne, jusqu'à la nuque
+  // ===== VIP : couronne royale, lunettes de patron, chaîne XXL, cape d'hermine =====
+  {
+    const cr = P('couronne', ['Head']);
+    const rb = P('rubis', ['Head']);
+    const CY = 0.9, CZ = -0.035, R0 = 0.182;
+    // bandeau épais, légèrement évasé
+    luffyShell(cr, [CY-0.012, CY+0.02, CY+0.055, CY+0.085], (y,t)=>({ rx:R0+0.02*t, rz:R0-0.01+0.02*t, zc:CZ }), 56, white);
+    // gros bourrelets en haut et en bas du bandeau
+    for(const yy of [CY-0.012, CY+0.085]){
+      const ring = []; for(let k=0;k<=40;k++){ const a=k/40*Math.PI*2; ring.push({p:v3(Math.sin(a)*(R0+0.02*(yy>CY?1:0)+0.004), yy, CZ+Math.cos(a)*(R0-0.01+0.02*(yy>CY?1:0)+0.004)), r:0.014}); }
+      luffyTube(cr, ring, 10, white);
+    }
+    const NP = 8;
+    for(let k=0;k<NP;k++){
+      const a = k/NP*Math.PI*2, a2 = (k+0.5)/NP*Math.PI*2;
+      const bx = Math.sin(a)*(R0+0.02), bz = CZ + Math.cos(a)*(R0+0.01);
+      const tx = Math.sin(a)*(R0+0.05), tz = CZ + Math.cos(a)*(R0+0.04);
+      luffyTube(cr, [{p:v3(bx, CY+0.075, bz), r:0.038}, {p:v3((bx+tx)/2, CY+0.15, (bz+tz)/2), r:0.022}, {p:v3(tx, CY+0.235, tz), r:0.005}], 10, white, { capStart:true });
+      luffyEllipsoid(cr, v3(tx, CY+0.245, tz), 0.02, 0.02, 0.02, 12, 8, white);          // perle d'or au sommet
+      luffyEllipsoid(rb, v3(Math.sin(a2)*(R0+0.028), CY+0.036, CZ+Math.cos(a2)*(R0+0.018)), 0.02, 0.026, 0.012, 12, 8, white);   // rubis du bandeau
+    }
+    luffyEllipsoid(rb, v3(0, CY+0.04, CZ+R0+0.03), 0.034, 0.042, 0.018, 16, 10, white);   // gros rubis frontal
+    // arceaux + globe crucifère
+    luffyTube(cr, [{p:v3(-R0,CY+0.08,CZ), r:0.012}, {p:v3(-R0*0.6,CY+0.2,CZ), r:0.012}, {p:v3(0,CY+0.25,CZ), r:0.012}, {p:v3(R0*0.6,CY+0.2,CZ), r:0.012}, {p:v3(R0,CY+0.08,CZ), r:0.012}], 8, white);
+    luffyTube(cr, [{p:v3(0,CY+0.08,CZ-R0), r:0.012}, {p:v3(0,CY+0.2,CZ-R0*0.6), r:0.012}, {p:v3(0,CY+0.25,CZ), r:0.012}, {p:v3(0,CY+0.2,CZ+R0*0.6), r:0.012}, {p:v3(0,CY+0.08,CZ+R0), r:0.012}], 8, white);
+    luffyEllipsoid(cr, v3(0, CY+0.285, CZ), 0.035, 0.035, 0.035, 16, 12, white);
+    luffyTube(cr, [{p:v3(0,CY+0.315,CZ), r:0.009}, {p:v3(0,CY+0.37,CZ), r:0.009}], 8, white, { capEnd:true });
+    luffyTube(cr, [{p:v3(-0.025,CY+0.35,CZ), r:0.008}, {p:v3(0.025,CY+0.35,CZ), r:0.008}], 8, white, { capStart:true, capEnd:true });
+    // lunettes de soleil
+    const lu = P('lunettes', ['Head']);
+    for(const sx of [-1,1]){
+      luffyEllipsoid(lu, v3(sx*0.083, 0.738, 0.192), 0.068, 0.044, 0.018, 20, 12, white);
+      luffyTube(lu, [{p:v3(sx*0.148, 0.744, 0.165), r:0.007}, {p:v3(sx*0.22, 0.742, 0.06), r:0.007}, {p:v3(sx*0.25, 0.735, -0.03), r:0.006}], 8, white);
+    }
+    luffyTube(lu, [{p:v3(-0.02, 0.75, 0.205), r:0.007}, {p:v3(0.02, 0.75, 0.205), r:0.007}], 8, white);
+    // chaîne XXL + énorme médaillon
+    const ch = P('chaine', ['UpperChest','Chest','Neck']);
+    const NC = 16;
+    for(let k=0;k<=NC;k++){
+      const u = k/NC, a = (u-0.5)*Math.PI*1.25;
+      luffyEllipsoid(ch, v3(Math.sin(a)*0.11, 0.49 - Math.cos(a)*0.085, 0.1 + Math.cos(a)*0.04), 0.024, 0.018, 0.018, 12, 8, white);
+    }
+    luffyEllipsoid(ch, v3(0, 0.385, 0.145), 0.052, 0.058, 0.016, 20, 12, white);
+    luffyEllipsoid(P('rubis', ['UpperChest','Chest']), v3(0, 0.385, 0.162), 0.02, 0.024, 0.008, 12, 8, white);
+    // cape royale rouge, bordée d'or, col d'hermine
+    const cp = P('cape', ['UpperChest','Chest','Spine','Hips']);
+    const back = { a0:()=>Math.PI*0.42, a1:()=>Math.PI*1.58 };
+    luffyShell(cp, [0.56,0.48,0.38,0.28,0.18,0.08,0.0], (y,t)=>({ rx:0.2+0.16*t, rz:0.16+0.13*t, zc:-0.02-0.05*t }), 40, white,
+      { ...back, bosses:(a,y,t)=>1 + 0.05*t*Math.sin(a*9) });
+    luffyShell(P('couronne', ['Spine','Hips']), [0.0,-0.03], (y,t)=>({ rx:0.365, rz:0.295, zc:-0.07 }), 40, white, back);
+    const hm = P('hermine', ['UpperChest','Neck']);
+    const col = []; for(let k=0;k<=24;k++){ const a = Math.PI*0.3 + k/24*Math.PI*1.4; col.push({p:v3(Math.sin(a)*0.2, 0.56, -0.01+Math.cos(a)*0.16), r:0.042}); }
+    luffyTube(hm, col, 12, white, { capStart:true, capEnd:true });
+  }
   // mèches de côté et de nuque, sous l'aile du chapeau
   for(let i=0;i<34;i++){
     const a = Math.PI*0.28 + (i/34)*Math.PI*1.44 + (rnd()-0.5)*0.12;       // du côté gauche au côté droit, par l'arrière
@@ -5823,11 +5938,12 @@ function buildLuffy(model, pivot){
   const faceTex = { ouvert: drawLuffyFace('ouvert'), ferme: drawLuffyFace('ferme'), rire: drawLuffyFace('rire') };
   const COL = { peau:LUFFY_COL.peau, cheveux:LUFFY_COL.cheveux, gilet:LUFFY_COL.gilet, short:LUFFY_COL.short,
                 revers:LUFFY_COL.revers, echarpe:LUFFY_COL.echarpe, bouton:LUFFY_COL.bouton, semelle:LUFFY_COL.semelle,
-                laniere:LUFFY_COL.laniere, cicatrice:LUFFY_COL.cicatrice, visage:0xffffff };
+                laniere:LUFFY_COL.laniere, cicatrice:LUFFY_COL.cicatrice, visage:0xffffff,
+                couronne:LUFFY_COL.couronne, lunettes:LUFFY_COL.lunettes, chaine:LUFFY_COL.chaine, rubis:LUFFY_COL.rubis, cape:LUFFY_COL.cape, hermine:LUFFY_COL.hermine };
   // 26/09 : version NÉON — mêmes couleurs, mais la tenue et le chapeau BRILLENT (flou lumineux du plateau)
-  const EMI = { gilet:0xb0121a, short:0x1e4fc8, echarpe:0xb08a10, revers:0x6a6660, bouton:0x8a6400, cicatrice:0x3a1512, semelle:0x4a3416 };
+  const EMI = { gilet:0x9a6e10, short:0x6e4a08, echarpe:0x5a3a04, revers:0x8a7440, bouton:0xa08020, cicatrice:0x3a1512, semelle:0x4a3410, couronne:0xc89410, chaine:0xc89a20, lunettes:0x000000, rubis:0x900014, cape:0x4a0508, hermine:0x807a70 };
   const OUT_W = { visage:0.0055, peau:0.0045, cheveux:0.005, gilet:0.004, short:0.0045, revers:0.004, echarpe:0.004,
-                  bouton:0.0022, semelle:0.003, laniere:0.0015, cicatrice:0 };
+                  bouton:0.0022, semelle:0.003, laniere:0.0015, cicatrice:0, couronne:0.003, lunettes:0.0025, chaine:0.0018, rubis:0.0015, cape:0.004, hermine:0.003 };
   const OUT_BASE = 0.0045;
   const withEmi = m=>{
     m.onBeforeCompile = sh=>{
@@ -5921,7 +6037,7 @@ function buildLuffy(model, pivot){
           float brin = sin(atan(vPaille.z, vPaille.x)*140.0 + rr*30.0);
           diffuseColor.rgb *= 0.90 + 0.07*smoothstep(-0.3, 0.9, rang) + 0.04*brin;`);
       };
-      o.material = hm; o.visible = true;
+      o.material = hm; o.visible = false;   // VIP : couronne à la place du chapeau
       /* Chapeau d'origine, retaillé à la tête (voir ci-dessous) : sur un plateau vu en
          plongée, l'aile à plat recouvrait tout le personnage — on ne voyait
          qu'un disque de paille. Incliné comme Luffy le porte souvent, il
@@ -5962,7 +6078,7 @@ function buildLuffy(model, pivot){
         o.geometry = g;
       }
       const ol = new THREE.SkinnedMesh(o.geometry, luffyOutlineMat((band ? 0.003 : 0.0045)/localScale));
-      ol.name = 'luffy_contour_chapeau'; ol.frustumCulled = false;
+      ol.name = 'luffy_contour_chapeau'; ol.frustumCulled = false; ol.visible = false;
       o.parent.add(ol); ol.position.copy(o.position); ol.quaternion.copy(o.quaternion); ol.scale.copy(o.scale);
       ol.bind(o.skeleton, o.bindMatrix);
       meshes.push(ol);
@@ -7732,9 +7848,9 @@ const TOTAL_PAID_KEY = 'pika_total_paid_live1';
    encaissée le paie. Les statistiques de chute de chaque lot
    (OUTCOME_RECIPE) sont une affaire séparée, réglable sans toucher à
    cette garantie. */
-const AVG_MISE = 10;              // mise moyenne (euros)
-const CA_CYCLE = 2100;           // chiffre d'affaires d'un cycle (euros) : tout le stock 30 ans
-const MARGIN_TARGET = 0.26;      // marge garantie sur le cycle et à chaque instant, lots comptés à leur VALEUR MARCHÉ (revente)
+const AVG_MISE = 29;              // mise moyenne (euros)
+const CA_CYCLE = 3770;           // chiffre d'affaires d'un cycle (euros) : tout le stock 30 ans
+const MARGIN_TARGET = 0.27;      // marge garantie sur le cycle et à chaque instant, lots comptés à leur VALEUR MARCHÉ (revente)
 const CEILING_RATIO = 1 - MARGIN_TARGET;  // part maximale reversée (dérivée, ne pas régler ici)
 
 /* ---------- Recalibrage sur le stock réel (18/09/2026, soir) ----------
@@ -7840,11 +7956,11 @@ if(zeroBtn) zeroBtn.hidden = true; if(false) zeroBtn.addEventListener('click', (
    marge « même si on comptait les lots à ce qu'ils valent sur Vinted ». */
 const PAYOUT_LADDER = [
   { cat:'jackpot300', cost:180 },   // ETB 30 ans
-  { cat:'etb',         cost:55  },   // Coffret Amphinobi-ex / Nymphali-ex
+  { cat:'etb',         cost:55  },   // Coffret 30 ans
   { cat:'booster50',   cost:45  },   // Tripack 30 ans
   { cat:'gradee',      cost:30  },   // Duopack 30 ans
   { cat:'booster8',    cost:14  },   // Booster 30 ans
-  { cat:'alternative', cost:1.82 },   // Zone Safari (ou carte promo/jumbo 30 ans issue des coffrets ouverts)
+  { cat:'alternative', cost:0 },
   { cat:'commune',     cost:0 },
 ];
 const LADDER_IDX = {};
@@ -7896,21 +8012,21 @@ const OUTCOME_BATCH_KEY = 'pika_outcome_batch_live' + PIKA_LIVE;
    Chance et Caisse Communautaire ne sont pas des lots : ce sont des
    détours (une carte pipée) qui amènent sur la case du lot. */
 const POUCH = [
-  /* Plan de l'animateur (27/09) — LIVE 1, 210 coups, pochette assumée. */
-  { cat:'jackpot300',  n:1  },   // ETB 30 ans
-  { cat:'etb',         n:1   },   // Coffret 30 ans (gagné entier)
-  { cat:'booster50',   n:2   },   // Tripack 30 ans (gagnés entiers)
-  { cat:'gradee',      n:1   },   // Duopack 30 ans
-  { cat:'booster8',    n:31  },   // Booster 30 ans à l'unité
-  { cat:'alternative', n:73  },   // Lot Mystère (47 EX + 26 boosters japonais)
-  { cat:'parc',        n:8   },   // Parc gratuit (promos des coffrets/tripacks ouverts)
-  { cat:'prison',      n:9   },   // Prison (carte commune de consolation)
-  { cat:'commune',     n:84  },   // Carte commune (30/09 : 84, Prison 9, Parc 8)
+  /* PIKAPOLY VIP — 130 coups à 29 €, uniquement des lots 30 ans (30/09). */
+  { cat:'jackpot300',  n:2   },   // ETB 30 ans (entre le 99e et le 130e coup)
+  { cat:'etb',         n:4   },   // Coffret 30 ans (02/10 : 5 -> 4)
+  { cat:'booster50',   n:3   },   // Tripack 30 ans (02/10 : 4 -> 3)
+  { cat:'gradee',      n:2   },   // Duopack 30 ans
+  { cat:'booster8',    n:110 },   // Booster 30 ans
+  { cat:'alternative', n:0   },
+  { cat:'parc',        n:4   },   // Parc gratuit (promos) (02/10 : 3 -> 4)
+  { cat:'prison',      n:5   },   // Prison (carte commune offerte) (02/10 : 4 -> 5)
+  { cat:'commune',     n:0   },
 ];
 const POUCH_SIZE = POUCH.reduce((s,r)=>s+r.n, 0);
 const TAILLE_POCHETTE = (window.__PIKA_MODE==='vip') ? 130 : 210;   // 30/09 : Golden = 130 coups
 if(POUCH_SIZE !== TAILLE_POCHETTE) throw new Error('POUCH : '+POUCH_SIZE+' coups au lieu de '+TAILLE_POCHETTE);
-const MYSTERY_MIX = { carte:47, booster:26 };   // carte = Mystère EX, booster = booster japonais
+const MYSTERY_MIX = { carte:0, booster:0 };   // carte = Mystère EX, booster = booster japonais
 if(MYSTERY_MIX.carte + MYSTERY_MIX.booster !== POUCH.find(r=>r.cat==='alternative').n)
   throw new Error('MYSTERY_MIX ne correspond pas au nombre de Lots Mystère');
 const OUTCOME_BATCH_SIZE = POUCH_SIZE;
@@ -7930,7 +8046,7 @@ const OUTCOME_BATCH_SIZE = POUCH_SIZE;
   centerPlate.material.needsUpdate = true;
   if(old) old.dispose();
 }
-const OUTCOME_COST = { prison: 0.68, parc: 0 };   // Parc gratuit : promos issues des produits ouverts, déjà payées
+const OUTCOME_COST = { prison: 0, parc: 0 };   // Parc gratuit : promos issues des produits ouverts, déjà payées
 PAYOUT_LADDER.forEach(t=>{ OUTCOME_COST[t.cat] = t.cost; });
 
 
@@ -8020,7 +8136,7 @@ function pinFixes(b, pos){
    collé à un autre, et le coup juste avant est toujours un Lot Mystère ou
    une Carte commune. Lots Mystère et Prison étalés régulièrement, le reste
    en Cartes communes. */
-const GROS_LOTS = new Set(['booster8','gradee','booster50','etb','jackpot300','parc']);
+const GROS_LOTS = new Set(['gradee','booster50','etb','jackpot300','parc','prison']);   // VIP : jamais deux « spéciaux » collés
 /* ---------- POCHETTE ALÉATOIRE ET RÉPARTIE (29/09, l'animateur) ----------
    À CHAQUE nouvelle pochette, tout est retiré au sort :
      • ETB : uniquement entre le 160e et le 210e coup (si plusieurs ETB,
@@ -8079,6 +8195,10 @@ function buildPouch(rep){ const POUCH = pouchAjustee(rep);
     if(!ok) continue;
     for(let i=0;i<N;i++) if(arr[i]===null) arr[i] = FILL;
     for(const r of POUCH){ if(arr.filter(c=>c===r.cat).length !== r.n){ ok = false; break; } }
+    /* 03/10 : panachage par tranche de 10 coups — au moins un lot autre qu'un booster
+       dans chaque tranche, et jamais plus de 14 boosters d'affilée. */
+    if(ok){ for(let t0=0;t0<N && ok;t0+=10){ let n=0; for(let i=t0;i<Math.min(N,t0+10);i++) if(arr[i]!==FILL) n++; if(!n) ok = false; } }
+    if(ok){ let run=0; for(let i=0;i<N;i++){ run = arr[i]===FILL ? run+1 : 0; if(run>14){ ok = false; break; } } }
     if(ok) return arr;
   }
   throw new Error('buildPouch : plan impossible à placer');
@@ -8094,7 +8214,7 @@ function buildMysteryQueue(){
 /* Version de la file. Une file laissée en mémoire du navigateur par une
    version précédente du jeu (autre recette, autre ordonnancement) n'a
    pas les mêmes garanties : elle est reconstruite. */
-const OUTCOME_BATCH_VERSION = 'v31-alea-210';   // nouvelle répartition (25/09) : pochette reconstruite
+const OUTCOME_BATCH_VERSION = 'vip-v33-regles-130';   // nouvelle répartition (25/09) : pochette reconstruite
 function loadOutcomeState(){
   try{
     const raw = safeGetItem(OUTCOME_BATCH_KEY);
@@ -8931,7 +9051,7 @@ async function move(forcedCount, forcedCard){
     placeTokenInstant(destIdx);
     setActive(destIdx);
   }
-  if(currentIndex===LAST){
+  if(false && currentIndex===LAST){   // 03/10 : l'ETB se garde ou se refuse comme les autres lots
     statusEl.textContent = '🏆 Arrivé à '+placeLabel(LAST)+' — JACKPOT FINAL !';
     finished = true;
   } else {
@@ -9044,7 +9164,7 @@ async function resolveChanceChest(myGen, forcedCard){
       placeTokenInstant(expectedIdx);
       setActive(expectedIdx);
     }
-    if(currentIndex===LAST){
+    if(false && currentIndex===LAST){   // 03/10 : pas de fin automatique sur l'ETB
       statusEl.textContent = '🏆 Arrivé à '+placeLabel(LAST)+' — JACKPOT FINAL !';
       finished = true;
     } else {
@@ -9081,6 +9201,7 @@ function restart(){
   pendingOutcome = null;
   forcedGame = false;
   plannedCardDelta = null;
+  gPlan = null; gRefus = false;
   walk = null;
   currentIndex = -1;
   player.root.scale.set(1,1,1);
@@ -9113,6 +9234,138 @@ function startGame(){
   broadcastSync({type:'start'});
 }
 
+/* ---------- RÈGLES DU PLATEAU GOLDEN (03/10, l'animateur) ----------
+   C'est la pochette qui commande : le lot de la partie est tiré d'abord,
+   puis on fabrique une suite de lancers plausible et variée pour y amener
+   le pion.
+     • Le lot prévu tombe à un lancer tiré au sort, avec TOUJOURS au moins
+       un lancer derrière (jamais au dernier) : le joueur peut garder ou
+       refuser et relancer. Les gros lots, loin sur le plateau, arrivent
+       mécaniquement plus tard (il faut des doubles : 2 doubles = 5
+       lancers, le gros lot peut tomber au 4e).
+     • Gardé : il est retiré de la pochette.
+     • Refusé (relance sur la case du lot) : le joueur ne peut plus tomber
+       que sur des boosters jusqu'à la fin de ses lancers ; le lot refusé
+       repart dans la pochette 2 à 15 coups plus loin (jamais au coup
+       suivant) et un booster de la pochette est pris à sa place.
+     • En chemin, seulement des cases de valeur inférieure ou égale au lot
+       prévu (boosters, Parc gratuit au rythme du stock) et Chance/Caisse.
+       Exception très rare : arrêt sur un autre lot prévu de la série
+       (échange dans la pochette si le joueur le garde).
+     • Prison et Parc gratuit sont moins chers qu'un booster : pour eux, les
+       arrêts en chemin restent des boosters (aucun autre chemin possible). */
+const G_VAL = { prison:0, parc:1, booster8:2, gradee:3, booster50:4, etb:5, jackpot300:6 };
+const G_EXC_P = 0.04;                       // exception : autre lot de la série en chemin
+const G_K_POIDS = {1:1, 2:1, 3:1, 4:0.45, 5:0.12};   // lancer d'arrivée du lot (les longs demandent des doubles)
+const G_OPTS = (()=>{ const L = [], W = {2:1,3:2,4:3,5:4,6:5,7:6,8:5,9:4,10:3,11:2,12:1};   // poids de deux vrais dés
+  for(let t=2;t<=12;t++){
+    if(t===2 || t===12){ L.push({t, dbl:true, w:1}); continue; }
+    if(t%2===0){ L.push({t, dbl:false, w:W[t]-1}); L.push({t, dbl:true, w:1}); }
+    else L.push({t, dbl:false, w:W[t]});
+  }
+  return L; })();
+let gPlan = null, gRefus = false;
+function gOrdre(pos, k){
+  // ordre aléatoire pondéré par de vrais dés et par la mémoire des derniers chemins
+  return G_OPTS.map(o=>{
+    let w = Math.pow(o.w, 0.8);
+    const j = landingIndex(pos, o.t);
+    let n = 0; for(const p of pathMemory) if(p[k] === j) n++;
+    w *= Math.pow(0.35, n);
+    return { o, key: Math.pow(Math.random(), 1/w) };
+  }).sort((a,b)=>b.key-a.key).map(x=>x.o);
+}
+function gArret(idx, target, exc, excDone){
+  if(idx <= 0) return null;
+  const T = tiles[idx]; if(T.isVisite) return null;
+  const c = T.catKey;
+  if(c === 'booster8') return target !== 'booster8' ? 'stop' : null;
+  if(c === 'parc') return (target !== 'parc' && passageAuRythme('parc')) ? 'stop' : null;
+  if(exc && !excDone && c === exc) return 'exc';
+  return null;
+}
+function gChercher(pos, i, allowed, K, target, exc, excDone, budget, memo){
+  if(budget.n-- <= 0) return null;
+  const key = pos+':'+i+':'+allowed+':'+excDone;
+  if(memo.has(key)) return null;
+  const last = (i+1 === K);
+  for(const o of gOrdre(pos, i)){
+    const allowed2 = allowed + (o.dbl ? 1 : 0);
+    const idx = landingIndex(pos, o.t), c = tiles[idx].catKey;
+    let cands;
+    if(c === 'chance' || c === 'chest'){
+      cands = [];
+      for(const d of shuffleInPlace(CARD_DELTAS.slice())){
+        const j = landingIndex(idx, d);
+        if(j > 0 && tiles[j].catKey !== 'chance' && tiles[j].catKey !== 'chest') cands.push({ j, d });
+      }
+    } else cands = [{ j: idx, d: null }];
+    for(const cd of cands){
+      const j = cd.j, cj = tiles[j].catKey;
+      if(last){
+        if((!exc || excDone) && j > 0 && cj === target && !tiles[j].isVisite && (i+1) < allowed2)
+          return [{ t:o.t, dbl:o.dbl, d:cd.d, j, offre: target }];
+        continue;
+      }
+      const a = gArret(j, target, exc, excDone);
+      if(!a) continue;
+      const sub = gChercher(j, i+1, allowed2, K, target, exc, excDone || a === 'exc', budget, memo);
+      if(sub) return [{ t:o.t, dbl:o.dbl, d:cd.d, j, offre: a === 'exc' ? exc : null }, ...sub];
+    }
+  }
+  memo.add(key);
+  return null;
+}
+function gPlanifier(target){
+  if(G_VAL[target] === undefined) return null;
+  const b = outcomeState.batch, pos = outcomeState.pos;
+  let exc = null;
+  if(G_VAL[target] >= 4 && Math.random() < G_EXC_P){
+    const poss = ['gradee','booster50','etb'].filter(x=>G_VAL[x] < G_VAL[target] && b.indexOf(x, pos) >= 0);
+    if(poss.length) exc = poss[Math.floor(Math.random()*poss.length)];
+  }
+  const Ks = Object.keys(G_K_POIDS).map(Number)
+    .map(K=>({ K, key: Math.pow(Math.random(), 1/G_K_POIDS[K]) })).sort((x,y)=>y.key-x.key).map(x=>x.K);
+  for(const e of (exc ? [exc, null] : [null])){
+    for(const K of Ks){
+      if(e && K < 2) continue;
+      const steps = gChercher(-1, 0, 3, K, target, e, false, { n: 4000 }, new Set());
+      if(steps) return { steps, K, exc: e };
+    }
+  }
+  return null;   // repli : ancien planificateur
+}
+/* Place de retour d'un lot dans la pochette : 2 à 15 coups plus loin,
+   jamais au coup suivant (index pos = prochain coup). */
+function gPlaceRetour(b, pos){
+  if(b.length < pos + 1) return b.length;
+  const hi = Math.min(b.length, pos + 14);
+  return pos + 1 + Math.floor(Math.random() * (hi - pos));
+}
+function gRefuser(){
+  gRefus = true;
+  const T = pendingOutcome;
+  if(!T || T === 'booster8') return;
+  const st = outcomeState, b = st.batch, pos = st.pos;
+  let j = -1; for(let q=pos;q<b.length;q++) if(b[q] === 'booster8'){ j = q; break; }
+  if(j >= 0 && b.length - pos >= 2){
+    b.splice(j, 1);
+    b.splice(gPlaceRetour(b, pos), 0, T);
+  } else {
+    (st.report = st.report || []).push(T);   // fin de série : le lot passe dans la pochette suivante
+  }
+  if(pos > 0) b[pos-1] = 'booster8';         // ce coup donne un booster
+  pendingOutcome = 'booster8';
+  saveOutcomeState();
+  updateCue();
+}
+function gBoosterSeul(pos){
+  const L = G_OPTS.filter(o=>{ const j = landingIndex(pos, o.t); return j > 0 && tiles[j].catKey === 'booster8' && !tiles[j].isVisite; });
+  if(!L.length) return null;
+  const o = gOrdre(pos, curGameTotals.length).find(x=>L.includes(x));
+  return { total: o.t, onTarget: true, wantDouble: o.dbl, cardDelta: null };
+}
+
 async function drawAndMove(){
   if(moving || finished || rollsUsed>=rollsAllowed || drawInProgress) return;
   drawInProgress = true;
@@ -9125,6 +9378,8 @@ async function drawAndMove(){
     saveTotals();
     // Le lot de cette mise est décidé maintenant, tiré de la pochette
     pendingOutcome = nextPredeterminedOutcome();
+    gRefus = false;
+    gPlan = (!forcedGame && pendingOutcome) ? gPlanifier(pendingOutcome) : null;
     updateCue();
   }
   // On continue plutôt que de garder le lot affiché : l'aperçu (ou le
@@ -9141,12 +9396,22 @@ async function drawAndMove(){
   /* 28/09 — POCHETTE ANNONCÉE + 3 LANCERS : le lot est tiré dans la pochette
      (affiché à l’écran et dans les règles), les lancers amènent le pion jusqu’à lui. */
   /* 29/09 : le lot n'est plus annoncé avant l'arrivée (spoiler) */
-  let plan = planTotal(currentIndex, rollsAllowed - rollsUsed, pendingOutcome);
+  let plan = null;
+  if(!forcedGame && pendingOutcome){
+    // 03/10 : relancer alors que le pion est sur le lot proposé = REFUS
+    if(gPlan && !gRefus && rollsUsed > 0){
+      const st = gPlan.steps[rollsUsed-1];
+      if(st && st.offre && currentIndex === st.j && tiles[currentIndex].catKey === st.offre) gRefuser();
+    }
+    if(gRefus) plan = gBoosterSeul(currentIndex);
+    else if(gPlan && gPlan.steps[rollsUsed]){ const sp = gPlan.steps[rollsUsed]; plan = { total: sp.t, onTarget: !!sp.offre, wantDouble: sp.dbl, cardDelta: sp.d }; }
+  }
+  if(!plan) plan = planTotal(currentIndex, rollsAllowed - rollsUsed, pendingOutcome);
   if(!plan && pendingOutcome && !forcedGame){
     const sur = [];
     for(let t=3;t<=11;t++){
       const c = tiles[landingIndex(currentIndex, t)].catKey;
-      if(c==='commune' || c==='alternative' || (c===pendingOutcome && rollsAllowed - rollsUsed <= 1)) sur.push(t);
+      if(c==='booster8' || (c===pendingOutcome && rollsAllowed - rollsUsed <= 1)) sur.push(t);
     }
     if(sur.length){
       const t = sur[Math.floor(Math.random()*sur.length)];
@@ -9258,35 +9523,11 @@ function passageAuRythme(cat){
   return reste - 1 >= attendu - 1;                          // en garder un ne met pas ce lot en avance
 }
 function landable(idx, targetCat){
-  if(idx===0) return false;                 // Départ : jamais de lot
-  const cat = tiles[idx].catKey;
-  // Prison (fin de partie), Chance et Caisse (détours) : jamais comme arrêt
-  // de passage (elles passent par leur carte, voir viaChance)
-  if(cat==='prison' || cat==='chance' || cat==='chest') return false;
-  /* 26/09 (l'animateur) : un produit 30 ans (booster, duopack, tripack, coffret,
-     ETB) n'est JAMAIS une case d'arrêt en cours de route, même quand c'est le
-     lot prévu : le pion ne s'y pose qu'au tout dernier lancer. */
-  if(LOTS_30_ANS.has(cat)) return false;
-  /* 26/09, l'animateur : JAMAIS d'arrêt de passage sur une case du lot visé :
-     le pion ne s'y pose qu'au tout dernier lancer. */
-  if(cat===targetCat) return false;
-  /* pochette exacte : s'arrêter ici doit correspondre à un lot encore en
-     stock — SAUF la commune, qui reste toujours une case de passage. Audit
-     23/09 : sans communes en stock (fin de pochette), plus aucun chemin
-     n'existait vers le lot prévu, le pion tombait sur une mauvaise case et
-     la pochette dépassait 245 coups. Garder une commune qui n'est plus en
-     stock est refusé à la touche D (claimCurrentLot). */
-  if(cat !== 'commune' && !passageAuRythme(cat)) return false;
-  const c = OUTCOME_COST[cat];
-  if(c===undefined) return false;
-  /* En cours de route : tous les PETITS lots (commune, Caisse, Lot
-     Mystère, booster), qu'ils valent plus ou moins que le lot prévu. Le
-     pion peut ainsi passer par un Lot Mystère que le joueur refuse pour
-     tenter mieux, puis finir sur une Caisse. S'il le garde, l'échange dans
-     la pochette (claimCurrentLot) tient les quantités. Jamais un produit
-     scellé (duopack et au-dessus) en passage : ceux-là ne tombent que
-     quand la pochette les a prévus. */
-  return c <= INTERMEDIATE_MAX_COST;
+  /* VIP (29/09, l'animateur) : en cours de route, le pion ne s'arrête QUE sur
+     des cases Booster ; le lot prévu n'arrive qu'au dernier lancer. */
+  if(idx===0) return false;
+  const c = tiles[idx].catKey;   // 29/09 : Boosters ou Parc gratuit (au rythme du stock) ; Prison jamais en chemin (fin de partie)
+  return (c==='booster8' && !tiles[idx].isVisite) || (c==='parc' && passageAuRythme('parc'));
 }
 /* Peut-on poser le pion sur une case du lot visé EXACTEMENT au dernier
    des k lancers restants, en ne posant que des cases neutres avant ?
@@ -9413,7 +9654,7 @@ function planTotal(pos, rollsLeft, targetCat){
     /* Cases de passage : d'abord celles dont le lot est encore EN STOCK. Une
        commune épuisée n'est prise que s'il n'y a pas d'autre chemin (fin de
        pochette) — sinon « garder » y était souvent refusé (audit 2). */
-    const enStock = t => { const c = tiles[landingIndex(pos,t)].catKey; return c === targetCat || passageAuRythme(c); };
+    const enStock = t => { const c = tiles[landingIndex(pos,t)].catKey; return c === targetCat || c === 'booster8' || passageAuRythme(c); };   // Golden : les boosters restent la case de passage normale
     { const a = single.filter(enStock); if(a.length) single.splice(0, single.length, ...a); }
     { const a = double.filter(enStock); if(a.length) double.splice(0, double.length, ...a); }
     /* 25/09 (en direct) : un lot à partir du booster ne se montre JAMAIS en
@@ -9426,7 +9667,7 @@ function planTotal(pos, rollsLeft, targetCat){
       for(let t=3;t<=11;t++){ const idx = landingIndex(pos, t); if(idx!==0 && tiles[idx].catKey==='prison') pr.push(t); }
       if(pr.length && Math.random() < 1/Math.max(1, rollsLeft-1)) return { total: pickWeightedTotal(pr, pos), onTarget: true, wantDouble: false };
     }
-    const earlyOk = (targetCat === 'commune' || targetCat === 'alternative');
+    const earlyOk = (targetCat === 'commune' || targetCat === 'alternative' || targetCat === 'booster8');
     if(!earlyOk) early.length = 0;
     if(early.length && Math.random() < EARLY_LANDING_P) return { total: pickWeightedTotal(early, pos), onTarget: true, wantDouble: false };
     // un double à la fréquence de vrais dés (1 sur 6), sauf s'il est le seul chemin
@@ -9475,7 +9716,7 @@ function planTotal(pos, rollsLeft, targetCat){
   }
   // repli : une commune (jamais Chance, Prison ni Départ)
   const neutral = [];
-  for(let t=2;t<=12;t++){ const idx = landingIndex(pos,t); if(idx!==0 && tiles[idx].catKey==='commune') neutral.push(t); }
+  for(let t=2;t<=12;t++){ const idx = landingIndex(pos,t); if(idx!==0 && tiles[idx].catKey==='booster8' && !tiles[idx].isVisite) neutral.push(t); }
   // 2 et 12 sont forcément des doubles (lancer de plus) : évités s'il y a mieux
   { const a = neutral.filter(t=>t!==2 && t!==12); if(a.length) neutral.splice(0, neutral.length, ...a); }
   if(!pouchHas('commune')){
@@ -9489,7 +9730,7 @@ function planTotal(pos, rollsLeft, targetCat){
        Se poser DÉJÀ sur la case du lot prévu, plutôt que sur une commune
        qui n'existe plus : si le joueur la garde, c'est le bon lot. */
     const surCible = [];
-    if(targetCat === 'commune' || targetCat === 'alternative') for(let t=3;t<=11;t++){ const idx = landingIndex(pos,t); if(idx!==0 && tiles[idx].catKey===targetCat) surCible.push(t); }
+    if(targetCat === 'commune' || targetCat === 'alternative' || targetCat === 'booster8') for(let t=3;t<=11;t++){ const idx = landingIndex(pos,t); if(idx!==0 && tiles[idx].catKey===targetCat) surCible.push(t); }
     if(surCible.length) return { total: pickWeightedTotal(surCible, pos), onTarget: true, wantDouble: false };
   }
   if(neutral.length) return { total: pickWeightedTotal(neutral, pos), onTarget: false, wantDouble: false };
@@ -9554,7 +9795,7 @@ async function claimCurrentLot(){
     for(let q=pos;q<b.length;q++) if(b[q]===realCat){ j = q; break; }
     if(j >= 0){
       b.splice(j, 1);
-      const at = pos;
+      const at = gPlaceRetour(b, pos);   // 03/10 : 2 à 15 coups plus loin, jamais au coup suivant
       b.splice(at, 0, pendingOutcome);
       pinFixes(b, pos);
       swap = { removedAt: j, insertedAt: at, kept: realCat, pending: pendingOutcome };
