@@ -70,14 +70,24 @@ lots), `assets/cases/` (illustrations des cases), `assets/bg/` (fond),
 - Un lot annoncé ne s'efface jamais tout seul : seulement B, C ou D.
 - Le lot affiché est toujours celui de la case où le pion est posé.
 - Les touches X / Y / Z n'affichent **rien** à l'écran.
-- Le plafond de reversement est tenu à chaque partie ; une recette qui le dépasse
-  empêche la page de se charger.
+- Pochette exacte : chaque lot sort exactement le nombre de fois prévu.
+- ETB, Coffret et Tripack ne tombent que s'ils ont été armés (X / Y / Z).
 - L'image doit rester juste en télé pivotée (`html.rotated`, `fitCelebToBoard`).
 - Le jeu doit rester fluide sur la machine de diffusion : garder un mode éco
   (`setEcoMode`) à côté de tout rendu haute définition.
-- Aucun modèle 3D, image, vidéo ou son extrait des jeux ou de l'anime officiels :
-  ce dossier est présenté au détenteur de la licence. Créations originales, ou
-  contenus dont la licence est claire.
+- Pokémon (décision de l'animateur, 07/10) : la démo sert à demander la licence ;
+  les vrais Pokémon y apparaissent, l'apparence officielle sert de référence.
+  Les recréer pour le projet plutôt que reprendre des fichiers extraits des jeux
+  ou de l'anime : c'est plus sûr, et plus beau.
+
+## La démo de présentation : dossier `demo/`
+
+La démo se reconstruit **de zéro, dans `demo/`**, sans toucher au jeu en direct
+(`board3d.js`, `board3d_golden.js`, `Nsldkso.html`, `tools/build.py`), que
+l'animateur utilise encore. Le moteur du Golden y est déjà sorti du visuel et testé :
+`demo/moteur/moteur.js`. Le nouveau visuel l'appelle (`tirer`, `garder`, `annuler`,
+`recommencer`, `armer`, `etat`) et met en scène ce qu'il rend. Ne pas réécrire les
+règles : mode d'emploi complet dans `demo/README.md`.
 
 ## Construire et vérifier
 
