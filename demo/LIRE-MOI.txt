@@ -1,0 +1,32 @@
+PIKAPOLY — GOLDEN / ARÈNE CINÉMATIQUE
+
+1. Décompresser le dossier « Pikapoly Golden » sur le Mac ou sur une clé USB.
+2. Ouvrir index.html dans Chrome ou Safari. Aucune connexion n'est nécessaire.
+3. Le Golden et son spectacle démarrent automatiquement. Luffy reste le pion.
+
+Commandes habituelles :
+A : démarrer une partie     B : tirer     D : garder le lot
+C : recommencer            U : annuler le dernier lot gardé
+M : règles                 F : plein écran
+R : pivoter (90°, 270°, puis retour)       G : changer de plateau
+X / Y / Z : armement silencieux habituel des lots
+
+Les boutons au bas du plateau contrôlent uniquement le spectacle :
+pause/reprise, son (coupé au départ), qualité cinéma / mode économie.
+Les combats sont automatiques et ne déterminent jamais un lot.
+
+Pour une présentation sur MacBook Air M1 : commencer en Full HD, brancher
+le chargeur et fermer les onglets inutilisés. Si la cadence est irrégulière,
+utiliser le mode économie. La fluidité doit être vérifiée sur le Mac réel.
+
+Cette démo conserve le moteur de la version actuelle et ses 36 cases.
+Ses sauvegardes sont distinctes de celles des directs (« demo: »).
+Les fichiers du jeu actuel n'ont pas été remplacés.
+
+Écran public : ouvrir une deuxième copie de l'adresse avec ?view=display#vip.
+Les deux fenêtres doivent utiliser le même navigateur. Pour une régie et un
+écran public, un hébergement local ou en ligne garantit une origine commune ;
+le partage de BroadcastChannel entre fichiers locaux dépend du navigateur.
+
+Conserver tout le dossier si de futurs médias locaux y sont ajoutés.
+verification.json donne les empreintes des sources utilisées.
