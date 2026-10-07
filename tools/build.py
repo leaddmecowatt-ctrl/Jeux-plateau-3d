@@ -44,6 +44,10 @@ VENDOR_MODULES = [
     'vendor/three/examples/jsm/shaders/LuminosityHighPassShader.js',
 ]
 ENTRY = 'board3d.js'
+# Plateau Golden (VIP) : même jeu, sa propre pochette, ses réglages et son
+# décor. Chargé à la place de board3d.js quand window.__PIKA_MODE vaut 'vip'
+# (touche G ou bouton ⇄, voir Nsldkso.html).
+ENTRY_VIP = 'board3d_golden.js'
 THREE_CORE = 'vendor/three/three.module.min.js'
 
 # Only real `import ... from '...'` statements — not any string that
@@ -161,11 +165,13 @@ def build(out_path):
     head = re.search(r'<head>.*?</head>', html, re.S).group(0)
     body = re.search(r'<body>(.*)</body>', html, re.S).group(1)
     entry_js = load(ENTRY)
+    vip_js = load(ENTRY_VIP)
 
     # ---- inline every ./assets/... image (and 3D model) as a data URI,
     # wherever it's referenced (HTML, CSS or JS) ----
     asset_paths = set(re.findall(r"\./assets/[A-Za-z0-9_/.\-]+\.(?:jpg|jpeg|png|webp|glb)", html))
     asset_paths |= set(re.findall(r"\./assets/[A-Za-z0-9_/.\-]+\.(?:jpg|jpeg|png|webp|glb)", entry_js))
+    asset_paths |= set(re.findall(r"\./assets/[A-Za-z0-9_/.\-]+\.(?:jpg|jpeg|png|webp|glb)", vip_js))
     data_uris = {}
     glb_b64 = {}
     for p in asset_paths:
@@ -225,9 +231,10 @@ def build(out_path):
     head = inline_css(head)
     body = inline_js(inline_html(inline_css(body)))
     entry_js = inline_js(entry_js)
+    vip_js = inline_js(vip_js)
     # aucune référence ne doit rester sous une forme non prévue
     for p in data_uris:
-        for name, text in (('head', head), ('body', body), ('board3d.js', entry_js)):
+        for name, text in (('head', head), ('body', body), ('board3d.js', entry_js), (ENTRY_VIP, vip_js)):
             rest = text.count(p) - text.count('__ASSETS[' + json.dumps(p) + ']') - text.count('data-asset="%s"' % p)
             if rest:
                 raise SystemExit('build.py: référence non gérée à %s dans %s (x%d)' % (p, name, rest))
@@ -248,6 +255,7 @@ def build(out_path):
 
     # ---- resolve every module's own imports to blob-token placeholders ----
     entry_js = rewrite_imports(entry_js, ENTRY)
+    vip_js = rewrite_imports(vip_js, ENTRY_VIP)
     module_src = {THREE_CORE: load(THREE_CORE)}  # three.module.min.js has no imports of its own
     for p in VENDOR_MODULES:
         module_src[p] = rewrite_imports(load(p), p)
@@ -277,6 +285,17 @@ def build(out_path):
 
     bundle_sources = {PATH_TO_TOKEN[p]: module_src[p] for p in order}
     bundle_sources['__ENTRY__'] = entry_js
+    # Le Golden ne voyage pas en entier (le fichier dépasserait la limite de
+    # 16 Mo d'un artifact) : seulement les blocs de lignes qui diffèrent du
+    # classique, réappliqués au chargement. [début, fin, lignes de remplacement]
+    import difflib
+    la, lb = entry_js.split('\n'), vip_js.split('\n')
+    vip_ops = [[i1, i2, lb[j1:j2]] for tag, i1, i2, j1, j2 in
+               difflib.SequenceMatcher(None, la, lb, autojunk=False).get_opcodes() if tag != 'equal']
+    rebuilt = list(la)
+    for i1, i2, rl in reversed(vip_ops): rebuilt[i1:i2] = rl
+    assert rebuilt == lb, 'build.py: différences du plateau Golden mal reconstruites'
+    bundle_sources['__VIP_OPS__'] = vip_ops
     load_order = [PATH_TO_TOKEN[p] for p in order] + ['__ENTRY__']
 
     bootstrap_lines = [
@@ -295,6 +314,21 @@ def build(out_path):
         "  }",
     ]
     for tok in load_order:
+        if tok == '__ENTRY__':
+            # Plateau Golden : sa pochette, son écran public et son stockage
+            # (préfixe « vip: », voir __plsVip) restent SÉPARÉS du classique.
+            bootstrap_lines += [
+                "  if(window.__PIKA_MODE==='vip'){",
+                "    // plateau Golden : pochette, réglages et écran public SÉPARÉS du classique",
+                "    var L = SRC.__ENTRY__.split('\\n'), ops = SRC.__VIP_OPS__;",
+                "    for(var k=ops.length-1;k>=0;k--){ var o=ops[k]; Array.prototype.splice.apply(L,[o[0],o[1]-o[0]].concat(o[2])); }",
+                "    var c = L.join('\\n');",
+                "    c = c.split(\"'pikapoly/pochette'\").join(\"'pikapoly/pochette_vip'\");",
+                "    c = c.split(\"'pikajackpot-sync'\").join(\"'pikajackpot-sync-vip'\");",
+                "    c = c.split('localStorage.').join('__plsVip.');",
+                "    SRC.__ENTRY__ = c;",
+                "  }",
+            ]
         bootstrap_lines.append(f"  blobify('{tok}');")
     bootstrap_lines += [
         "  var s = document.createElement('script');",
