@@ -56,49 +56,35 @@ jobs:
               { const r = new THREE.Mesh(new THREE.TorusGeometry(0.43, 0.035, 16, 72), orSombre); r.rotation.x = Math.PI/2; sph.add(r); }
               { const b = new THREE.Mesh(new THREE.SphereGeometry(0.1, 24, 16), new THREE.MeshStandardMaterial({ color:0xfff6c9, emissive:0xffe27a, emissiveIntensity:1.6 })); b.position.set(0, 0, 0.4); sph.add(b); }"""
           # Conserver l'indentation originale : bloc ciblé et strict.
-          new = """    // Hyper Ball fidèle : coque noire supérieure, blanc nacré inférieur,
-              // deux larges bandes jaune-or, joint équatorial et bouton argent.
+          new = """    // Master Ball premium : violet, pastilles fuchsia et M blanc.
               const sph = new THREE.Group();
-              const noir = new THREE.MeshPhysicalMaterial({color:0x17191f, metalness:0.36, roughness:0.22, clearcoat:0.95, clearcoatRoughness:0.12});
-              const jaune = new THREE.MeshPhysicalMaterial({color:0xffd54a, metalness:0.53, roughness:0.23, clearcoat:0.75});
-              const blanc = new THREE.MeshPhysicalMaterial({color:0xf5f5fc, metalness:0.18, roughness:0.25, clearcoat:0.8});
-              const joint = new THREE.MeshStandardMaterial({color:0x26272e, metalness:0.46, roughness:0.29});
-              const argent = new THREE.MeshStandardMaterial({color:0xdde2eb, metalness:0.65, roughness:0.22});
-              const centre = new THREE.MeshStandardMaterial({color:0xaab3c5, metalness:0.5, roughness:0.29});
-              // Les deux hémisphères se rejoignent à l'équateur horizontal.
-              sph.add(new THREE.Mesh(new THREE.SphereGeometry(0.42, 64, 40, 0, Math.PI*2, 0, Math.PI/2), noir));
+              const violet = new THREE.MeshPhysicalMaterial({color:0x6536a9, metalness:0.22, roughness:0.26, clearcoat:0.95, clearcoatRoughness:0.13});
+              const rose = new THREE.MeshPhysicalMaterial({color:0xec3f94, metalness:0.20, roughness:0.27, clearcoat:0.9});
+              const blanc = new THREE.MeshPhysicalMaterial({color:0xf8f6ff, metalness:0.12, roughness:0.27, clearcoat:0.75});
+              const joint = new THREE.MeshStandardMaterial({color:0x17131f, metalness:0.35, roughness:0.33});
+              const argent = new THREE.MeshStandardMaterial({color:0xe5e6f0, metalness:0.5, roughness:0.26});
+              sph.add(new THREE.Mesh(new THREE.SphereGeometry(0.42, 64, 40, 0, Math.PI*2, 0, Math.PI/2), violet));
               sph.add(new THREE.Mesh(new THREE.SphereGeometry(0.42, 64, 40, 0, Math.PI*2, Math.PI/2, Math.PI/2), blanc));
-              // Hyper Ball : deux rubans jaunes larges et continus, de
-              // l'équateur avant jusqu'à l'équateur arrière, par le sommet.
-              // Sur SphereGeometry, phi=PI/2 est la face avant (+Z).
-              // Deux portions avant + leurs prolongements arrière se rejoignent
-              // sans interruption au pôle nord. Pas de petits chevrons collés.
-              const largeurRuban = 0.49;
-              for (const axe of [0.92, 2.22]) {
-                for (const phi of [axe - largeurRuban/2, axe + Math.PI - largeurRuban/2]) {
-                  sph.add(new THREE.Mesh(
-                    new THREE.SphereGeometry(0.429, 36, 40, phi, largeurRuban, 0, Math.PI/2),
-                    jaune
-                  ));
-                }
+              // Pastilles rose fuchsia symétriques sur les épaules supérieures.
+              for (const phi of [0.25, Math.PI-0.85]) {
+                sph.add(new THREE.Mesh(new THREE.SphereGeometry(0.428, 32, 20, phi, 0.60, 0.25, 0.63), rose));
               }
-              // Liaison jaune visible sur le haut, pour retrouver le motif
-              // continu de la référence, même lorsque la boule tourne.
-              sph.add(new THREE.Mesh(
-                new THREE.SphereGeometry(0.430, 72, 12, 0, Math.PI*2, 0, 0.18),
-                jaune
-              ));
-              const ceinture = new THREE.Mesh(new THREE.TorusGeometry(0.424, 0.027, 12, 80), joint);
+              // Grand M blanc sur l'avant (+Z), en ruban 3D sur la sphère.
+              const mPts = [
+                [-0.19,0.14],[-0.12,0.30],[-0.01,0.19],[0.08,0.30],[0.18,0.14]
+              ];
+              const m3 = mPts.map(([x,y]) => new THREE.Vector3(x,y,Math.sqrt(Math.max(0.001,0.432*0.432-x*x-y*y))));
+              sph.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(m3), 32, 0.025, 8, false), blanc));
+              const ceinture = new THREE.Mesh(new THREE.TorusGeometry(0.423, 0.030, 12, 80), joint);
               ceinture.rotation.x = Math.PI/2; sph.add(ceinture);
-              // Bouton frontal orienté vers la caméra, lisible à petite échelle.
               const bouton = new THREE.Group();
-              bouton.position.set(0, 0, 0.428);
-              const base = new THREE.Mesh(new THREE.CylinderGeometry(0.125, 0.125, 0.045, 36), joint);
+              bouton.position.z = 0.43;
+              const base = new THREE.Mesh(new THREE.CylinderGeometry(0.126,0.126,0.045,40), joint);
               base.rotation.x = Math.PI/2; bouton.add(base);
-              const anneau = new THREE.Mesh(new THREE.TorusGeometry(0.091, 0.022, 12, 48), argent);
-              anneau.position.z = 0.03; bouton.add(anneau);
-              const disque = new THREE.Mesh(new THREE.CircleGeometry(0.069, 40), centre);
-              disque.position.z = 0.034; bouton.add(disque);
+              const anneau = new THREE.Mesh(new THREE.TorusGeometry(0.091,0.022,12,48), argent);
+              anneau.position.z = 0.030; bouton.add(anneau);
+              const disque = new THREE.Mesh(new THREE.CircleGeometry(0.069,40), blanc);
+              disque.position.z = 0.035; bouton.add(disque);
               sph.add(bouton);"""
           if s.count(old) != 1:
               raise SystemExit("Le bloc des quatre sphères a changé : arrêt sans modification")
