@@ -59,33 +59,24 @@ jobs:
           new = """    // Master Ball premium : violet, pastilles fuchsia et M blanc.
               const sph = new THREE.Group();
               const violet = new THREE.MeshPhysicalMaterial({color:0x6536a9, metalness:0.22, roughness:0.26, clearcoat:0.95, clearcoatRoughness:0.13});
-              const rose = new THREE.MeshPhysicalMaterial({color:0xec3f94, metalness:0.20, roughness:0.27, clearcoat:0.9});
+              const rose = new THREE.MeshPhysicalMaterial({color:0xff2399, metalness:0.06, roughness:0.29, clearcoat:0.9});
               const blanc = new THREE.MeshPhysicalMaterial({color:0xf8f6ff, metalness:0.12, roughness:0.27, clearcoat:0.75});
               const joint = new THREE.MeshStandardMaterial({color:0x17131f, metalness:0.35, roughness:0.33});
               const argent = new THREE.MeshStandardMaterial({color:0xe5e6f0, metalness:0.5, roughness:0.26});
               sph.add(new THREE.Mesh(new THREE.SphereGeometry(0.42, 64, 40, 0, Math.PI*2, 0, Math.PI/2), violet));
               sph.add(new THREE.Mesh(new THREE.SphereGeometry(0.42, 64, 40, 0, Math.PI*2, Math.PI/2, Math.PI/2), blanc));
-              // Pastilles latérales de Master Ball : vrais disques ronds
-              // légèrement bombés, posés EN RELIEF sur la coque violette.
-              // Les axes sont sur les épaules gauche/droite et non sur l'avant.
+              // Pastilles fuchsia bombées : calottes qui épousent la sphère,
+              // sans cylindre ni bord en corde. Relief doux et continu.
+              // La sphère UV est construite sur l'axe +Y, puis orientée
+              // vers la normale de l'épaule correspondante.
               for (const sens of [-1, 1]) {
-                const direction = new THREE.Vector3(sens*0.78, 0.49, 0.39).normalize();
-                const pastille = new THREE.Group();
-                pastille.position.copy(direction.clone().multiplyScalar(0.407));
-                pastille.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1), direction);
-                const bord = new THREE.Mesh(
-                  new THREE.CylinderGeometry(0.151, 0.151, 0.026, 48), violet
-                );
-                bord.rotation.x = Math.PI/2;
-                pastille.add(bord);
-                const roseRelief = new THREE.Mesh(
-                  new THREE.SphereGeometry(0.150, 40, 20, 0, Math.PI*2, 0, Math.PI/2),
+                const normale = new THREE.Vector3(sens*0.77, 0.52, 0.36).normalize();
+                const pastille = new THREE.Mesh(
+                  new THREE.SphereGeometry(0.426, 56, 28, 0, Math.PI*2, 0, 0.49),
                   rose
                 );
-                roseRelief.rotation.x = -Math.PI/2;
-                roseRelief.position.z = 0.017;
-                roseRelief.scale.z = 0.22;
-                pastille.add(roseRelief);
+                pastille.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), normale);
+                pastille.position.copy(normale.clone().multiplyScalar(0.012));
                 sph.add(pastille);
               }
               // Grand M blanc sur l'avant (+Z), en ruban 3D sur la sphère.
