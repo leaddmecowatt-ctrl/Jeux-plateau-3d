@@ -8,7 +8,7 @@ jobs:
   construire:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
     steps:
       - name: Récupérer le projet
         uses: actions/checkout@v4
@@ -58,3 +58,25 @@ jobs:
           name: golden-premium-iphone
           path: dist/pikajackpot.html
           retention-days: 14
+      - name: Enregistrer le HTML sur une branche de démonstration
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p /tmp/golden-premium-build
+          cp dist/pikajackpot.html /tmp/golden-premium-build/pikajackpot.html
+          git fetch origin astra/golden-premium-build || true
+          if git show-ref --verify --quiet refs/remotes/origin/astra/golden-premium-build; then
+            git checkout -B astra/golden-premium-build origin/astra/golden-premium-build
+          else
+            git checkout --orphan astra/golden-premium-build
+            git rm -rf --ignore-unmatch .
+          fi
+          mkdir -p dist
+          cp /tmp/golden-premium-build/pikajackpot.html dist/pikajackpot.html
+          git add -f dist/pikajackpot.html
+          git commit -m "Mettre à jour la démonstration Golden Premium" || echo "Aucune modification"
+          git push origin HEAD:refs/heads/astra/golden-premium-build
+          echo "SHA final : $(git rev-parse HEAD)"
