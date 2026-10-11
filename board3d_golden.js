@@ -9259,7 +9259,14 @@ function restart(){
     // On recule la position plutôt que d'insérer une copie : la pochette
     // garde ses 245 coups et le compteur reste juste.
     const st = outcomeState;
-    if(st.pos > 0 && st.batch[st.pos-1] === pendingOutcome) st.pos--;   if(window.__pikaCoupArme === pendingOutcome) lotArmeParTouche = pendingOutcome;   /* 11/10 : coup armé recommencé -> le lot reste armé */
+    /* 11/10 (correctif) : le ré-armement X/Y/Z avait été glissé ENTRE le if et son else ;
+       le else (insertion d'une copie du lot) s'exécutait alors à chaque C sur un coup non armé,
+       en plus du recul de la position : le lot prévu était dupliqué et la pochette s'allongeait
+       (131, 132… coups). Trouvé par le robot de test (C pendant le déplacement du pion). */
+    if(st.pos > 0 && st.batch[st.pos-1] === pendingOutcome){
+      st.pos--;
+      if(window.__pikaCoupArme === pendingOutcome) lotArmeParTouche = pendingOutcome;   /* 11/10 : coup armé recommencé -> le lot reste armé */
+    }
     else st.batch.splice(st.pos, 0, pendingOutcome);
     pinFixes(st.batch, st.pos);
     st.enCours = false;
