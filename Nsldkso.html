@@ -1416,6 +1416,64 @@ html.display-mode .results-ticker{ display:flex }
 @keyframes v4Sheen{ 0%{background-position:190% 0,0 0} 38%{background-position:-90% 0,0 0} 100%{background-position:-90% 0,0 0} }
 @media (prefers-reduced-motion: reduce){ .place-banner.show{ animation:none; } }
 </style>
+
+<style>
+/* GOLDEN WARM POLISH — uniquement Golden, mini-jeu carré conservé */
+html.vip #pikaSwitch{
+  background:linear-gradient(155deg,rgba(75,48,13,.95),rgba(23,16,7,.97) 60%,rgba(64,40,9,.94));
+  border-color:#ffe09a;
+  color:#fff0c5;
+  box-shadow:inset 0 1px 0 rgba(255,245,195,.28),0 3px 12px rgba(25,9,0,.36);
+}
+html.vip .board-wrap::before{
+  background:radial-gradient(ellipse at 50% 67%,rgba(56,26,4,.47),rgba(183,115,23,.18) 39%,transparent 76%);
+}
+html.vip .screen-btns button{
+  color:#fff0c1;
+  background:linear-gradient(180deg,rgba(53,36,15,.90),rgba(20,13,7,.92));
+  border:1px solid #f3ca70;
+  box-shadow:inset 0 1px 0 rgba(255,244,187,.22),0 4px 14px rgba(33,17,5,.36);
+}
+html.vip .screen-btns button:active{background:#604013}
+html.vip .hint3d{
+  color:#ffeac0;
+  background:rgba(33,20,6,.64);
+  border-color:rgba(255,208,121,.48);
+}
+html.vip .celebration .celeb-text{
+  border-color:#ffe09a;
+  background:radial-gradient(ellipse at 50% 0%,rgba(103,65,15,.86),rgba(25,15,7,.95) 72%);
+  box-shadow:inset 0 1px 0 rgba(255,240,185,.4),0 12px 36px rgba(27,12,2,.48),0 0 20px rgba(255,191,70,.18);
+}
+html.vip .card-draw-overlay.show{
+  background:radial-gradient(ellipse at 50% 46%,rgba(52,31,12,.79),rgba(9,7,8,.92) 77%);
+}
+html.vip .results-ticker .ticker-item{
+  border-color:#ffe5a0;
+  box-shadow:0 3px 10px rgba(19,10,2,.48),0 0 8px rgba(255,207,91,.24);
+}
+/* Des lucioles légères dans les marges, jamais sur les cases ni les lots. */
+.golden-firefly{display:none}
+html.vip .golden-firefly{
+  position:absolute;display:block;left:var(--fx);top:var(--fy);
+  width:var(--fs);height:var(--fs);border-radius:50%;opacity:.18;
+  background:radial-gradient(circle,#fff8d6 0%,#ffe18a 28%,rgba(255,175,53,.55) 53%,transparent 78%);
+  box-shadow:0 0 10px rgba(255,201,98,.32);
+  pointer-events:none;will-change:transform,opacity;
+  animation:goldenWarmFloat var(--ft) ease-in-out var(--fd) infinite;
+}
+@keyframes goldenWarmFloat{
+  0%,100%{transform:translate3d(-3px,6px,0) scale(.73);opacity:.09}
+  50%{transform:translate3d(7px,-11px,0) scale(1.12);opacity:.62}
+}
+html.vip:has(#celebration.show) .golden-firefly{
+  box-shadow:0 0 15px rgba(255,210,114,.56);
+}
+html.eco .golden-firefly{display:none}
+@media(prefers-reduced-motion:reduce){
+  .golden-firefly{display:none!important}
+}
+</style>
 </head>
 <body>
 <script>
@@ -1468,6 +1526,15 @@ if(new URLSearchParams(location.search).get('view')==='display'){
          le plateau (z-index sous .board-row, et confinées aux bords
          pour ne jamais passer devant lui). -->
     <div class="bg-fall" aria-hidden="true">
+      <!-- Huit points lumineux discrets, réservés au mode Golden. -->
+      <i class="golden-firefly" style="--fx:3%;--fy:16%;--fs:5px;--ft:12s;--fd:-3s"></i>
+      <i class="golden-firefly" style="--fx:9%;--fy:36%;--fs:8px;--ft:15s;--fd:-8s"></i>
+      <i class="golden-firefly" style="--fx:5%;--fy:72%;--fs:6px;--ft:11s;--fd:-6s"></i>
+      <i class="golden-firefly" style="--fx:12%;--fy:89%;--fs:4px;--ft:13s;--fd:-1s"></i>
+      <i class="golden-firefly" style="--fx:96%;--fy:13%;--fs:6px;--ft:14s;--fd:-9s"></i>
+      <i class="golden-firefly" style="--fx:90%;--fy:32%;--fs:5px;--ft:10s;--fd:-4s"></i>
+      <i class="golden-firefly" style="--fx:94%;--fy:68%;--fs:7px;--ft:16s;--fd:-12s"></i>
+      <i class="golden-firefly" style="--fx:87%;--fy:88%;--fs:4px;--ft:12s;--fd:-2s"></i>
       <div class="fall-star" style="left:4%;width:22px;height:22px;animation-duration:14s;animation-delay:-2s"></div>
       <div class="fall-star" style="left:9%;width:14px;height:14px;animation-duration:17s;animation-delay:-8s"></div>
       <div class="fall-star" style="left:3%;width:17px;height:17px;animation-duration:11s;animation-delay:-5s"></div>
