@@ -28,18 +28,18 @@ jobs:
           debut=s.index("  const COL = { peau:LUFFY_COL.peau")
           fin=s.index("  const OUT_W =",debut)
           s=s[:debut]+"""  // Or métallique différencié, sans modifier le squelette ni les animations.
-          const OR_MASSIF = 0xe9b94c;
-          const OR_NUANCES = { cheveux:0xd79a24, gilet:0xf4c95d, short:0xdca83b,
-            revers:0xffd978, echarpe:0xc78b22, bouton:0xffe69a,
-            semelle:0xb98222, laniere:0xf4c65b, cicatrice:0xc9993a };
+          const OR_MASSIF = 0xf5cf4a;
+          const OR_NUANCES = { cheveux:0xe9c34a, gilet:0xffdf73, short:0xf5cf4a,
+            revers:0xffe27a, echarpe:0xe9c34a, bouton:0xfff4b8,
+            semelle:0xc98f17, laniere:0xffdf73, cicatrice:0xdca72e };
           const COL = Object.fromEntries(Object.keys(parts).map(k=>[k, OR_NUANCES[k] || OR_MASSIF]));
           COL.visage = 0xffffff;
-          const EMI = Object.fromEntries(Object.keys(parts).map(k=>[k, 0x100801]));
+          const EMI = Object.fromEntries(Object.keys(parts).map(k=>[k, 0x251903]));
           EMI.visage = 0x000000;
           """+s[fin:]
-          remplace("visage: new THREE.MeshToonMaterial({ map:faceTex.ouvert, gradientMap:grad }),","visage: new THREE.MeshStandardMaterial({ map:faceTex.ouvert, color:0xf6ce72, metalness:0.72, roughness:0.24, side:THREE.DoubleSide }),")
-          remplace("corps: withEmi(new THREE.MeshToonMaterial({ color:0xffffff, gradientMap:grad, vertexColors:true, side:THREE.DoubleSide })),","corps: withEmi(new THREE.MeshStandardMaterial({ color:0xffffff, metalness:0.93, roughness:0.19, vertexColors:true, side:THREE.DoubleSide })),")
-          remplace("const hm = new THREE.MeshToonMaterial({ color: band ? 0xd01c24 : 0xe8c078, gradientMap:grad, side:THREE.DoubleSide,\n        emissive: band ? 0xa01018 : 0x7a5a16 });","const hm = new THREE.MeshStandardMaterial({ color: band ? 0xb60923 : 0xe9b94c, metalness: band ? 0.36 : 0.84, roughness: band ? 0.32 : 0.23, side:THREE.DoubleSide, emissive: band ? 0x280005 : 0x100801 });")
+          remplace("visage: new THREE.MeshToonMaterial({ map:faceTex.ouvert, gradientMap:grad }),","visage: new THREE.MeshStandardMaterial({ map:faceTex.ouvert, color:0xffdf73, metalness:0.65, roughness:0.30, side:THREE.DoubleSide }),")
+          remplace("corps: withEmi(new THREE.MeshToonMaterial({ color:0xffffff, gradientMap:grad, vertexColors:true, side:THREE.DoubleSide })),","corps: withEmi(new THREE.MeshStandardMaterial({ color:0xffffff, metalness:0.66, roughness:0.31, vertexColors:true, side:THREE.DoubleSide })),")
+          remplace("const hm = new THREE.MeshToonMaterial({ color: band ? 0xd01c24 : 0xe8c078, gradientMap:grad, side:THREE.DoubleSide,\n        emissive: band ? 0xa01018 : 0x7a5a16 });","const hm = new THREE.MeshStandardMaterial({ color: band ? 0xb60923 : 0xf5cf4a, metalness: band ? 0.36 : 0.68, roughness: band ? 0.32 : 0.30, side:THREE.DoubleSide, emissive: band ? 0x280005 : 0x100801 });")
           remplace("o.material = hm; o.visible = false;   // VIP : couronne à la place du chapeau","o.material = hm; o.visible = true;   // Golden : chapeau et ruban visibles")
           remplace("ol.name = 'luffy_contour_chapeau'; ol.frustumCulled = false; ol.visible = false;","ol.name = 'luffy_contour_chapeau'; ol.frustumCulled = false; ol.visible = true;")
           p.write_text(s,encoding="utf-8")
