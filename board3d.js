@@ -6877,6 +6877,66 @@ function updateCineCam(dt){
   return true;
 }
 
+/* ---------- VISITE DU PLATEAU EN ATTENTE (11/10, l'animateur) ----------
+   Tant que le personnage attend au bord de la case Départ (aucune partie en
+   cours), la caméra fait le tour complet du plateau pour montrer ses côtés et
+   l'extérieur : un tour en ~48 s, la caméra descend et remonte doucement,
+   s'éloigne et se rapproche. Dès qu'une partie démarre (A, B, tirage), elle
+   revient en douceur au cadrage habituel. Un doigt sur l'écran l'arrête
+   aussitôt (reprise après quelques secondes sans toucher). */
+const TOUR_ATTENTE_S = 4;                 // délai d'attente avant le départ de la visite
+const TOUR_PERIODE_S = 48;                // un tour complet du plateau
+let tourW = 0, tourT = 0, tourAz = 0, tourCalme = 0, tourActif = false;
+const _tourFrom = new THREE.Vector3(), _tourFromT = new THREE.Vector3();
+const _tourPos = new THREE.Vector3(), _tourTgt = new THREE.Vector3();
+const _tourBase = new THREE.Vector3(), _tourBaseT = new THREE.Vector3();
+controls.addEventListener('start', ()=>{ tourCalme = 0; if(tourW > 0){ tourW = 0; tourActif = false; } });
+function tourEnAttente(){
+  return !reduceMotion && !gameStarted && currentIndex === -1 && !moving && !drawInProgress
+    && !pendingOutcome && cineMode === null && cineBlend <= 0.001;
+}
+function tourVueBase(){
+  const dir = (camFitMode === 'square' ? CAM_DIR_SQUARE : camFitMode === 'tall' ? CAM_DIR_TALL : CAM_DIR_DEFAULT).clone();
+  _tourBaseT.set(0, 0.3, 0);
+  _tourBase.copy(_tourBaseT).add(dir.multiplyScalar(CAM_BASE_DIST * camFitFactor));
+}
+function updateTourCam(dt){
+  const attente = tourEnAttente();
+  tourCalme = attente ? tourCalme + dt : 0;
+  const veut = attente && tourCalme >= TOUR_ATTENTE_S;
+  if(!veut && tourW <= 0) return false;
+  if(veut && !tourActif){
+    // départ : on part de la vue actuelle, l'azimut continue d'où elle regarde
+    tourActif = true; tourT = 0;
+    _tourFrom.copy(camera.position); _tourFromT.copy(controls.target);
+    const d = camera.position.clone().sub(controls.target);
+    tourAz = Math.atan2(d.x, d.z);
+    controls.autoRotate = false;
+  }
+  tourW = Math.max(0, Math.min(1, tourW + (veut ? dt/2.2 : -dt/1.2)));
+  if(veut) tourT += dt;
+  // pose de la visite : tour complet, hauteur et distance qui respirent
+  const az = tourAz + tourT * (Math.PI*2/TOUR_PERIODE_S);
+  const elev = THREE.MathUtils.degToRad(31 + 13*Math.cos(tourT * Math.PI*2/26));   // de 18° (on voit les côtés) à 44°
+  const dist = CAM_BASE_DIST * camFitFactor * (1.18 + 0.14*Math.sin(tourT * Math.PI*2/34));
+  _tourTgt.set(0, 0.05, 0);
+  _tourPos.set(Math.sin(az)*Math.cos(elev)*dist, _tourTgt.y + Math.sin(elev)*dist, Math.cos(az)*Math.cos(elev)*dist);
+  // fondu : depuis la vue de départ en entrant, vers le cadrage habituel en sortant
+  if(!veut){ tourVueBase(); _tourFrom.copy(_tourBase); _tourFromT.copy(_tourBaseT); }
+  const k = tourW*tourW*(3 - 2*tourW);
+  camera.position.copy(_tourFrom).lerp(_tourPos, k);
+  controls.target.copy(_tourFromT).lerp(_tourTgt, k);
+  camera.lookAt(controls.target);
+  if(tourW <= 0){
+    // fin de la visite : la main revient à OrbitControls sur le cadrage habituel
+    tourActif = false;
+    tourVueBase();
+    camera.position.copy(_tourBase); controls.target.copy(_tourBaseT);
+    controls.update();
+  }
+  return true;
+}
+
 /* Le corps de la frame est isolé de la boucle d'affichage : la boucle
    fournit le temps réel, mais on peut aussi l'avancer pas à pas depuis
    l'extérieur (enregistrement d'une séquence à cadence régulière sur une
@@ -6888,7 +6948,7 @@ function frameStep(dt, t){
      garde-fou élargit le champ pour garder les 4 coins visibles, ce qui
      n'a aucun sens en gros plan sur le pion. */
   if(!updateCineCam(dt)){
-    controls.update(dt);   // en secondes : la rotation auto garde sa vitesse à 30 i/s
+    if(!updateTourCam(dt)) controls.update(dt);   // en secondes : la rotation auto garde sa vitesse à 30 i/s
     updateCornerSafety(dt);
   }
   updateSparkles(dt);
