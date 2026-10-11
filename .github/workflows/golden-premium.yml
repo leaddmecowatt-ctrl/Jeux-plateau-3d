@@ -100,6 +100,8 @@ jobs:
               raise SystemExit("Le bloc des quatre sphères a changé : arrêt sans modification")
           p.write_text(s.replace(old, new, 1), encoding="utf-8")
           PY
+      - name: Raffiner les véritables cases et moulures Golden 3D
+        run: python3 tools/golden_warm_3d_patch.py
       - name: Vérifier JavaScript
         run: |
           cp board3d.js /tmp/classique.mjs
