@@ -125,6 +125,12 @@ décoration). Le contexte WebGL perdu est rattrapé (`webglcontextlost`).
   (https://claude.ai/artifact/PceEXQGHeWurcphjqXWe8Z) : ce travail avait été fait hors
   GitHub. Le bundle reconstruit a été comparé à l'artifact : code des deux plateaux,
   images, pion et three.js identiques.
+- Le 11/10/2026, la **version finalisée** de l'animateur (artifact
+  https://claude.ai/artifact/Qh4AKmaqsRzWPKECqVJujF, nom « Golden Shiny ») a été
+  rapatriée ici : travail du 10/10 (finitions, nom Golden Shiny) et corrections du 11/10
+  (duopacks en boucle sur le Golden, C sans D = lot enregistré, ré-armement X/Y/Z,
+  coins et remparts du Golden, touche I = image aux coins). Le bundle reconstruit a été
+  comparé à l'artifact : code des deux plateaux, images, pion et three.js identiques.
 - Deux agents travaillent sur ce dépôt : Claude et Astra (ChatGPT), qui lit `AGENTS.md`
   (brief commun, à garder à jour avec ce fichier). Chantier : refaire l'esthétique en
   partant du plateau Golden, sans toucher au moteur. Chacun sa branche, PR vers `main`,

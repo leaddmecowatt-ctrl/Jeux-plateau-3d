@@ -104,3 +104,12 @@ cp board3d_golden.js /tmp/c.mjs && node --check /tmp/c.mjs
 - L'autre agent relit la PR et commente ; l'animateur décide de la fusion.
 - Chaque PR visuelle joint ses captures avant / après.
 - Messages de commit en français, qui disent ce qui change **et pourquoi**.
+
+## Mise à jour du 11/10/2026
+
+Le 11/10/2026, la **version finalisée** de l'animateur (artifact
+  https://claude.ai/artifact/Qh4AKmaqsRzWPKECqVJujF, nom « Golden Shiny ») a été
+  rapatriée ici : travail du 10/10 (finitions, nom Golden Shiny) et corrections du 11/10
+  (duopacks en boucle sur le Golden, C sans D = lot enregistré, ré-armement X/Y/Z,
+  coins et remparts du Golden, touche I = image aux coins). Le bundle reconstruit a été
+  comparé à l'artifact : code des deux plateaux, images, pion et three.js identiques.
