@@ -70,9 +70,9 @@ jobs:
               // La sphère UV est construite sur l'axe +Y, puis orientée
               // vers la normale de l'épaule correspondante.
               for (const sens of [-1, 1]) {
-                const normale = new THREE.Vector3(sens*0.77, 0.52, 0.36).normalize();
+                const normale = new THREE.Vector3(sens*0.72, 0.66, 0.25).normalize();
                 const pastille = new THREE.Mesh(
-                  new THREE.SphereGeometry(0.426, 56, 28, 0, Math.PI*2, 0, 0.49),
+                  new THREE.SphereGeometry(0.426, 56, 28, 0, Math.PI*2, 0, 0.36),
                   rose
                 );
                 pastille.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), normale);
