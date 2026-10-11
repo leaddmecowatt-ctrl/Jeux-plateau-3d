@@ -68,10 +68,13 @@ jobs:
               // Les deux hémisphères se rejoignent à l'équateur horizontal.
               sph.add(new THREE.Mesh(new THREE.SphereGeometry(0.42, 64, 40, 0, Math.PI*2, 0, Math.PI/2), noir));
               sph.add(new THREE.Mesh(new THREE.SphereGeometry(0.42, 64, 40, 0, Math.PI*2, Math.PI/2, Math.PI/2), blanc));
-              // Bandes courbes jaunes symétriques sur la face avant de la coque.
-              for (const debut of [0.31, 2.35]) {
-                sph.add(new THREE.Mesh(new THREE.SphereGeometry(0.426, 24, 24, debut, 0.49, 0.08, Math.PI/2-0.08), jaune));
+              // Vrai motif H de l'Hyper Ball : deux larges bandes verticales
+              // face au bouton (axe +Z), reliées par une traverse sur le sommet.
+              // SphereGeometry: phi=PI/2 pointe vers l'avant (+Z).
+              for (const debut of [0.57, 2.20]) {
+                sph.add(new THREE.Mesh(new THREE.SphereGeometry(0.427, 28, 32, debut, 0.37, 0.22, Math.PI/2-0.22), jaune));
               }
+              sph.add(new THREE.Mesh(new THREE.SphereGeometry(0.428, 48, 12, 0.57, 2.00, 0.13, 0.22), jaune));
               const ceinture = new THREE.Mesh(new THREE.TorusGeometry(0.424, 0.027, 12, 80), joint);
               ceinture.rotation.x = Math.PI/2; sph.add(ceinture);
               // Bouton frontal orienté vers la caméra, lisible à petite échelle.
