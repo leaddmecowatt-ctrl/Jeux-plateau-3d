@@ -8067,10 +8067,10 @@ const POUCH = [
   { cat:'etb',         n:4   },   // Coffret 30 ans (02/10 : 5 -> 4)
   { cat:'booster50',   n:3   },   // Tripack 30 ans (02/10 : 4 -> 3)
   { cat:'gradee',      n:2   },   // Duopack 30 ans
-  { cat:'booster8',    n:110 },   // Booster 30 ans
+  { cat:'booster8',    n:105 },   // Booster 30 ans (11/10 : 110 -> 105, pour faire place aux Prisons et Parcs)
   { cat:'alternative', n:0   },
-  { cat:'parc',        n:4   },   // Parc gratuit (promos) (02/10 : 3 -> 4)
-  { cat:'prison',      n:5   },   // Prison (carte commune offerte) (02/10 : 4 -> 5)
+  { cat:'parc',        n:7   },   // Parc gratuit (promos) (02/10 : 3 -> 4 ; 11/10 : 4 -> 7)
+  { cat:'prison',      n:7   },   // Prison (carte commune offerte) (02/10 : 4 -> 5 ; 11/10 : 5 -> 7)
   { cat:'commune',     n:0   },
 ];
 const POUCH_SIZE = POUCH.reduce((s,r)=>s+r.n, 0);
