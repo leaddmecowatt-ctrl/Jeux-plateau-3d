@@ -1,9 +1,9 @@
-name: Golden Premium - aperçu jouable
+name: Golden Warm - finition jouable
 on:
   workflow_dispatch:
   push:
     branches:
-      - astra/golden-premium-personnage
+      - astra/golden-warm-polish
 jobs:
   construire:
     runs-on: ubuntu-latest
@@ -44,7 +44,7 @@ jobs:
           remplace("ol.name = 'luffy_contour_chapeau'; ol.frustumCulled = false; ol.visible = false;","ol.name = 'luffy_contour_chapeau'; ol.frustumCulled = false; ol.visible = true;")
           p.write_text(s,encoding="utf-8")
           PY
-      - name: Sculpter les quatre Hyper Balls dorées
+      - name: Sculpter les quatre Master Balls
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -111,7 +111,7 @@ jobs:
       - name: Publier le fichier jouable
         uses: actions/upload-artifact@v4
         with:
-          name: golden-premium-iphone
+          name: golden-warm-iphone
           path: dist/pikajackpot.html
           retention-days: 14
       - name: Enregistrer le HTML sur une branche de démonstration
@@ -125,16 +125,16 @@ jobs:
           cp dist/pikajackpot.html /tmp/golden-premium-build/pikajackpot.html
           git reset --hard HEAD
           git clean -fdx
-          git fetch origin refs/heads/astra/golden-premium-build:refs/remotes/origin/astra/golden-premium-build || true
-          if git show-ref --verify --quiet refs/remotes/origin/astra/golden-premium-build; then
-            git checkout -B astra/golden-premium-build origin/astra/golden-premium-build
+          git fetch origin refs/heads/astra/golden-warm-build:refs/remotes/origin/astra/golden-warm-build || true
+          if git show-ref --verify --quiet refs/remotes/origin/astra/golden-warm-build; then
+            git checkout -B astra/golden-warm-build origin/astra/golden-warm-build
           else
-            git checkout --orphan astra/golden-premium-build
+            git checkout --orphan astra/golden-warm-build
             git rm -rf --ignore-unmatch .
           fi
           mkdir -p dist
           cp /tmp/golden-premium-build/pikajackpot.html dist/pikajackpot.html
           git add -f dist/pikajackpot.html
-          git commit -m "Mettre à jour la démonstration Golden Premium" || echo "Aucune modification"
-          git push origin HEAD:refs/heads/astra/golden-premium-build
+          git commit -m "Build Golden Warm depuis ${GITHUB_SHA}" || echo "Aucune modification"
+          git push origin HEAD:refs/heads/astra/golden-warm-build
           echo "SHA final : $(git rev-parse HEAD)"
