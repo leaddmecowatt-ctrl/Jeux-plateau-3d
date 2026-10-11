@@ -56,7 +56,6 @@ jobs:
               { const r = new THREE.Mesh(new THREE.TorusGeometry(0.43, 0.035, 16, 72), orSombre); r.rotation.x = Math.PI/2; sph.add(r); }
               { const b = new THREE.Mesh(new THREE.SphereGeometry(0.1, 24, 16), new THREE.MeshStandardMaterial({ color:0xfff6c9, emissive:0xffe27a, emissiveIntensity:1.6 })); b.position.set(0, 0, 0.4); sph.add(b); }"""
           # Conserver l'indentation originale : bloc ciblé et strict.
-          old = "\n".join(line[4:] for line in old.split("\n"))
           new = """    // Hyper Ball dorée sculptée : coques jaune-or, chevrons et verrou central.
               const sph = new THREE.Group();
               const coque = new THREE.MeshStandardMaterial({color:0xf5cf4a, metalness:0.7, roughness:0.26, emissive:0x4a2c00, emissiveIntensity:0.15});
@@ -83,7 +82,6 @@ jobs:
               const coeur = new THREE.Mesh(new THREE.SphereGeometry(0.083, 24, 16), blanc);
               coeur.position.z = 0.03; verrou.add(coeur);
               sph.add(verrou);"""
-          new = "\n".join(line[4:] for line in new.split("\n"))
           if s.count(old) != 1:
               raise SystemExit("Le bloc des quatre sphères a changé : arrêt sans modification")
           p.write_text(s.replace(old, new, 1), encoding="utf-8")
@@ -111,7 +109,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           mkdir -p /tmp/golden-premium-build
           cp dist/pikajackpot.html /tmp/golden-premium-build/pikajackpot.html
-          git fetch origin astra/golden-premium-build || true
+          git fetch origin refs/heads/astra/golden-premium-build:refs/remotes/origin/astra/golden-premium-build || true
           if git show-ref --verify --quiet refs/remotes/origin/astra/golden-premium-build; then
             git checkout -B astra/golden-premium-build origin/astra/golden-premium-build
           else
