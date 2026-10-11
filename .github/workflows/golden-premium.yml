@@ -109,6 +109,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           mkdir -p /tmp/golden-premium-build
           cp dist/pikajackpot.html /tmp/golden-premium-build/pikajackpot.html
+          git reset --hard HEAD
+          git clean -fdx
           git fetch origin refs/heads/astra/golden-premium-build:refs/remotes/origin/astra/golden-premium-build || true
           if git show-ref --verify --quiet refs/remotes/origin/astra/golden-premium-build; then
             git checkout -B astra/golden-premium-build origin/astra/golden-premium-build
